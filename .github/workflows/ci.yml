@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    name: Integridad del repositorio
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Obtener archivos
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Validar archivos y alcance del CI
+        run: python3 scripts/check_repository.py
+
+  documentation:
+    name: Consistencia documental
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Obtener archivos
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Ejecutar comprobaciones deterministas
+        run: python3 -m unittest discover -s odd/probes -p 'test_*.py' -v

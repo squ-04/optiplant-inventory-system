@@ -1,0 +1,31 @@
+# Diagramas de actividad de OptiPlant
+
+Objetivo: documentar transferencia entre sucursales y flujo de venta en Excalidraw con el estilo aprobado de `diagramas-v2`.
+Entrega local, sin commits ni publicación. Ruta: inline; comprobaciones de estructura UML, trazabilidad, geometría y vistas previas si el entorno permite generarlas.
+
+## Specs
+
+- S1: «debemos de hacer el diagrama de actividad de la transferencia entre sucursales y el flujo de venta».
+- S2: «mantengamos el formato de excallidraw y los formatos y estilos que se han definido con esta ultima version de los diagramas de caso de uso».
+- S3: «Revisa como archivos necesarios para entender los flujos los archivos de requisitos funcionales y otros archivos que consideres».
+- S4: Ratificación humana «Si confirmamos» a la propuesta «¿Confirmamos que el gerente de origen podrá rechazar con motivo únicamente cuando la transferencia esté «en preparación», antes de aprobarla?». Integrar la transición `en preparación → rechazada`, sin trasladar preparación/despacho del operador al gerente ni ampliar otros permisos.
+
+## Tasks
+
+- [x] T1 | S1-S4 | inline | H v1.2/01 integrada en RF, decisiones, UC, HU y diagramas vigentes; actividad de transferencia actualizada: 46 nodos y 45 flujos. Trece recorridos documentales totales comprobados (once de transferencia y dos de venta). Vista previa regenerada e inspeccionada; rechazo válido y denegado diferenciados. Sin commit autorizado.
+- [x] T2 | S1-S3 | inline | Venta: 11 nodos y 10 flujos; dos recorridos documentales comprobados; registro, confirmación atómica y resultados contrastados con RF-0027 a RF-0031 y UC-013 a UC-014. Vista previa inspeccionada. Sin commit autorizado.
+
+## Log
+
+- L1: Okay, ahora si me han gustado, pasemos ahora a hacer los diagramas de actividad que se han solicitado, para ello mantengamos el formato de excallidraw y los formatos y estilos que se han definido con esta ultima version de los diagramas de caso de uso, como solicitan debemos de hacer el diagrama de actividad de la transferencia entre sucursales y el flujo de venta. Revisa como archivos necesarios para entender los flujos los archivos de requisitos funcionales y otros archivos que consideres
+- L2: La exploración confirma la obligación de ambos diagramas en `prueba-tecnica.md:148-155`. Se emplean los RF vigentes y las fichas UC, no los antecedentes de decisiones sustituidos. Hay un vacío real: RF-0034 admite rechazo motivado de origen, pero no precisa actor ni momento exacto. No se asignará ese permiso por inferencia ni se inventará una transición de fase; se documentará separadamente. La recepción única, llegada cero con discrepancia y venta atómica están ratificadas.
+- L3: Se mantiene el estilo cromático y tipográfico aprobado, adaptando la notación a actividades UML: carriles de responsabilidad, acciones redondeadas, decisiones con guardas, inicio y finales; no óvalos de casos de uso para representar pasos.
+- L4: Se crearon dos fuentes Excalidraw y dos vistas previas PNG en `docs/02-casos-de-uso/diagramas-actividad/`. Se inspeccionaron la venta completa y tres tramos de la transferencia con un renderizador local de la escena (no aplicación nativa Excalidraw). La inspección detectó recortes en textos de decisiones y finales: se ajustaron los saltos de línea y se regeneraron las imágenes; la medición tipográfica posterior no detectó desbordamientos.
+- L5: Comprobaciones observadas: dos JSON válidos, vínculos recíprocos, una etiqueta por contenedor, todos los nodos alcanzables, dos salidas con guardas por decisión, recorridos finitos, once recorridos documentales, ausencia de solapamientos de textos y de conectores atravesando nodos ajenos. Las notas están 85 px bajo los carriles. No se ejecutaron pruebas de aplicación: son artefactos documentales y no hay un comportamiento ejecutable que justifique RED/GREEN.
+- L6: El README conserva la trazabilidad y el vacío de rechazo motivado de origen sin asignarle actor/fase. No se modificaron los requisitos, decisiones ratificadas, especificación, diagramas de casos de uso ni sus respaldos. No se hicieron commits o publicaciones. Revisión nativa de edición en Excalidraw no realizada; vistas previas geométricas disponibles.
+- L7: «Dejemos que el rechazo lo haga el gerente de origen tambien ya que el es el encargado de las acciones de origen, asi mismo me gustaria preguntarte si crees correcto hacer que todas las acciones de origen las haga el gerente de origen?».
+- L8: A la propuesta «¿Confirmamos que el gerente de origen podrá rechazar con motivo únicamente cuando la transferencia esté «en preparación», antes de aprobarla?» el usuario respondió: «Si confirmamos».
+- L9: Se adopta H v1.2/01 como siguiente identificación libre. La autorización integra actor y fase del rechazo en documentación funcional, casos/historias y diagramas vigentes. Se preservan el antecedente INC-015/D06, los archivos fuente de la prueba, los respaldos `diagramas/`, ejemplos y el flujo de venta. No hay autorización para código de aplicación, commits o publicaciones.
+- L10: H v1.2/01 integrada: RF-0034 incorpora CA-03 y CA-04 y fila de permisos; decisiones conservan INC-015/D06 como antecedente y añaden resolución posterior; UC-015 y HU-015 describen rechazo de gerente origen desde «en preparación» con motivo. Se sincronizaron las referencias bibliográficas de arquitectura sin cambiar su diseño.
+- L11: La actividad añade revisión del gerente, elección aprobar/solicitar rechazo, validación del permiso/estado/motivo y resultados separados de rechazo válido o intento denegado. La asociación Gerente–UC-015 en `diagramas-v2` explicita rechazo. El README marca el vacío como resuelto y la vista PNG fue regenerada. No se trasladaron preparación/despacho al gerente.
+- L12: Verificación observada: trece recorridos documentales, conservación de todos los recorridos previos, vínculos recíprocos, decisiones con dos guardas, todos los nodos alcanzables y recorridos finitos; sin superposiciones de texto o conectores que atraviesen nodos ajenos. La inspección visual y la medición tipográfica de las vistas locales no detectaron recortes. SHA-256 confirma intactos fuentes originales, respaldos, ejemplos, otros módulos y venta. No se ejecutó software de aplicación ni se probó edición nativa en Excalidraw. Sin commits ni publicaciones.
