@@ -156,6 +156,55 @@ class SharedChecksTest(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertEqual("$Format:%H$", (self.repo / "sample.txt").read_text())
 
+    @unittest.skipUnless(shutil.which("docker"), "Docker CLI required for plugin discovery")
+    def test_hook_discovers_plugins_without_reusing_docker_credentials(self):
+        for explicit_config in (False, True):
+            with self.subTest(explicit_config=explicit_config):
+                config = self.base / ("custom-docker" if explicit_config else ".docker")
+                plugins = config / "cli-plugins"
+                plugins.mkdir(parents=True, exist_ok=True)
+                (config / "config.json").write_text(
+                    '{"auths":{"private.example":{"auth":"DO_NOT_COPY"}},'
+                    '"currentContext":"DO_NOT_REUSE"}'
+                )
+                plugin = plugins / "docker-optiplantprobe"
+                plugin.write_text(
+                    "#!/bin/sh\n"
+                    'if [ "$1" = docker-cli-plugin-metadata ]; then\n'
+                    "  printf '%s\\n' '{\"SchemaVersion\":\"0.1.0\",\"Vendor\":\"OptiPlant\","
+                    "\"Version\":\"1.0.0\",\"ShortDescription\":\"Discovery probe\"}'\n"
+                    "else\n  printf 'plugin-discovered\\n'\nfi\n"
+                )
+                plugin.chmod(0o755)
+                if explicit_config:
+                    self.env["DOCKER_CONFIG"] = str(config)
+                else:
+                    self.env.pop("DOCKER_CONFIG", None)
+                (self.repo / "odd/probes/test_sample.py").write_text(
+                    "import json, os, subprocess, unittest\nfrom pathlib import Path\n"
+                    "class Sample(unittest.TestCase):\n"
+                    " def test_plugin(self):\n"
+                    "  result = subprocess.run(['docker', 'optiplantprobe'], capture_output=True, text=True)\n"
+                    "  self.assertEqual(0, result.returncode, result.stderr)\n"
+                    "  self.assertEqual('plugin-discovered\\n', result.stdout)\n"
+                    "  home = Path(os.environ['HOME'])\n"
+                    "  config = Path(os.environ.get('DOCKER_CONFIG', str(home / '.docker')))\n"
+                    "  self.assertTrue(config.is_relative_to(home))\n"
+                    "  settings = json.loads((config / 'config.json').read_text())\n"
+                    "  self.assertEqual({'cliPluginsExtraDirs'}, set(settings))\n"
+                    f"  self.assertEqual([{str(plugins.resolve())!r}], settings['cliPluginsExtraDirs'])\n"
+                    "  self.assertFalse((config / 'contexts').exists())\n"
+                )
+                original = (config / "config.json").read_bytes()
+                oid = self.commit()
+                result = subprocess.run(
+                    [str(self.repo / ".githooks/pre-push")], cwd=self.repo,
+                    env=self.env, input=f"refs/heads/main {oid} refs/heads/main {'0' * 40}\n",
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                self.assertEqual(original, (config / "config.json").read_bytes())
+
 
 if __name__ == "__main__":
     unittest.main()

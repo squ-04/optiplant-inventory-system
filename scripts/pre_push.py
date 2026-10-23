@@ -1,5 +1,6 @@
 """Validate each outgoing tip in isolation, never uncommitted working-tree fixes."""
 
+import json
 import os
 from pathlib import Path
 import re
@@ -81,7 +82,15 @@ def main():
                                    cwd=snapshot, env=env, check=True, capture_output=True)
                 for name in ("home", "tmp"):
                     (base / name).mkdir()
-                check_env = dict(env, HOME=str(base / "home"), TMPDIR=str(base / "tmp"))
+                # Keep plugin discovery without reusing auths, contexts or credential helpers.
+                source_config = Path(env.get("DOCKER_CONFIG") or str(Path.home() / ".docker"))
+                docker_config = base / "home" / ".docker"
+                docker_config.mkdir()
+                (docker_config / "config.json").write_text(json.dumps({
+                    "cliPluginsExtraDirs": [str((source_config / "cli-plugins").resolve())],
+                }), encoding="utf-8")
+                check_env = dict(env, HOME=str(base / "home"), TMPDIR=str(base / "tmp"),
+                                 DOCKER_CONFIG=str(docker_config))
                 result = subprocess.run(
                     [sys.executable, str(ROOT / "scripts/run_checks.py"), "--root", str(snapshot)],
                     cwd=snapshot, env=check_env, stdin=subprocess.DEVNULL,
