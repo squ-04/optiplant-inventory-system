@@ -25,7 +25,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Validar archivos y alcance del CI
-        run: python3 scripts/check_repository.py
+        run: python3 scripts/run_checks.py repository
 
   documentation:
     name: Consistencia documental
@@ -37,4 +37,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Ejecutar comprobaciones deterministas
-        run: python3 -m unittest discover -s odd/probes -p 'test_*.py' -v
+        run: python3 scripts/run_checks.py documentation

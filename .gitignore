@@ -69,3 +69,5 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .atl/.skill-registry.cache.json
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
