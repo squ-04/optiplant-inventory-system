@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:17.11-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-optiplant}
+      POSTGRES_USER: ${POSTGRES_USER:-optiplant_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Genera .env con scripts/init_environment.py}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Genera .env con scripts/init_environment.py}
+      APP_DB_MIGRATION_PASSWORD: ${APP_DB_MIGRATION_PASSWORD:?Genera .env con scripts/init_environment.py}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/01-runtime-role.sql:/docker-entrypoint-initdb.d/01-runtime-role.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    # No publicar PostgreSQL al host.
+
+  backend:
+    build: ./backend
+    environment:
+      APP_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-optiplant}
+      APP_DB_USER: optiplant_app
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Genera .env con scripts/init_environment.py}
+      APP_DB_MIGRATION_USER: optiplant_migrator
+      APP_DB_MIGRATION_PASSWORD: ${APP_DB_MIGRATION_PASSWORD:?Genera .env con scripts/init_environment.py}
+      APP_ADMIN_CODE: ${APP_ADMIN_CODE:-ADMIN}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?Genera .env con scripts/init_environment.py}
+      APP_DEMO_DATA: ${APP_DEMO_DATA:-true}
+      APP_FRONTEND_ORIGIN: http://localhost:${FRONTEND_PORT:-5173}
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-8080}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, 'curl --fail --silent http://localhost:8080/actuator/health > /dev/null']
+      interval: 5s
+      timeout: 5s
+      start_period: 60s
+      retries: 30
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:${BACKEND_PORT:-8080}
+    ports:
+      - '127.0.0.1:${FRONTEND_PORT:-5173}:5173'
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:5173/").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  pgdata:

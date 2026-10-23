@@ -1,4 +1,4 @@
-"""Check versionable files without claiming application build coverage."""
+"""Check versionable files; application execution belongs to the shared CI groups."""
 
 import json
 from pathlib import Path, PurePosixPath
@@ -24,8 +24,6 @@ def path_errors(name):
         errors.append("posible material de credenciales")
     if path.name == ".DS_Store" or "node_modules" in path.parts or "__pycache__" in path.parts:
         errors.append("archivo local o generado")
-    if name in APPLICATION_MARKERS:
-        errors.append("ampliar el CI con compilación/pruebas reales antes de incorporar la aplicación o Compose")
     return errors
 
 

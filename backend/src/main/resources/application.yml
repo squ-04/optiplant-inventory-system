@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: optiplant-inventory
+  datasource:
+    url: ${APP_DB_URL}
+    username: ${APP_DB_USER}
+    password: ${APP_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    locations: classpath:db/migration,classpath:db/demo/${app.demo-data}
+    clean-disabled: true
+    user: ${APP_DB_MIGRATION_USER:${APP_DB_USER}}
+    password: ${APP_DB_MIGRATION_PASSWORD:${APP_DB_PASSWORD}}
+  session:
+    timeout: 30m
+    jdbc:
+      initialize-schema: never
+server:
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${APP_COOKIE_SECURE:false}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+app:
+  frontend-origin: ${APP_FRONTEND_ORIGIN:http://localhost:5173}
+  admin-code: ${APP_ADMIN_CODE:}
+  admin-password: ${APP_ADMIN_PASSWORD:}
+  demo-data: ${APP_DEMO_DATA:false}

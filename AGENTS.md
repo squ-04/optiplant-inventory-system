@@ -23,6 +23,7 @@ Estas elecciones pertenecen al proyecto: no deben presentarse como requisitos te
 
 ## 2. Fuentes y trazabilidad
 
+- Consultar primero el [índice documental](docs/indice-documental.md) para localizar las referencias principales de la tarea, especialmente requisitos funcionales, decisiones de arquitectura y modelo de datos; leer después los documentos aplicables y sus estados. El índice orienta la navegación, no sustituye las fuentes ni altera su precedencia.
 - Utilizar `docs/00-source/prueba-tecnica.pdf` como fuente original y definitiva de los requisitos externos.
 - Utilizar `docs/00-source/prueba-tecnica.md` como transcripción operativa; contrastarla con el PDF ante dudas o discrepancias.
 - No modificar los documentos originales sin autorización expresa.
@@ -44,6 +45,8 @@ Estas elecciones pertenecen al proyecto: no deben presentarse como requisitos te
 
 ## 4. Documentación y diagramas
 
+- Mantener actualizado `docs/indice-documental.md` al crear, mover o renombrar documentación principal; comprobar sus enlaces y distinguir referencias vigentes, borradores y antecedentes sin duplicar su contenido.
+- Reservar el nombre `README.md` para el documento general del proyecto en la raíz, cuya elaboración se realizará posteriormente. Usar nombres descriptivos para los demás documentos.
 - Utilizar español técnico, preciso y profesional en documentación y explicaciones.
 - Priorizar Markdown para documentación y PlantUML, Mermaid o Excalidraw para diagramas versionables.
 - Mantener consistencia de términos, reglas y estados entre los distintos artefactos.

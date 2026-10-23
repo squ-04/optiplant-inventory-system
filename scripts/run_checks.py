@@ -14,11 +14,21 @@ CHECKS = {
         "Consistencia documental",
         [sys.executable, "-m", "unittest", "discover", "-s", "odd/probes", "-p", "test_*.py", "-v"],
     ),
+    "backend": ("Backend: compilación y pruebas", [sys.executable, "scripts/check_application.py", "backend"]),
+    "frontend": ("Frontend: pruebas, tipos y construcción", [sys.executable, "scripts/check_application.py", "frontend"]),
+    "integration": ("Integración: Compose y API REST", [sys.executable, "scripts/check_application.py", "integration"]),
 }
 
 
 def run_group(name, root):
     label, command = CHECKS[name]
+    if name in {"backend", "frontend", "integration"} and not any(
+        (root / marker).exists() for marker in (
+            "backend/pom.xml", "frontend/package.json", "compose.yaml", "compose.yml",
+            "docker-compose.yaml", "docker-compose.yml",
+        )
+    ):
+        return label, 0, "No aplica: snapshot documental anterior a las aplicaciones.\n", ""
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
     try:
         result = subprocess.run(command, cwd=root, env=env, stdin=subprocess.DEVNULL,

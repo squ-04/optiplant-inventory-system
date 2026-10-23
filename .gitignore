@@ -68,6 +68,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# Generated skill index contains machine-specific absolute paths.
+.atl/skill-registry.md
 .atl/.skill-registry.cache.json
 # Playwright CLI output (may contain credentials)
 .playwright-cli/

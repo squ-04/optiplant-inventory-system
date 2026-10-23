@@ -1,0 +1,18 @@
+:root { font-family: system-ui, sans-serif; color: #18312b; background: #f3f6f5; line-height: 1.5; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 56rem; margin: auto; padding: 1.5rem; }
+section { background: white; border: 1px solid #b9cbc3; border-radius: .5rem; padding: 1.25rem; margin-block: 1rem; }
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.25rem; }
+fieldset { border: 0; margin: 0; padding: 0; }
+legend { margin-bottom: .75rem; }
+label { display: block; margin-block: .75rem; }
+input { display: block; width: 100%; max-width: 30rem; padding: .65rem; font: inherit; border: 1px solid #526b61; border-radius: .25rem; }
+button { background: #145840; color: white; font: inherit; padding: .65rem 1rem; border: 0; border-radius: .25rem; cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
+:focus-visible { outline: 3px solid #905500; outline-offset: 3px; }
+[role="alert"] { color: #8b1923; border-left: .25rem solid; padding: .75rem; background: #fff0f1; }
+dt { font-weight: 650; }
+dd { margin: 0 0 .65rem; overflow-wrap: anywhere; }
+pre { padding: 1rem; background: #eef4f1; overflow: auto; }

@@ -25,10 +25,10 @@ class RepositoryChecksTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual([], CHECKS.path_errors(name))
 
-    def test_application_requires_expanding_ci(self):
+    def test_application_markers_are_allowed_with_real_ci_groups(self):
         for name in CHECKS.APPLICATION_MARKERS:
             with self.subTest(name=name):
-                self.assertTrue(CHECKS.path_errors(name))
+                self.assertEqual([], CHECKS.path_errors(name))
 
     def test_json_and_excalidraw_are_parsed_without_rewriting(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -46,14 +46,17 @@ El comando único para comprobar el árbol de trabajo, sin publicar nada, es:
 python3 scripts/run_checks.py
 ```
 
-Ejecuta los dos grupos en paralelo, espera ambos y devuelve error si falla cualquiera. Los resultados se muestran agrupados para no mezclar diagnósticos. El workflow invoca el mismo registro de comandos, con jobs independientes:
+Ejecuta todos los grupos en paralelo, espera sus resultados y devuelve error si falla cualquiera. Los resultados se muestran agrupados para no mezclar diagnósticos. El workflow invoca el mismo registro de comandos, con jobs independientes:
 
 ```bash
 python3 scripts/run_checks.py repository
 python3 scripts/run_checks.py documentation
+python3 scripts/run_checks.py backend
+python3 scripts/run_checks.py frontend
+python3 scripts/run_checks.py integration
 ```
 
-Al hacer `git push`, el hook toma de Git cada commit de destino que se va a enviar, copia sus blobs originales a una carpeta temporal fuera del proyecto y ejecuta ambos grupos allí. Los atributos de exportación y filtros de checkout no pueden omitir ni transformar ese contenido. Un arreglo sin commit no puede ocultar un error del commit enviado. Las ramas distintas de la actual también se validan; destinos repetidos se comprueban una vez. Las eliminaciones de referencias no tienen contenido nuevo que validar. No se inspecciona cada commit histórico intermedio, solo cada snapshot de destino. Los submódulos y enlaces simbólicos externos se rechazan explícitamente, no se omiten en silencio.
+Al hacer `git push`, el hook toma de Git cada commit de destino que se va a enviar, copia sus blobs originales a una carpeta temporal fuera del proyecto y ejecuta todos los grupos allí. Los atributos de exportación y filtros de checkout no pueden omitir ni transformar ese contenido. Un arreglo sin commit no puede ocultar un error del commit enviado. Las ramas distintas de la actual también se validan; destinos repetidos se comprueban una vez. Las eliminaciones de referencias no tienen contenido nuevo que validar. No se inspecciona cada commit histórico intermedio, solo cada snapshot de destino. Los submódulos y enlaces simbólicos externos se rechazan explícitamente, no se omiten en silencio. Docker debe estar activo para los grupos de aplicación; consulta [la guía técnica](preparacion-tecnica.md).
 
 Si algo falla, el push se cancela; tus archivos, commits y referencias locales se conservan. Corrige, crea el commit correspondiente y repite. El hook no crea commits, no publica por su cuenta y no bloquea el merge local. Las copias temporales se retiran al terminar normalmente.
 
@@ -108,24 +111,27 @@ Para ramas desactualizadas, integra `main` en la rama del cambio, resuelve confl
 
 ## 5. Qué comprueba el CI actual
 
-Se ejecuta en PR hacia `main`, pushes a `main` y manualmente. No usa filtros por ruta, secretos, despliegues, auto-merge ni permisos de escritura. Cancela ejecuciones obsoletas del mismo evento/rama y limita cada job a cinco minutos. Las acciones se fijan por SHA; actualizarlas exige revisar el nuevo origen y ejecutar de nuevo el CI.
+Se ejecuta en PR hacia `main`, pushes a `main` y manualmente. No usa filtros por ruta, secretos del repositorio, despliegues, auto-merge ni permisos de escritura. Cancela ejecuciones obsoletas del mismo evento/rama; los jobs documentales tienen cinco minutos y los de aplicación treinta. Las acciones se fijan por SHA; actualizarlas exige revisar el nuevo origen y ejecutar de nuevo el CI.
 
 | Check | Evidencia que aporta | No demuestra |
 |---|---|---|
 | Integridad del repositorio | Nombres de archivos sensibles/generados, lectura JSON y Excalidraw, límite explícito del alcance actual | Detección completa de secretos, validez visual de diagramas o cumplimiento funcional |
 | Consistencia documental | Pruebas del modelo de datos existente y de las reglas del repositorio | Compilación Java/React, integración PostgreSQL, renderizado o pruebas de seguridad |
+| Aplicación (backend) | Maven `verify` y pruebas backend | Implementación de todos los módulos funcionales |
+| Aplicación (frontend) | Lockfile congelado, pruebas, tipos y construcción Vite | Todos los recorridos del navegador |
+| Aplicación (integration) | Compose y humo real HTTP de la base técnica | HTTPS productivo o cobertura funcional completa |
 
-Utiliza Python 3 de Ubuntu 24.04 y biblioteca estándar, solo para comprobaciones auxiliares; no introduce un runtime del producto. Para el flujo completo local se requiere Python 3.10 o posterior. El workflow no instala dependencias de aplicaciones inexistentes.
+Utiliza Python 3 de Ubuntu 24.04 y biblioteca estándar para comprobaciones auxiliares; no introduce un runtime del producto. Para el flujo completo local se requiere Python 3.10 o posterior y Docker. Java/Maven y Node/pnpm se ejecutan en contenedores con versiones fijadas.
 
-**Al incorporar aplicaciones, ampliar las comprobaciones compartidas y el CI en ese mismo bloque de trabajo.** El comprobador rechaza los manifiestos iniciales `backend/pom.xml`, `frontend/package.json` y Compose en la raíz para evitar un verde documental presentado como validación del producto. Sustituye esa guarda y actualiza sus pruebas cuando existan jobs reales; no la elimines sin cubrir la aplicación correspondiente. Si se adopta otra ubicación, actualiza también la detección. Es una guarda de transición, no detección universal de aplicaciones.
+La guarda documental que rechazaba `backend/pom.xml`, `frontend/package.json` y Compose se sustituye por los grupos reales de aplicación. Un snapshot anterior puramente documental puede indicar «no aplica»; una incorporación parcial o una herramienta no disponible falla, no produce una aprobación ficticia.
 
-| Componente futuro | Comprobación a incorporar conforme a la arquitectura aprobada |
+| Componente | Comprobación conforme a la arquitectura aprobada |
 |---|---|
-| Backend | Temurin y Maven fijados, preferentemente Maven Wrapper; verificación Maven y pruebas reales, incluyendo PostgreSQL/Flyway cuando corresponda |
+| Backend | Temurin y Maven fijados; verificación Maven y pruebas reales de PostgreSQL/Flyway |
 | Frontend | Node y pnpm fijados, `pnpm install --frozen-lockfile`, scripts reales de tipos, pruebas y construcción |
-| Infraestructura | Validación de Compose con configuración de ejemplo sin secretos; después arranque y pruebas de salud/persistencia aisladas |
+| Infraestructura | Arranque Compose, salud y persistencia con secretos efímeros y volumen aislado |
 
-Las versiones aprobadas están en [arquitectura §5.4](../04-arquitectura/arquitectura-y-diseno-tecnico.md#54-versiones-y-compatibilidad-tecnológica). No se generaron aplicaciones ni se cambiaron esas decisiones. Cada grupo nuevo tendrá su comando compartido y su job; no se encadenarán verificaciones independientes ni se ocultarán fallos. Si se usan matrices, desactivar `fail-fast` para conservar los otros resultados. Las dependencias reales, como compilar antes de ciertas pruebas, siguen siendo necesarias.
+Las versiones aprobadas están en [arquitectura §5.4](../04-arquitectura/arquitectura-y-diseno-tecnico.md#54-versiones-y-compatibilidad-tecnológica). Cada grupo tiene su comando compartido y su job; no se ocultan fallos. La matriz desactiva `fail-fast` para conservar los demás resultados. Las dependencias reales, como compilar antes de ciertas pruebas, siguen siendo necesarias. La configuración del workflow no acredita una ejecución remota: la evidencia local queda en [las tareas](../../odd/tasks/preparacion-tecnica.md).
 
 ## 6. Revisión si eliges abrir un PR
 
