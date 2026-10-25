@@ -1,0 +1,116 @@
+# Sistema visual de las interfaces OptiPlant
+
+**Estado:** dirección visual actualizada por solicitud expresa del responsable el 25 de octubre de 2026, siguiendo su referencia «Enterprise SaaS Admin Dashboard / Clean Enterprise UI». Aplicada a acceso, administración y consultas. Sustituye la propuesta anterior azul petróleo; es una identidad de interfaz, no un manual de marca institucional. La integración con backend real se comprueba por separado.
+
+## Uso y alcance
+
+Reutilizar los tokens y patrones de `frontend/src/styles/base.css` al implementar nuevos requisitos funcionales. Mantener el vocabulario, los permisos, los estados y las confirmaciones definidos por backend; no crear pantallas ficticias para completar la navegación.
+
+La referencia arquitectónica sigue siendo [ARQ-001](../04-arquitectura/arquitectura-y-diseno-tecnico.md#arq-001--presentación-web-y-herramientas-del-frontend). Tailwind CSS y su adaptador Vite están instalados en la versión aprobada 4.3.3. Los componentes oficiales incorporados se adaptan al sistema visual existente; las demás bibliotecas aprobadas se incorporarán cuando su funcionalidad lo requiera.
+
+La autorización del responsable permite instalar y adaptar componentes oficiales de shadcn/ui y sus dependencias necesarias sin aprobación individual. Antes de añadir uno, consultar `frontend/components.json`, `frontend/src/components/ui` y `frontend/src/components/shared`; reutilizar lo existente. Una biblioteca ajena al stack y a esas dependencias requiere justificación y autorización previa. Esta autorización está registrada también en [AGENTS.md](../../AGENTS.md#6-diseño-del-frontend-y-componentes-autorizados).
+
+## Tokens reutilizables
+
+| Función | Token CSS | Valor |
+|---|---|---|
+| Fondo de trabajo | `--color-background` | `#F7F9FC` |
+| Superficie | `--color-surface` | `#FFFFFF` |
+| Texto y estructura azul oscuro | `--color-text` | `#14213D` |
+| Texto secundario | `--color-muted` | `#53647E` |
+| Acción principal naranja | `--color-action` | `#C2410C` |
+| Foco y enlaces | `--color-focus` | `#254B87` |
+| Bordes sutiles | `--color-border` | `#DFE5EF` |
+| Advertencia | `--color-warning` | `#895700` |
+| Error y acción destructiva | `--color-danger` | `#B42318` |
+
+- Tipografía del sistema, sin fuentes externas. Títulos de 24–32 px, subtítulos de 24 px y texto de 16 px con interlineado de 1,5 en la configuración predeterminada del navegador.
+- Espaciado mediante `--space-*`, basado en incrementos de 4 px; radios diferenciados para controles y paneles.
+- Alineación izquierda, textos explicativos de hasta 74 caracteres aproximados por línea y cantidades alineadas a la derecha con cifras tabulares.
+- Reservar naranja para las acciones principales y el contexto de navegación activo. Se usa un naranja más oscuro que el de la imagen para dar contraste al texto blanco; sombras discretas, sin gradientes decorativos ni iconos multicolor.
+
+## Patrones de interfaz
+
+| Necesidad | Patrón actual |
+|---|---|
+| App Shell | `AppShell`, en `frontend/src/components/shared`: barra lateral persistente desde 1024 px, identidad, navegación y resumen de sesión; en móvil la navegación se adapta al ancho disponible. |
+| Navegación operativa | `.section-nav`, enlaces por fragmento a vistas existentes con `aria-current`; una vista visible a la vez, historial del navegador y foco en el título al cambiar. No sustituye la adopción aprobada de React Router. |
+| Navegación contextual | `SectionTabs` compone los `Tabs` oficiales con primitivas Radix: roles ARIA, flechas, Inicio y Fin. `forceMount` y `hidden` mantienen paneles y formularios sin exponer los inactivos al teclado. |
+| Acceso al contenido | `.skip-link`, primer enlace de teclado, con destino enfocable. |
+| Contexto de usuario y sucursal | `.session-panel`, sin ocultar ni abreviar los identificadores. |
+| Acción principal | `Button` compartido, variante predeterminada naranja; texto que describe la operación. |
+| Acción secundaria o destructiva | `Button variant="outline"`; las bajas añaden texto rojo y conservan confirmaciones y reglas existentes. |
+| Campos | `Input` compartido, con nombres, límites, autocompletado y validación HTML existentes. Mantener `select` nativo cuando no se necesite una interacción adicional. |
+| Administración tabular | `Table` compartido con código destacado, nombre legible, estado textual con `StatusBadge` y edición por registro. Los usuarios muestran perfil traducido y sucursal asignada desde datos ya consultados, sin nuevas llamadas ni campos de negocio. |
+| Consulta tabular | `.table-scroll`, región con nombre y foco de teclado; conservar `caption`, encabezados y precisión textual de cantidades. |
+| Carga y resultado confirmado | `role="status"`; conservar las regiones vivas y `aria-busy` existentes. |
+| Error o desconexión | `role="alert"`, texto explicativo y acento rojo. No confirmar éxito ni sincronización offline. |
+| Advertencia | `.notice-warning`, texto explícito y acento ámbar, como una sucursal inactiva. |
+| Vacío y datos desactualizados | Conservar mensajes de ausencia de registros y fecha de consulta; no inventar datos ni estados de éxito. |
+
+Los controles tienen un mínimo de 44 px de alto con el tamaño de fuente predeterminado. El foco es visible; los estados no dependen exclusivamente del color. No se añaden animaciones automáticas y se respeta la preferencia de movimiento reducido. La región de tabla admite desplazamiento horizontal sin extender el documento.
+
+### Adaptación funcional de la referencia
+
+No copiar tarjetas KPI, auditoría, correo electrónico, idiomas o módulos que no estén implementados. Los indicadores y sus cálculos pertenecen al servidor según ARQ-001; no generar cifras a partir de listados para decorar la pantalla. Cuando sus requisitos se implementen, las tarjetas KPI usarán superficie blanca, etiqueta legible y valor con unidad y contexto, sin depender solo del color. Los filtros y la paginación se incorporarán con los contratos funcionales correspondientes, sin controles inertes ni filtrado que contradiga la coordinación con backend.
+
+La consulta de sucursales conserva su selector real y la fecha de actualización. La navegación no cambia el ámbito de escritura, no concede permisos y no descarta formularios ocultos. Los componentes nuevos son de presentación; no contienen reglas de negocio ni llamadas REST.
+
+## Componentes oficiales incorporados
+
+Incorporación manual y adaptación del registro oficial `new-york-v4`, consultado el 25/10/2026; no se ejecutó un CLI flotante ni se instaló una biblioteca runtime llamada `shadcn/ui`. Su código está en `frontend/src/components/ui`, con [licencia MIT conservada](../../frontend/src/components/ui/LICENSE.txt). Si se usa el CLI en futuras incorporaciones, arquitectura §5.4.2 fija `shadcn` 4.22.1; esa versión no congela el registro remoto.
+
+| Componente | Fuente oficial | Uso actual |
+|---|---|---|
+| Button | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/button.json) | Acceso, cambio de contraseña, administración y consulta. |
+| Input | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/input.json) | Campos de acceso, sucursales y usuarios. |
+| Badge | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/badge.json) | Estado activo/inactivo, mediante `StatusBadge`. |
+| Table | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/table.json) | Sucursales, usuarios y existencias. |
+| Tabs | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/tabs.json) | Navegación contextual de administración mediante `SectionTabs`. |
+
+SHA-256 del campo `files[0].content` original, antes de las adaptaciones locales; sirve para identificar la instantánea consultada, no como hash del archivo adaptado:
+
+```text
+button 79dd6f75f8136394442202d6b8b922fb269eaad0a5dba579397c9d5b41f893bb
+input  0c9457181f6ddc80969bcf854e92c362903a55b6e889fbef3fd85343ecc4af5b
+badge  13a9380dfff853ee730c14a52df49f22aecd31f40f2998d7c1e7ec458b6e1650
+table  bd1a9fc83a5a2149e504038e274bb7e5a0351af59f6896df52ac4d5b439695ac
+tabs   e1df6e2f95ece373ca909c1d54b8ba8cf4c47dd425c1784bbb9a01c38dd0936b
+```
+
+**Adaptaciones locales:** alias `@/lib/utils` para `cn`; primitivas individuales oficiales `@radix-ui/react-tabs` y `@radix-ui/react-slot` en lugar de importar el conjunto completo `radix-ui`; tamaños táctiles mínimos de 44 px; variantes y colores OptiPlant; sin variantes oscuras, verticales o tamaños no utilizados. La tabla usa una sola región externa identificada y enfocable para desplazarla con teclado, evitando dos contenedores de scroll. El montaje persistente de las pestañas se configura en la composición compartida. No se presenta el código adaptado como una copia sin modificaciones del registro.
+
+**Dependencias directas necesarias:** `@radix-ui/react-tabs` 1.2.1, `@radix-ui/react-slot` 1.5.0, `class-variance-authority` 0.7.1, `clsx` 2.1.1 y `tailwind-merge` 3.7.0. Tailwind y `@tailwindcss/vite` 4.3.3 son herramientas de construcción. Sus versiones exactas y transitivas quedan fijadas en el manifiesto y lockfile; no se añaden iconos, gráficas, calendarios ni otro sistema de componentes para esta mejora.
+
+Tailwind importa sus capas de tema y utilidades, sin Preflight, para no reiniciar los estilos de HTML existentes. Los estilos de aplicación se ubican en `@layer components`, por debajo de las utilidades. No sobrescribir estilos de componentes oficiales con reglas globales de mayor precedencia; preferir sus variantes y `className` con `cn`. `components.json` y los alias de TypeScript/Vite documentan dónde reutilizar o incorporar código.
+
+## Comprobaciones reproducibles
+
+```sh
+nvm use 24.22.1
+cd frontend
+pnpm test
+pnpm build
+```
+
+Usar las versiones fijadas y la [guía de instalación nativa](../../frontend/README.md#ejecución-nativa-en-macos-arm64). Para servir el frontend en el puerto de la comprobación, ejecutar `pnpm dev --host 127.0.0.1 --port 4175 --strictPort` dentro de `frontend`. Con ese servidor activo y `playwright-cli` ya disponible, ejecutar la comprobación visual desde un directorio temporal externo al repositorio:
+
+```sh
+playwright-cli -s=optiplant-visual open http://127.0.0.1:4175
+playwright-cli -s=optiplant-visual run-code --filename=<ruta-del-repositorio>/scripts/check_visual_browser.js
+playwright-cli -s=optiplant-visual run-code --filename=<ruta-del-repositorio>/scripts/check_component_regressions.js
+playwright-cli -s=optiplant-visual close
+```
+
+El script usa respuestas API simuladas y comprueba barra lateral, vista seleccionada, navegación de pestañas por teclado, carga de editores desde las tablas, conservación de formularios al navegar, visibilidad de enlaces por rol y cambio inicial de contraseña, formato de cantidades y ausencia de desbordamiento a 1440, 768, 390 y 320 px. No realiza escrituras en el backend ni demuestra integración full stack.
+
+### Evidencia y límites de esta aplicación
+
+- Se consultaron requisitos funcionales, RNF y ARQ-001 antes de definir la propuesta con `frontend-design`; el responsable aprobó su aplicación antes de editar.
+- La instalación local inicial contenía la variante Linux ARM64 de Rolldown, pero no la de macOS ARM64; Vite fallaba antes de editar. Tras autorización expresa, se instaló Node 24.22.1 desde la distribución oficial con SHA-256 verificado y se reinstaló con pnpm 11.24.0 y `--frozen-lockfile`. No se modificaron `package.json` ni `pnpm-lock.yaml`. Las 14 pruebas, TypeScript y el build completo de producción pasan.
+- Sin un servidor Vite ejecutable no se observó un ciclo RED→GREEN visual previo a la implementación. Se verificó la presentación en Chromium mediante un arnés temporal externo, generado desde los TSX y CSS actuales con TypeScript y React ya instalados; la comprobación de navegador pasa y se inspeccionaron capturas de escritorio y móvil. Este arnés no sustituye la compilación de producción.
+- Una segunda ejecución del mismo script pasó con el servidor Vite real y las versiones fijadas, a 1440, 768, 390 y 320 px. Esto reemplaza la limitación del arnés temporal para la comprobación de presentación; las respuestas API siguen siendo simuladas.
+- Para la adaptación a la nueva imagen se amplió la comprobación antes de editar: falló con «Authenticated shell must have a persistent sidebar» sobre la versión anterior. Tras implementar el App Shell y las pestañas, la comprobación ampliada pasa; también pasan las 14 pruebas existentes y el build. Se inspeccionaron capturas de escritorio y móvil. No se añaden herramientas de UI o navegación al manifiesto.
+- En la etapa posterior, autorizada expresamente para shadcn/ui, la prueba ampliada falló antes de implementar con «Login must reuse the official shared button». Se incorporaron los cinco componentes y sus dependencias, conservando las versiones previamente fijadas del stack. La activación de pestañas por teclado espera la actualización asíncrona de foco de Radix antes de comprobar el resultado. Pasan la instalación congelada, las 14 pruebas, TypeScript, build y navegador; se comprobó además un rechazo sin cambios de datos simulados, sin reintento ni éxito previo retenido.
+- Un verificador independiente contrastó esta migración con la instantánea previa, en directorios temporales externos: instalación congelada limpia desde caché, pruebas, build y navegador pasan; no reprodujo bloqueos. También comprobó validación vacía, conservación de borradores entre pestañas, controles deshabilitados durante solicitudes y rechazo sin reintento. Ese probe se conserva en `scripts/check_component_regressions.js`. La estructura de Docker/lockfile se revisó, pero no se ejecutó una construcción Docker/Linux en esta etapa.
+- La preparación posterior de commits incluyó una comprobación real de 10 escenarios UI/API sobre una pila Compose desechable, sin tocar los volúmenes del responsable. Pasaron backend (31 pruebas), humo de integración y frontend Docker (14 pruebas, tipos y build). Se corrigió el checker para no copiar `node_modules` del host hacia Linux, con regresiones y verificación independiente del riesgo 5. La evidencia de entrega y los límites funcionales pendientes se registran en [las tareas RF-0002–RF-0007](../../odd/tasks/rf-0002-0007.md). La instalación de componentes por sí sola no acredita integración ni funcionalidades todavía no implementadas.

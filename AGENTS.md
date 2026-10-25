@@ -10,7 +10,7 @@ Estas instrucciones complementan las instrucciones globales de Gentle AI y Organ
 - Frontend: React con TypeScript y Vite.
 - Comunicación: exclusivamente mediante API REST, alternativa inicial aprobada.
 - Dashboards: Recharts como alternativa inicial.
-- Biblioteca de componentes visuales y sistema de estilos: pendientes de definición durante el diseño técnico.
+- Biblioteca de componentes y estilos: shadcn/ui y Tailwind CSS, aprobados en ARQ-001; las versiones y herramientas de referencia se consultan en arquitectura §5.4.2. No tratarlos como una elección pendiente ni sustituirlos automáticamente.
 - Infraestructura: Docker Compose.
 - Presentación prevista: 27 de octubre de 2026.
 - Funcionalidad adicional seleccionada: módulo de reportes exportables, conforme a la alternativa propuesta en la sección 4 del enunciado oficial.
@@ -60,3 +60,13 @@ Estas elecciones pertenecen al proyecto: no deben presentarse como requisitos te
 - Conservar evidencia auténtica del uso de IA: herramientas, etapas, prompts, resultados y validaciones.
 - Incluir las decisiones y correcciones humanas relevantes, así como las limitaciones de los resultados generados.
 - No fabricar evidencias ni presentar propuestas de IA como decisiones aprobadas.
+
+## 6. Diseño del frontend y componentes autorizados
+
+- Aplicar `frontend-design` como guía de presentación, subordinada a requisitos y arquitectura. La dirección solicitada por el responsable es Enterprise SaaS / Clean Enterprise UI: tema claro, fondos neutros, superficies blancas, estructura azul oscuro y naranja para acciones principales, con sombras discretas. Consultar el [sistema visual vigente](docs/08-implementacion/sistema-visual.md) para tokens, patrones, componentes y evidencia.
+- Mantener el App Shell con navegación lateral persistente en escritorio y adaptación móvil, identificación del ámbito de sesión y navegación accesible. Mostrar únicamente módulos y datos implementados; no copiar KPI, auditoría, filtros, idiomas ni campos de una referencia visual si sus requisitos y contratos no existen.
+- El responsable autoriza instalar, configurar y utilizar autónomamente los componentes oficiales de shadcn/ui y sus dependencias necesarias, sin aprobación individual por componente. Antes de añadir uno, revisar `frontend/src/components/ui`, los componentes compartidos y `frontend/components.json`; reutilizar o adaptar lo existente antes de duplicar.
+- Conservar el código de los componentes en `frontend/src/components/ui` y sus composiciones en `frontend/src/components/shared`. Registrar origen oficial, adaptaciones y dependencias exactas en el sistema visual; respetar la licencia. El registro remoto puede cambiar: fijar el CLI no congela el código descargado. Si se utiliza el CLI, emplear la versión definida en arquitectura, no `latest`.
+- Respetar las versiones del stack aprobado y el lockfile. Una biblioteca ajena a ese stack y a las dependencias necesarias de los componentes oficiales no queda autorizada: justificarla y obtener autorización antes de incorporarla.
+- Mantener patrones uniformes para botones, formularios, tablas, estados textuales y mensajes. Verificar contraste, foco visible, teclado, movimiento reducido, desplazamiento de tablas en móvil y conservación de formularios al cambiar de vista o pestaña.
+- La mejora visual no puede alterar permisos, validaciones, precisión decimal, confirmaciones del servidor ni contratos REST. Estas autorizaciones no habilitan cambios de alcance, publicaciones, commits ni modificaciones de las instrucciones globales.

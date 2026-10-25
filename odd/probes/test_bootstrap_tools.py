@@ -52,6 +52,55 @@ class EnvironmentTest(unittest.TestCase):
 
 
 class ApplicationRunnerTest(unittest.TestCase):
+    def test_frontend_installs_without_host_dependencies_or_generated_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            source = root / "frontend"
+            source.mkdir()
+            (source / "package.json").write_text("{}")
+            (source / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
+            for name in ("node_modules", "dist", ".vite", ".pnpm-store"):
+                (source / name).mkdir()
+                (source / name / "host-only").write_text("foreign-platform-state")
+            (source / ".env").write_text("TEST_SECRET=fixture-only\n")
+            before = {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+            shutil.copy2(ROOT / "scripts/check_application.py", root / "scripts/check_application.py")
+            executable = root / "docker"
+            executable.write_text(f'#!{sys.executable}\n' + '''
+import pathlib, subprocess, sys
+root = pathlib.Path(__file__).parent
+command = sys.argv[-1].replace("/source", str(root / "frontend")).replace("/work", str(root / "work"))
+command = command.replace("/tmp/frontend-source.tar", str(root / "source.tar"))
+sys.exit(subprocess.run(["sh", "-ec", command]).returncode)
+''')
+            executable.chmod(0o755)
+            npm = root / "npm"
+            npm.write_text("#!/bin/sh\nexit 0\n")
+            npm.chmod(0o755)
+            pnpm = root / "pnpm"
+            pnpm.write_text(f'#!{sys.executable}\n' + '''
+import pathlib, sys
+root = pathlib.Path.cwd()
+if sys.argv[1] == "install":
+    excluded = ["node_modules", "dist", ".vite", ".pnpm-store", ".env"]
+    if any((root / name).exists() for name in excluded):
+        sys.exit(7)
+    (root / "node_modules").mkdir()
+    (root / "node_modules" / "native-binding").write_text("container-platform")
+else:
+    if (root / "node_modules" / "native-binding").read_text() != "container-platform":
+        sys.exit(8)
+''')
+            pnpm.chmod(0o755)
+            env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"])
+            result = subprocess.run([sys.executable, "scripts/check_application.py", "frontend"],
+                                    cwd=root, env=env, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual((source / "package.json").read_bytes(), (root / "work/package.json").read_bytes())
+            self.assertEqual((source / "pnpm-lock.yaml").read_bytes(), (root / "work/pnpm-lock.yaml").read_bytes())
+            self.assertEqual(before, {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()})
+
     def test_documentary_snapshot_and_partial_application_are_distinguished(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1,26 +1,37 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
-import type { BootstrapDto, User } from '../lib/api/client.ts';
+import type { User } from '../lib/api/client.ts';
+import { Administration } from './Administration.tsx';
+import { Visibility } from './Visibility.tsx';
+import { AppShell } from '../components/shared/AppShell.tsx';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [dto, setDto] = useState<BootstrapDto | null>(null);
   const [busy, setBusy] = useState(true);
+  const [revision, setRevision] = useState(0);
   const [message, setMessage] = useState('Comprobando sesión…');
   const [error, setError] = useState('');
+  const [location, setLocation] = useState(() => window.location.hash.slice(1));
+  useEffect(() => {
+    const update = () => setLocation(window.location.hash.slice(1));
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
+  }, []);
   const [client] = useState(() => new ApiClient(
     import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080', fetch,
-    () => { setUser(null); setDto(null); },
+    () => { setUser(null); },
   ));
 
   function showError(reason: unknown) {
     setError(reason instanceof ApiError && reason.status === 401
-      ? 'Sesión no disponible o credenciales incorrectas. Inicie sesión de nuevo.'
+      ? 'Sesión no disponible o credenciales incorrectas. Inicie sesión de nuevo. Los formularios no enviados no se confirmaron.'
+      : reason instanceof TypeError ? 'Sin comunicación con el servidor. No se confirmó la solicitud; las consultas pueden estar desactualizadas. No se guardarán operaciones para sincronización offline.'
       : reason instanceof Error ? reason.message : 'No se pudo completar la solicitud.');
     if (reason instanceof ApiError && reason.status === 403 && reason.problem.code === 'PASSWORD_CHANGE_REQUIRED') {
       setUser(previous => previous && { ...previous, mustChangePassword: true });
-      setDto(null);
     }
   }
 
@@ -60,39 +71,48 @@ export function App() {
     });
   }
 
-  return <main aria-busy={busy}>
-    <header><h1>OptiPlant · Preparación técnica</h1>
-      <p>Verificación mínima de sesión y API REST. Los módulos de negocio no están implementados en esta pantalla.</p></header>
+  const navigation = [
+    ...(!user?.mustChangePassword ? [
+      ...(user?.role === 'ADMIN' ? [{ id: 'administration-title', label: 'Administración' }] : []),
+      { id: 'visibility-title', label: 'Consultas' },
+    ] : []),
+    { id: 'account-title', label: 'Mi sesión' },
+    { id: 'password-title', label: 'Contraseña' },
+  ];
+  const current = !user ? 'login-title' : user.mustChangePassword ? (location === 'account-title' ? 'account-title' : 'password-title')
+    : navigation.some(item => item.id === location) ? location : navigation[0].id;
+
+  return <AppShell navigation={navigation} current={current} busy={busy} session={user}>
     <p role="status" aria-live="polite">{busy ? 'Procesando solicitud…' : message}</p>
     {error && <p role="alert" id="feedback">{error}</p>}
-    {!user ? <section aria-labelledby="login-title"><h2 id="login-title">Iniciar sesión</h2>
+    {!user ? <section className="login-panel" aria-labelledby="login-title"><h2 id="login-title" tabIndex={-1}>Iniciar sesión</h2>
       <form onSubmit={login} aria-describedby={error ? 'feedback' : undefined}>
         <fieldset disabled={busy}><legend>Credenciales individuales</legend>
-          <label>Código de usuario<input name="code" autoComplete="username" required /></label>
-          <label>Contraseña<input name="password" type="password" autoComplete="current-password" required /></label>
-          <button type="submit">Iniciar sesión</button>
+          <label>Código de usuario<Input name="code" autoComplete="username" required /></label>
+          <label>Contraseña<Input name="password" type="password" autoComplete="current-password" required /></label>
+          <Button type="submit">Iniciar sesión</Button>
         </fieldset>
       </form>
     </section> : <>
-      <section aria-labelledby="account-title"><h2 id="account-title">Contexto de sesión</h2>
+      <section hidden={current !== 'account-title'} className="session-panel" aria-labelledby="account-title"><h2 id="account-title" tabIndex={-1}>Contexto de sesión</h2>
         <dl><dt>Usuario</dt><dd>{user.code}</dd><dt>Identificador público</dt><dd>{user.externalId}</dd>
           <dt>Rol</dt><dd>{user.role}</dd><dt>Sucursal</dt><dd>{user.branchExternalId ?? 'Ámbito global'}</dd></dl>
-        <button disabled={busy} onClick={() => void run(async () => { await client.logout(); setMessage('Sesión cerrada.'); })}>Cerrar sesión</button>
+        <Button variant="outline" disabled={busy} onClick={() => void run(async () => { await client.logout(); setMessage('Sesión cerrada.'); })}>Cerrar sesión</Button>
       </section>
-      {user.mustChangePassword ? <section aria-labelledby="password-title"><h2 id="password-title">Cambio inicial obligatorio</h2>
-        <p>Debe cambiar su contraseña temporal antes de acceder a la comprobación protegida.</p>
+      <section hidden={current !== 'password-title'} aria-labelledby="password-title"><h2 id="password-title" tabIndex={-1}>{user.mustChangePassword ? 'Cambio inicial obligatorio' : 'Cambiar contraseña'}</h2>
+        <p>{user.mustChangePassword ? 'Debe cambiar su contraseña temporal antes de operar.' : 'El cambio cerrará todas sus sesiones.'}</p>
         <form onSubmit={changePassword} aria-describedby={error ? 'feedback' : undefined}>
           <fieldset disabled={busy}><legend>Nueva contraseña de 15 a 128 caracteres</legend>
-            <label>Contraseña actual<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
-            <label>Nueva contraseña<input name="newPassword" type="password" autoComplete="new-password" minLength={15} maxLength={128} required /></label>
-            <button type="submit">Actualizar contraseña</button>
+            <label>Contraseña actual<Input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+            <label>Nueva contraseña<Input name="newPassword" type="password" autoComplete="new-password" minLength={15} maxLength={128} required /></label>
+            <Button type="submit">Actualizar contraseña</Button>
           </fieldset>
         </form>
-      </section> : <section aria-labelledby="api-title"><h2 id="api-title">Comprobación API protegida</h2>
-        <button disabled={busy} onClick={() => void run(async () => { setDto(null); setDto(await client.bootstrap()); setMessage('Respuesta recibida del backend.'); })}>Consultar prueba REST</button>
-        {dto && <><p>Importe exacto recibido: <output>{dto.amount}</output>. Se conserva como cadena decimal.</p>
-          <pre aria-label="DTO recibido del backend">{JSON.stringify(dto, null, 2)}</pre></>}
-      </section>}
+      </section>
+      {!user.mustChangePassword && <>
+      {user.role === 'ADMIN' && <div hidden={current !== 'administration-title'}><Administration client={client} onError={showError} onChanged={() => setRevision(value => value + 1)} /></div>}
+      <div hidden={current !== 'visibility-title'}><Visibility client={client} user={user} onError={showError} revision={revision} /></div>
+      </>}
     </>}
-  </main>;
+  </AppShell>;
 }

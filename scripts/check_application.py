@@ -37,7 +37,10 @@ def main():
         command = [
             "docker", "run", "--rm", "--mount", f"type=bind,src={ROOT / 'frontend'},dst=/source,readonly",
             "node:24.22.1-bookworm-slim", "sh", "-ec",
-            "cp -a /source /work; cd /work; npm install --global pnpm@11.24.0; "
+            "mkdir /work; tar -C /source --exclude=./node_modules --exclude=./dist "
+            "--exclude=./.vite --exclude=./.pnpm-store --exclude=./.env --exclude='./.env.*' "
+            "-cf /tmp/frontend-source.tar .; tar -C /work -xf /tmp/frontend-source.tar; "
+            "cd /work; npm install --global pnpm@11.24.0; "
             "pnpm install --frozen-lockfile; pnpm test; pnpm build",
         ]
     else:

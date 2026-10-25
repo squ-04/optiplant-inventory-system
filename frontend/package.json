@@ -4,18 +4,31 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.24.0",
-  "engines": { "node": "24.22.1", "pnpm": "11.24.0" },
+  "engines": {
+    "node": "24.22.1",
+    "pnpm": "11.24.0"
+  },
   "scripts": {
     "dev": "vite",
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "build": "tsc -b && vite build"
   },
-  "dependencies": { "react": "19.2.8", "react-dom": "19.2.8" },
+  "dependencies": {
+    "@radix-ui/react-slot": "1.5.0",
+    "@radix-ui/react-tabs": "1.2.1",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "3.7.0"
+  },
   "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.9.2",
     "@types/react": "19.2.9",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.0",
+    "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "vite": "8.3.4"
   }

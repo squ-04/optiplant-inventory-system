@@ -6,6 +6,34 @@ export interface User {
   mustChangePassword: boolean;
 }
 
+export type Role = 'ADMIN' | 'MANAGER' | 'OPERATOR';
+export interface Branch {
+  externalId: string;
+  code: string;
+  name: string;
+  active: boolean;
+}
+export interface UserInput {
+  code: string;
+  fullName: string;
+  role: Role;
+  branchExternalId: string | null;
+}
+export interface ManagedUser extends UserInput {
+  externalId: string;
+  active: boolean;
+  mustChangePassword: boolean;
+}
+
+export interface InventoryItem { productExternalId: string; sku: string; name: string; physicalQuantity: string }
+export interface OperationalDocument { externalId: string; code: string; status: string; occurredAt: string }
+export interface Movement { externalId: string; occurredAt: string; kind: string; direction: string;
+  sku: string; productName: string; quantity: string; unit: string; actorCode: string }
+export interface Visibility {
+  branch: Branch; inventory: InventoryItem[]; purchases: OperationalDocument[]; sales: OperationalDocument[];
+  transfers: OperationalDocument[]; movements: Movement[];
+}
+
 export interface BootstrapDto {
   externalId: string;
   occurredAt: string;
@@ -45,6 +73,39 @@ function userDto(value: unknown): User {
       !(value.branchExternalId === null || uuid(value.branchExternalId)) ||
       typeof value.mustChangePassword !== 'boolean') throw invalid();
   return value as unknown as User;
+}
+
+function branchDto(value: unknown): Branch {
+  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !text(value.name) ||
+      typeof value.active !== 'boolean') throw invalid();
+  return value as unknown as Branch;
+}
+function managedUserDto(value: unknown): ManagedUser {
+  userDto(value);
+  if (!record(value) || !text(value.fullName) || typeof value.active !== 'boolean' ||
+      !['ADMIN', 'MANAGER', 'OPERATOR'].includes(String(value.role))) throw invalid();
+  return value as unknown as ManagedUser;
+}
+function listDto<T>(value: unknown, parse: (item: unknown) => T): T[] {
+  if (!Array.isArray(value)) throw invalid();
+  return value.map(parse);
+}
+function inventoryDto(value: unknown): InventoryItem {
+  if (!record(value) || !uuid(value.productExternalId) || !text(value.sku) || !text(value.name) ||
+      typeof value.physicalQuantity !== 'string' || !/^\d+(\.\d+)?$/.test(value.physicalQuantity)) throw invalid();
+  return value as unknown as InventoryItem;
+}
+function documentDto(value: unknown): OperationalDocument {
+  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !text(value.status) ||
+      !text(value.occurredAt) || !Number.isFinite(Date.parse(value.occurredAt))) throw invalid();
+  return value as unknown as OperationalDocument;
+}
+function movementDto(value: unknown): Movement {
+  if (!record(value) || !uuid(value.externalId) || !text(value.occurredAt) ||
+      !Number.isFinite(Date.parse(value.occurredAt)) ||
+      !['kind', 'direction', 'sku', 'productName', 'unit', 'actorCode'].every(k => text(value[k])) ||
+      typeof value.quantity !== 'string' || !/^\d+(\.\d+)?$/.test(value.quantity)) throw invalid();
+  return value as unknown as Movement;
 }
 
 export class ApiClient {
@@ -126,5 +187,49 @@ export class ApiClient {
         !/^\d{4}-\d{2}-\d{2}T.*Z$/.test(value.occurredAt) || !Number.isFinite(Date.parse(value.occurredAt)) ||
         typeof value.amount !== 'string' || !/^-?\d+(\.\d+)?$/.test(value.amount)) throw invalid();
     return value as BootstrapDto;
+  }
+
+  async branches(): Promise<Branch[]> {
+    return listDto(await this.request('/branches'), branchDto);
+  }
+  async branch(id: string): Promise<Branch> {
+    return branchDto(await this.request(`/branches/${encodeURIComponent(id)}`));
+  }
+  async createBranch(data: { code: string; name: string }): Promise<Branch> {
+    return branchDto(await this.request('/branches', 'POST', data));
+  }
+  async updateBranch(id: string, data: { name: string }): Promise<Branch> {
+    return branchDto(await this.request(`/branches/${encodeURIComponent(id)}/update`, 'POST', data));
+  }
+  async deactivateBranch(id: string): Promise<Branch> {
+    return branchDto(await this.request(`/branches/${encodeURIComponent(id)}/deactivate`, 'POST'));
+  }
+  async users(): Promise<ManagedUser[]> {
+    return listDto(await this.request('/users'), managedUserDto);
+  }
+  async user(id: string): Promise<ManagedUser> {
+    return managedUserDto(await this.request(`/users/${encodeURIComponent(id)}`));
+  }
+  async createUser(data: UserInput & { temporaryPassword: string }): Promise<ManagedUser> {
+    return managedUserDto(await this.request('/users', 'POST', data));
+  }
+  async updateUser(id: string, data: UserInput): Promise<ManagedUser> {
+    return managedUserDto(await this.request(`/users/${encodeURIComponent(id)}/update`, 'POST', data));
+  }
+  async deactivateUser(id: string): Promise<void> {
+    await this.request(`/users/${encodeURIComponent(id)}/deactivate`, 'POST');
+  }
+  async visibleBranches(): Promise<Branch[]> {
+    return listDto(await this.request('/visibility/branches'), branchDto);
+  }
+  async inventory(id: string): Promise<InventoryItem[]> {
+    return listDto(await this.request(`/visibility/inventory/${encodeURIComponent(id)}`), inventoryDto);
+  }
+  async visibility(id: string): Promise<Visibility> {
+    const value = await this.request(`/visibility/branches/${encodeURIComponent(id)}`);
+    if (!record(value)) throw invalid();
+    return { branch: branchDto(value.branch), inventory: listDto(value.inventory, inventoryDto),
+      purchases: listDto(value.purchases, documentDto), sales: listDto(value.sales, documentDto),
+      transfers: listDto(value.transfers, documentDto), movements: listDto(value.movements, movementDto) };
   }
 }
