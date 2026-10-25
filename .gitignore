@@ -71,5 +71,7 @@ __pycache__/
 # Generated skill index contains machine-specific absolute paths.
 .atl/skill-registry.md
 .atl/.skill-registry.cache.json
+# CodeGraph indexes, SQLite journals and local process state are generated.
+/.codegraph/
 # Playwright CLI output (may contain credentials)
 .playwright-cli/

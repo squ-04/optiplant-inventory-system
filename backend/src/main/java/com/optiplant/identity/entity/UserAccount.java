@@ -52,6 +52,39 @@ public class UserAccount {
         return account;
     }
 
+    public static UserAccount create(String code, String fullName, String role, Long branchId, String hash, Instant now) {
+        UserAccount account = new UserAccount();
+        account.externalId = UUID.randomUUID();
+        account.code = code;
+        account.fullName = fullName;
+        account.role = role;
+        account.branchId = branchId;
+        account.passwordHash = hash;
+        account.active = true;
+        account.mustChangePassword = true;
+        account.createdAt = now;
+        account.updatedAt = now;
+        return account;
+    }
+
+    public void update(String code, String fullName, String role, Long branchId, Instant now) {
+        boolean accessChanged = !this.role.equals(role) || !java.util.Objects.equals(this.branchId, branchId);
+        this.code = code;
+        this.fullName = fullName;
+        this.role = role;
+        this.branchId = branchId;
+        if (accessChanged) credentialsVersion = Math.incrementExact(credentialsVersion);
+        updatedAt = now;
+    }
+
+    public void deactivate(Instant now) {
+        if (active) {
+            active = false;
+            credentialsVersion = Math.incrementExact(credentialsVersion);
+            updatedAt = now;
+        }
+    }
+
     public void changePassword(String hash, Instant now) {
         passwordHash = hash;
         mustChangePassword = false;
@@ -62,6 +95,7 @@ public class UserAccount {
     public Long getId() { return id; }
     public UUID getExternalId() { return externalId; }
     public String getCode() { return code; }
+    public String getFullName() { return fullName; }
     public String getPasswordHash() { return passwordHash; }
     public String getRole() { return role; }
     public Long getBranchId() { return branchId; }

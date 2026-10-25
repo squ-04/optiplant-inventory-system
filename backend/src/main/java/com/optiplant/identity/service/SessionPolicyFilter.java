@@ -64,5 +64,11 @@ public class SessionPolicyFilter extends OncePerRequestFilter {
             session.setAttribute(INTERACTIVE_AT, now);
         }
         chain.doFilter(request, response);
+        if (request.getMethod().equals("POST") && response.getStatus() >= 200 && response.getStatus() < 300
+            && (path.equals("/api/v1/users") || path.startsWith("/api/v1/users/")
+                || path.equals("/api/v1/branches") || path.startsWith("/api/v1/branches/"))) {
+            HttpSession live = request.getSession(false);
+            if (live != null) live.setAttribute(INTERACTIVE_AT, now);
+        }
     }
 }

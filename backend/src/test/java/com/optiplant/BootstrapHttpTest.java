@@ -226,7 +226,7 @@ class BootstrapHttpTest {
     }
 
     @Test
-    void revokedVersionAndInactiveBranchInvalidateAccessWithoutLeakingProtectedData() throws Exception {
+    void revokedVersionDeniesAccessButInactiveBranchPreservesAuthorizedConsultation() throws Exception {
         createAccount("version-user", "ADMIN", null);
         Browser versioned = authenticated("version-user");
         jdbc.update("UPDATE identity_user_account SET credentials_version=credentials_version+1 WHERE code='version-user'");
@@ -236,10 +236,10 @@ class BootstrapHttpTest {
         createAccount("disabled-branch-user", "MANAGER", branch);
         Browser scoped = authenticated("disabled-branch-user");
         jdbc.update("UPDATE identity_branch SET active=false WHERE external_id=?", branch);
-        assertProblem(scoped.get("/api/v1/bootstrap"), 401, "SESSION_REVOKED");
+        assertThat(scoped.get("/api/v1/bootstrap").statusCode()).isEqualTo(200);
         scoped.csrf();
-        assertProblem(scoped.post("/api/v1/auth/login", Map.of("code", "disabled-branch-user",
-            "password", "fixture individual password"), true), 401, "LOGIN_INVALID");
+        assertThat(scoped.post("/api/v1/auth/login", Map.of("code", "disabled-branch-user",
+            "password", "fixture individual password"), true).statusCode()).isEqualTo(200);
     }
 
     private void createBranch(UUID externalId, String code) {

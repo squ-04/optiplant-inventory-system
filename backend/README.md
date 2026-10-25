@@ -2,6 +2,8 @@
 
 Base mínima de S1–S3 de `odd/tasks/preparacion-tecnica.md`: API REST, sesiones JDBC, migraciones y datos sintéticos. No implementa comandos de inventario, compras, ventas, transferencias ni reportes.
 
+La ampliación RF-0002–RF-0007 incorpora administración de usuarios/sucursales y consultas operativas sobre datos persistidos. Consultar [rutas, prueba manual y límites](../docs/08-implementacion/acceso-y-administracion.md). No se sustituyen los módulos operativos pendientes por simulaciones. No se modifican las migraciones ya aplicadas.
+
 ## Construcción y pruebas
 
 Desde la raíz, con Docker disponible:

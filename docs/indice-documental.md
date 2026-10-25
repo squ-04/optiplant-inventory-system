@@ -46,6 +46,7 @@ Los diagramas E-R están incluidos en el [modelo de datos](06-modelo-base-datos/
 
 | Documento | Uso y cautela |
 |---|---|
+| [Acceso, administración y consultas: prueba manual](08-implementacion/acceso-y-administracion.md) | Guía de la implementación de RF-0002–RF-0007, rutas, pruebas manuales y límites por módulos dependientes. No sustituye requisitos aprobados. |
 | [Git, GitHub y pull requests](07-colaboracion/git-github-y-pull-requests.md) | Guía de colaboración y revisión del repositorio. |
 | [Guía temporal de incertidumbres](01-requerimientos/incertidumbres-pendientes-temporal.md) | Antecedente de análisis con alternativas no aprobadas por sí mismas. No sustituye las decisiones ratificadas ni demuestra que todas sus preguntas sigan abiertas. |
 | [Diagramas de casos de uso — respaldo anterior](02-casos-de-uso/diagramas/indice-diagramas-casos-de-uso.md) | Versión anterior conservada como respaldo; consultar primero la versión 2 y la especificación textual. |

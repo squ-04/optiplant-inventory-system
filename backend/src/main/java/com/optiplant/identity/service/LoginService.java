@@ -54,7 +54,7 @@ public class LoginService {
         }
         UserAccount user = users.findByCode(code).orElse(null);
         boolean matches = passwords.matches(password, user == null ? dummyHash : user.getPasswordHash());
-        if (user != null && matches && user.isActive() && accounts.branchActive(user)) {
+        if (user != null && matches && user.isActive()) {
             jdbc.update("""
                 UPDATE identity_login_guard SET failure_count=0, escalation_level=0,
                 blocked_until=NULL, window_started_at=?, updated_at=? WHERE subject_hash=?

@@ -53,7 +53,8 @@ public class AccountService {
     }
 
     public boolean valid(SessionPrincipal principal, UserAccount user) {
-        return user.isActive() && branchActive(user)
+        // An inactive branch blocks commands, not authorized historical consultation.
+        return user.isActive()
             && principal.credentialsVersion() == user.getCredentialsVersion()
             && principal.role().equals(user.getRole())
             && Objects.equals(principal.branchExternalId(), branchExternalId(user));
