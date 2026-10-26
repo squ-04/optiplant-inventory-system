@@ -8,8 +8,8 @@ Estas instrucciones complementan las instrucciones globales de Gentle AI y Organ
 - Backend: monolito modular con separación interna por capas, Java y Spring Boot.
 - Persistencia: Spring Data JPA con Hibernate y PostgreSQL.
 - Frontend: React con TypeScript y Vite.
-- Comunicación: exclusivamente mediante API REST, alternativa inicial aprobada.
-- Dashboards: Recharts como alternativa inicial.
+- Comunicación: exclusivamente mediante API REST, aprobada en ARQ-002.
+- Dashboards: Recharts, aprobado en ARQ-001 junto con el stack del frontend.
 - Biblioteca de componentes y estilos: shadcn/ui y Tailwind CSS, aprobados en ARQ-001; las versiones y herramientas de referencia se consultan en arquitectura §5.4.2. No tratarlos como una elección pendiente ni sustituirlos automáticamente.
 - Infraestructura: Docker Compose.
 - Presentación prevista: 27 de octubre de 2026.
