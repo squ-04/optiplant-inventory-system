@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { User } from '../lib/api/client.ts';
 import { Administration } from './Administration.tsx';
+import { Catalog } from './Catalog.tsx';
 import { Visibility } from './Visibility.tsx';
 import { AppShell } from '../components/shared/AppShell.tsx';
 import { Button } from '../components/ui/button';
@@ -74,6 +75,7 @@ export function App() {
   const navigation = [
     ...(!user?.mustChangePassword ? [
       ...(user?.role === 'ADMIN' ? [{ id: 'administration-title', label: 'Administración' }] : []),
+      { id: 'catalog-title', label: 'Catálogo' },
       { id: 'visibility-title', label: 'Consultas' },
     ] : []),
     { id: 'account-title', label: 'Mi sesión' },
@@ -111,6 +113,7 @@ export function App() {
       </section>
       {!user.mustChangePassword && <>
       {user.role === 'ADMIN' && <div hidden={current !== 'administration-title'}><Administration client={client} onError={showError} onChanged={() => setRevision(value => value + 1)} /></div>}
+      <div hidden={current !== 'catalog-title'}><Catalog client={client} user={user} onError={showError} revision={revision} /></div>
       <div hidden={current !== 'visibility-title'}><Visibility client={client} user={user} onError={showError} revision={revision} /></div>
       </>}
     </>}

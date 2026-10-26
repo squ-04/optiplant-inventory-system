@@ -107,11 +107,11 @@ async (page) => {
     'Branch listing must reuse the official shared table');
   await page.getByRole('button', { name: 'Editar NORTE', exact: true }).click();
   await page.getByRole('button', { name: 'Desactivar sucursal', exact: true }).waitFor();
-  assert(await page.getByLabel('Código', { exact: true }).getAttribute('readonly') !== null,
+  assert(await page.locator('section[aria-labelledby="administration-title"]').getByLabel('Código', { exact: true }).getAttribute('readonly') !== null,
     'Existing branch codes must remain read-only when editing');
   assert(await page.getByRole('button', { name: 'Guardar sucursal', exact: true }).evaluate(el =>
     getComputedStyle(el).backgroundColor === 'rgb(194, 65, 12)'), 'Primary actions must use the approved accessible orange');
-  await page.getByLabel('Nombre', { exact: true }).fill('Sucursal Norte revisada');
+  await page.locator('section[aria-labelledby="administration-title"]').getByLabel('Nombre', { exact: true }).fill('Sucursal Norte revisada');
   await page.getByRole('button', { name: 'Guardar sucursal', exact: true }).click();
   await page.getByText('Sucursal guardada.', { exact: true }).waitFor();
   assert(currentBranch.name === 'Sucursal Norte revisada', 'Shared input/button must preserve confirmed writes');
@@ -120,7 +120,7 @@ async (page) => {
     'Branch update must preserve method, CSRF and payload without changing code');
   const beforeRejection = JSON.stringify(currentBranch);
   rejectBranchUpdate = true;
-  await page.getByLabel('Nombre', { exact: true }).fill('Cambio rechazado');
+  await page.locator('section[aria-labelledby="administration-title"]').getByLabel('Nombre', { exact: true }).fill('Cambio rechazado');
   await page.getByRole('button', { name: 'Guardar sucursal', exact: true }).click();
   await page.getByText('No se confirmó el cambio de sucursal.', { exact: true }).first().waitFor();
   assert(JSON.stringify(currentBranch) === beforeRejection && writes.length === 2,

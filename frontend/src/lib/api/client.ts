@@ -25,6 +25,27 @@ export interface ManagedUser extends UserInput {
   mustChangePassword: boolean;
 }
 
+export interface ProductAttributes {
+  sku: string;
+  name: string;
+  description: string | null;
+  baseUnitName: string;
+  baseDivisible: boolean;
+}
+/** Minimum stock in base units as an exact decimal string; never converted to a JavaScript number. */
+export interface ProductEnablement { branchExternalId: string; minimumQuantity: string }
+export interface ProductBranch {
+  branchExternalId: string; branchCode: string; branchName: string; branchActive: boolean;
+  enabled: boolean; minimumQuantity: string | null;
+}
+export interface Product extends ProductAttributes {
+  externalId: string;
+  active: boolean;
+  inUse: boolean;
+  /** Local enablement, returned to administrators only. */
+  branches: ProductBranch[] | null;
+}
+
 export interface InventoryItem { productExternalId: string; sku: string; name: string; physicalQuantity: string }
 export interface OperationalDocument { externalId: string; code: string; status: string; occurredAt: string }
 export interface Movement { externalId: string; occurredAt: string; kind: string; direction: string;
@@ -89,6 +110,21 @@ function managedUserDto(value: unknown): ManagedUser {
 function listDto<T>(value: unknown, parse: (item: unknown) => T): T[] {
   if (!Array.isArray(value)) throw invalid();
   return value.map(parse);
+}
+const decimal = (value: unknown) => typeof value === 'string' && /^\d+(\.\d+)?$/.test(value);
+function productBranchDto(value: unknown): ProductBranch {
+  if (!record(value) || !uuid(value.branchExternalId) || !text(value.branchCode) || !text(value.branchName) ||
+      typeof value.branchActive !== 'boolean' || typeof value.enabled !== 'boolean' ||
+      !(value.minimumQuantity === null || decimal(value.minimumQuantity))) throw invalid();
+  return value as unknown as ProductBranch;
+}
+function productDto(value: unknown): Product {
+  if (!record(value) || !uuid(value.externalId) || !text(value.sku) || !text(value.name) ||
+      !(value.description === null || typeof value.description === 'string') || !text(value.baseUnitName) ||
+      typeof value.baseDivisible !== 'boolean' || typeof value.active !== 'boolean' || typeof value.inUse !== 'boolean' ||
+      !(value.branches === null || Array.isArray(value.branches))) throw invalid();
+  if (value.branches !== null) listDto(value.branches, productBranchDto);
+  return value as unknown as Product;
 }
 function inventoryDto(value: unknown): InventoryItem {
   if (!record(value) || !uuid(value.productExternalId) || !text(value.sku) || !text(value.name) ||
@@ -218,6 +254,28 @@ export class ApiClient {
   }
   async deactivateUser(id: string): Promise<void> {
     await this.request(`/users/${encodeURIComponent(id)}/deactivate`, 'POST');
+  }
+  async products(): Promise<Product[]> {
+    return listDto(await this.request('/products'), productDto);
+  }
+  async product(id: string): Promise<Product> {
+    return productDto(await this.request(`/products/${encodeURIComponent(id)}`));
+  }
+  async createProduct(data: ProductAttributes & { branches: ProductEnablement[] }): Promise<Product> {
+    return productDto(await this.request('/products', 'POST', data));
+  }
+  async updateProduct(id: string, data: ProductAttributes): Promise<Product> {
+    return productDto(await this.request(`/products/${encodeURIComponent(id)}/update`, 'POST', data));
+  }
+  async enableProduct(id: string, data: ProductEnablement): Promise<Product> {
+    return productDto(await this.request(`/products/${encodeURIComponent(id)}/branches`, 'POST', data));
+  }
+  /** Logical deactivation only: the API exposes no physical deletion. */
+  async deactivateProduct(id: string): Promise<Product> {
+    return productDto(await this.request(`/products/${encodeURIComponent(id)}/deactivate`, 'POST'));
+  }
+  async reactivateProduct(id: string): Promise<Product> {
+    return productDto(await this.request(`/products/${encodeURIComponent(id)}/reactivate`, 'POST'));
   }
   async visibleBranches(): Promise<Branch[]> {
     return listDto(await this.request('/visibility/branches'), branchDto);
