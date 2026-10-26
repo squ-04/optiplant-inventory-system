@@ -13,7 +13,7 @@ RF-0011, INC-006/D01–D03 (H v1.3/01) y el modelo de datos §6.2/§7.4 establec
 ## Recorrido manual
 
 1. Levantar el entorno según [acceso y administración](acceso-y-administracion.md) e iniciar sesión como administrador. Abrir **Catálogo**.
-2. Crear un producto con SKU, nombre, descripción opcional y unidad base, indicando si admite fracciones. Usar **Elegir todas las sucursales activas** o marcar algunas e indicar un stock mínimo explícito para cada una (se acepta cero). El mensaje confirma que no se registraron existencias; en **Consultas** el producto no aparece con saldo.
+2. Pulsar **Nuevo producto** (el formulario aparece y recibe el foco) y crear un producto con SKU, nombre, descripción opcional y unidad base, indicando si admite fracciones. Usar **Elegir todas las sucursales activas** o marcar algunas e indicar un stock mínimo explícito para cada una (se acepta cero). El mensaje confirma que no se registraron existencias; en **Consultas** el producto no aparece con saldo.
 3. Repetir el mismo SKU: se rechaza con «El SKU ya está registrado en la red.» y el borrador se conserva. Un mínimo fraccionario en una unidad entera, más de tres decimales o un valor negativo también se rechazan.
 4. Editar el producto: nombre y descripción cambian; el identificador público no. Mientras el producto no tenga historial (saldos, movimientos, líneas de compra, venta o transferencia, o precios), SKU y unidad base son editables; después quedan protegidos y el servidor rechaza su cambio con `PRODUCT_IDENTITY_PROTECTED`.
 5. Crear una sucursal nueva en **Administración**, volver a **Catálogo**, editar el producto y usar **Habilitar en otra sucursal** con su mínimo. Se conserva la identidad del producto y no se crean existencias.

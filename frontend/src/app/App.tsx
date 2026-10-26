@@ -8,6 +8,8 @@ import { Visibility } from './Visibility.tsx';
 import { AppShell } from '../components/shared/AppShell.tsx';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { PasswordField } from '../components/shared/PasswordField.tsx';
+import { Building2, KeyRound, LogIn, LogOut, Package, Search, UserRound } from 'lucide-react';
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -74,12 +76,13 @@ export function App() {
 
   const navigation = [
     ...(!user?.mustChangePassword ? [
-      ...(user?.role === 'ADMIN' ? [{ id: 'administration-title', label: 'Administración' }] : []),
-      { id: 'catalog-title', label: 'Catálogo' },
-      { id: 'visibility-title', label: 'Consultas' },
+      ...(user?.role === 'ADMIN' ? [{ id: 'administration-title', label: 'Administración', icon: Building2 }] : []),
+      // Consultas stays first for local profiles: the first entry is the landing view.
+      { id: 'visibility-title', label: 'Consultas', icon: Search },
+      { id: 'catalog-title', label: 'Catálogo', icon: Package },
     ] : []),
-    { id: 'account-title', label: 'Mi sesión' },
-    { id: 'password-title', label: 'Contraseña' },
+    { id: 'account-title', label: 'Mi sesión', icon: UserRound },
+    { id: 'password-title', label: 'Contraseña', icon: KeyRound },
   ];
   const current = !user ? 'login-title' : user.mustChangePassword ? (location === 'account-title' ? 'account-title' : 'password-title')
     : navigation.some(item => item.id === location) ? location : navigation[0].id;
@@ -91,23 +94,23 @@ export function App() {
       <form onSubmit={login} aria-describedby={error ? 'feedback' : undefined}>
         <fieldset disabled={busy}><legend>Credenciales individuales</legend>
           <label>Código de usuario<Input name="code" autoComplete="username" required /></label>
-          <label>Contraseña<Input name="password" type="password" autoComplete="current-password" required /></label>
-          <Button type="submit">Iniciar sesión</Button>
+          <PasswordField label="Contraseña" name="password" autoComplete="current-password" required />
+          <Button type="submit"><LogIn aria-hidden="true" />Iniciar sesión</Button>
         </fieldset>
       </form>
     </section> : <>
       <section hidden={current !== 'account-title'} className="session-panel" aria-labelledby="account-title"><h2 id="account-title" tabIndex={-1}>Contexto de sesión</h2>
         <dl><dt>Usuario</dt><dd>{user.code}</dd><dt>Identificador público</dt><dd>{user.externalId}</dd>
           <dt>Rol</dt><dd>{user.role}</dd><dt>Sucursal</dt><dd>{user.branchExternalId ?? 'Ámbito global'}</dd></dl>
-        <Button variant="outline" disabled={busy} onClick={() => void run(async () => { await client.logout(); setMessage('Sesión cerrada.'); })}>Cerrar sesión</Button>
+        <Button variant="outline" disabled={busy} onClick={() => void run(async () => { await client.logout(); setMessage('Sesión cerrada.'); })}><LogOut aria-hidden="true" />Cerrar sesión</Button>
       </section>
       <section hidden={current !== 'password-title'} aria-labelledby="password-title"><h2 id="password-title" tabIndex={-1}>{user.mustChangePassword ? 'Cambio inicial obligatorio' : 'Cambiar contraseña'}</h2>
         <p>{user.mustChangePassword ? 'Debe cambiar su contraseña temporal antes de operar.' : 'El cambio cerrará todas sus sesiones.'}</p>
         <form onSubmit={changePassword} aria-describedby={error ? 'feedback' : undefined}>
           <fieldset disabled={busy}><legend>Nueva contraseña de 15 a 128 caracteres</legend>
-            <label>Contraseña actual<Input name="currentPassword" type="password" autoComplete="current-password" required /></label>
-            <label>Nueva contraseña<Input name="newPassword" type="password" autoComplete="new-password" minLength={15} maxLength={128} required /></label>
-            <Button type="submit">Actualizar contraseña</Button>
+            <PasswordField label="Contraseña actual" name="currentPassword" autoComplete="current-password" required />
+            <PasswordField label="Nueva contraseña" name="newPassword" autoComplete="new-password" minLength={15} maxLength={128} required />
+            <Button type="submit"><KeyRound aria-hidden="true" />Actualizar contraseña</Button>
           </fieldset>
         </form>
       </section>

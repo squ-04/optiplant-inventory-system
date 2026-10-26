@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { Branch, Product, ProductAttributes, ProductEnablement, User } from '../lib/api/client.ts';
 import { StatusBadge } from '../components/shared/StatusBadge';
+import { revealEditor } from '../components/shared/revealEditor.ts';
+import { Ban, Pencil, Plus, RefreshCw, RotateCcw, Save, Store, X } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
@@ -19,6 +21,8 @@ export function Catalog({ client, user, onError, revision }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selected, setSelected] = useState<Product | null>(null);
+  // The editor exists only after an explicit create or edit action.
+  const [editorOpen, setEditorOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState('');
@@ -60,12 +64,15 @@ export function Catalog({ client, user, onError, revision }: Props) {
     <div className="list-heading">
       <div><h3>Productos registrados</h3><p>Identificación, unidad base y disponibilidad en el catálogo general.</p></div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={busy} onClick={() => void run(load)}>Actualizar catálogo</Button>
-        {admin && <Button disabled={busy} onClick={() => { setSelected(null); setMessage(''); }}>Nuevo producto</Button>}
+        <Button variant="outline" disabled={busy} onClick={() => void run(load)}><RefreshCw aria-hidden="true" />Actualizar catálogo</Button>
+        {admin && <Button disabled={busy} onClick={() => {
+          if (selected) setSelected(null);
+          setMessage(''); setEditorOpen(true); revealEditor('product-editor');
+        }}><Plus aria-hidden="true" />Nuevo producto</Button>}
       </div>
     </div>
     {!loaded && !busy && <p>El catálogo todavía no está disponible.</p>}
-    {loaded && products.length === 0 && <p>{admin ? 'No hay productos registrados. Cree el primero con el formulario.' : 'No hay productos registrados.'}</p>}
+    {loaded && products.length === 0 && <p>{admin ? 'No hay productos registrados. Use «Nuevo producto» para crear el primero.' : 'No hay productos registrados.'}</p>}
     {products.length > 0 && <div className="table-scroll" role="region" aria-label="Productos registrados" tabIndex={0}>
       <Table>
         <TableCaption>Productos registrados, ordenados por SKU</TableCaption>
@@ -82,12 +89,14 @@ export function Catalog({ client, user, onError, revision }: Props) {
             {item.baseDivisible ? 'Admite fracciones' : 'Solo cantidades enteras'}</span></TableCell>
           <TableCell><StatusBadge active={item.active} /></TableCell>
           {admin && <TableCell className="text-right"><Button variant="outline" disabled={busy}
-            onClick={() => void run(async () => setSelected(await client.product(item.externalId)))}>
-            Editar <span className="sr-only">{item.sku}</span>
+            onClick={() => void run(async () => {
+              setSelected(await client.product(item.externalId)); setEditorOpen(true); revealEditor('product-editor');
+            })}>
+            <Pencil aria-hidden="true" />Editar <span className="sr-only">{item.sku}</span>
           </Button></TableCell>}
         </TableRow>)}</TableBody>
       </Table></div>}
-    {admin && <>
+    {admin && editorOpen && <>
       <ProductEditor key={selected ? `editor-${JSON.stringify(selected)}` : 'new-product'} product={selected} branches={branches} busy={busy}
         onSave={(attributes, enablements) => run(async () => {
           const result = selected
@@ -114,7 +123,8 @@ export function Catalog({ client, user, onError, revision }: Props) {
               setMessage('Producto reactivado. No está habilitado en ninguna sucursal hasta configurarlo de nuevo.');
             });
           }
-        }} />
+        }}
+        onClose={() => { setEditorOpen(false); setSelected(null); }} />
       {selected && <EnablementPanel key={`enablement-${JSON.stringify(selected)}`} product={selected} branches={branches} busy={busy}
         onEnable={enablement => void run(async () => {
           const result = await client.enableProduct(selected.externalId, enablement);
@@ -124,10 +134,10 @@ export function Catalog({ client, user, onError, revision }: Props) {
   </section>;
 }
 
-function ProductEditor({ product, branches, busy, onSave, onDeactivate, onReactivate }: {
+function ProductEditor({ product, branches, busy, onSave, onDeactivate, onReactivate, onClose }: {
   product: Product | null; branches: Branch[]; busy: boolean;
   onSave: (attributes: ProductAttributes, enablements: ProductEnablement[]) => Promise<void>;
-  onDeactivate: () => void; onReactivate: () => void;
+  onDeactivate: () => void; onReactivate: () => void; onClose: () => void;
 }) {
   const [divisible, setDivisible] = useState(product?.baseDivisible ?? false);
   const [chosen, setChosen] = useState<string[]>([]);
@@ -144,7 +154,7 @@ function ProductEditor({ product, branches, busy, onSave, onDeactivate, onReacti
       branchExternalId: branch.externalId, minimumQuantity: String(data.get(`minimum-${branch.externalId}`)) })));
   }
 
-  return <form onSubmit={submit}>
+  return <form id="product-editor" onSubmit={submit}>
     <fieldset disabled={busy}>
       <legend>{product ? `Editar producto ${product.sku}` : 'Crear producto'}</legend>
       {product && <p>Identificador público: {product.externalId} · <StatusBadge active={product.active} /></p>}
@@ -182,9 +192,10 @@ function ProductEditor({ product, branches, busy, onSave, onDeactivate, onReacti
           })}</ul>
         </>}
       </fieldset>}
-      <Button type="submit">{product ? 'Guardar cambios' : 'Crear producto'}</Button>
-      {product?.active && <Button variant="outline" className="text-destructive" type="button" onClick={onDeactivate}>Desactivar producto</Button>}
-      {product && !product.active && <Button variant="outline" type="button" onClick={onReactivate}>Reactivar producto</Button>}
+      <Button type="submit">{product ? <><Save aria-hidden="true" />Guardar cambios</> : <><Plus aria-hidden="true" />Crear producto</>}</Button>
+      {product?.active && <Button variant="outline" className="text-destructive" type="button" onClick={onDeactivate}><Ban aria-hidden="true" />Desactivar producto</Button>}
+      {product && !product.active && <Button variant="outline" type="button" onClick={onReactivate}><RotateCcw aria-hidden="true" />Reactivar producto</Button>}
+      <Button variant="ghost" type="button" onClick={onClose}><X aria-hidden="true" />Cerrar formulario</Button>
     </fieldset>
   </form>;
 }
@@ -235,7 +246,7 @@ function EnablementPanel({ product, branches, busy, onEnable }: {
           inputMode={product.baseDivisible ? 'decimal' : 'numeric'} pattern={quantityPattern(product.baseDivisible)}
           title={quantityHint(product.baseDivisible)} /></label>
         <p className="text-muted-foreground">{quantityHint(product.baseDivisible)} Se acepta cero.</p>
-        <Button type="submit">Habilitar en sucursal</Button>
+        <Button type="submit"><Store aria-hidden="true" />Habilitar en sucursal</Button>
       </fieldset>
     </form> : <p className="notice-warning">Reactive el producto antes de habilitarlo en una sucursal.</p>}
   </div>;

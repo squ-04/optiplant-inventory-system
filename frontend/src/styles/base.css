@@ -155,6 +155,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .list-heading h3 { margin: 0; }
 .list-heading p { margin-bottom: 0; color: var(--color-muted); font-size: .875rem; }
 .list-heading button { margin: 0; }
+.nav-icon { width: 1.125rem; height: 1.125rem; margin-right: var(--space-3); flex: none; }
+.password-field { display: flex; align-items: center; gap: var(--space-2); max-width: 36rem; }
+.password-field input { margin: 0; }
 .checkbox-field { display: flex; align-items: center; gap: var(--space-3); min-height: 2.75rem; align-self: end; }
 .checkbox-field input[type="checkbox"] { display: inline-block; width: 1.25rem; min-height: 1.25rem; height: 1.25rem; margin: 0; padding: 0; flex: none; accent-color: var(--color-action); }
 .nested-fieldset { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }

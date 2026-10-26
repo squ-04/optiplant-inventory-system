@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
-interface NavigationItem { id: string; label: string }
+interface NavigationItem { id: string; label: string; icon?: LucideIcon }
 
 export function AppShell({ children, navigation, current, busy, session }: {
   children: ReactNode;
@@ -23,7 +24,8 @@ export function AppShell({ children, navigation, current, busy, session }: {
       {brand}
       <nav className="section-nav" aria-label="Secciones de trabajo">
         {navigation.map(item => <a key={item.id} href={`#${item.id}`}
-          aria-current={current === item.id ? 'page' : undefined}>{item.label}</a>)}
+          aria-current={current === item.id ? 'page' : undefined}>
+          {item.icon && <item.icon className="nav-icon" aria-hidden="true" />}{item.label}</a>)}
       </nav>
       <div className="sidebar-session"><span className="session-avatar" aria-hidden="true">{session.code.slice(0, 2)}</span>
         <div><strong>{session.code}</strong><span>{session.role}</span><a href="#account-title">Ver mi sesión</a></div>

@@ -74,11 +74,12 @@ def main():
       stage = 'create-user';
       await page.getByRole('link', { name: 'Administración', exact: true }).click();
       await page.getByRole('tab', { name: 'Usuarios', exact: true }).click();
+      await page.getByRole('button', { name: 'Nuevo usuario', exact: true }).click();
       const userForm = page.getByRole('group', { name: 'Crear usuario', exact: true });
       await userForm.getByLabel('Nombre completo').fill('Persona de prueba UI');
       await userForm.getByLabel('Código de usuario', { exact: true }).fill(user);
       await userForm.getByLabel('Sucursal activa').selectOption({ label: a + ' · ' + a });
-      await userForm.getByLabel('Contraseña temporal individual').fill(config.temporary);
+      await userForm.getByLabel('Contraseña temporal individual', { exact: true }).fill(config.temporary);
       await userForm.getByRole('button', { name: 'Guardar usuario' }).click();
       await page.getByText('Usuario guardado.', { exact: false }).waitFor();
       const context = await page.context().browser().newContext();

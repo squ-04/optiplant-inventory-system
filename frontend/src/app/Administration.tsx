@@ -3,6 +3,9 @@ import type { FormEvent } from 'react';
 import { ApiClient } from '../lib/api/client.ts';
 import type { Branch, ManagedUser, Role, UserInput } from '../lib/api/client.ts';
 import { SectionTabs } from '../components/shared/SectionTabs.tsx';
+import { PasswordField } from '../components/shared/PasswordField.tsx';
+import { revealEditor } from '../components/shared/revealEditor.ts';
+import { Ban, Pencil, Plus, RefreshCw, Save, X } from 'lucide-react';
 import { StatusBadge } from '../components/shared/StatusBadge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -17,6 +20,9 @@ export function Administration({ client, onError, onChanged }: Props) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [branch, setBranch] = useState<Branch | null>(null);
   const [account, setAccount] = useState<ManagedUser | null>(null);
+  // Editors exist only after an explicit create or edit action, never as an idle form on load.
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState('');
@@ -65,14 +71,17 @@ export function Administration({ client, onError, onChanged }: Props) {
     <p>Las bajas conservan identidad e historial. No se eliminan registros ni se reactivan automáticamente.</p>
     <p role="status">{busy ? 'Consultando servidor…' : message}</p>
     {error && <p role="alert">{error}</p>}
-    <Button variant="outline" disabled={busy} onClick={() => void run(reload)}>Actualizar listados</Button>
+    <Button variant="outline" disabled={busy} onClick={() => void run(reload)}><RefreshCw aria-hidden="true" />Actualizar listados</Button>
     {!loaded && <p>Los datos todavía no están disponibles.</p>}
     <SectionTabs label="Administración de la red" items={[{ label: 'Sucursales', content: <>
     <div className="list-heading">
       <div><h3>Sucursales</h3><p>Identificación y disponibilidad de las sedes de la red.</p></div>
-      <Button disabled={busy} onClick={() => setBranch(null)}>Nueva sucursal</Button>
+      <Button disabled={busy} onClick={() => {
+        if (branch) setBranch(null);
+        setBranchOpen(true); revealEditor('branch-editor');
+      }}><Plus aria-hidden="true" />Nueva sucursal</Button>
     </div>
-    {loaded && branches.length === 0 && <p>No hay sucursales registradas.</p>}
+    {loaded && branches.length === 0 && <p>No hay sucursales registradas. Use «Nueva sucursal» para crear la primera.</p>}
     {branches.length > 0 && <div className="table-scroll" role="region" aria-label="Sucursales registradas" tabIndex={0}>
       <Table>
         <TableCaption>Sucursales registradas</TableCaption>
@@ -85,12 +94,14 @@ export function Administration({ client, onError, onChanged }: Props) {
           <TableCell className="font-medium">{item.name}</TableCell>
           <TableCell><StatusBadge active={item.active} activeLabel="Activa" inactiveLabel="Inactiva" /></TableCell>
           <TableCell className="text-right"><Button variant="outline" disabled={busy}
-            onClick={() => void run(async () => setBranch(await client.branch(item.externalId)))}>
-            Editar <span className="sr-only">{item.code}</span>
+            onClick={() => void run(async () => {
+              setBranch(await client.branch(item.externalId)); setBranchOpen(true); revealEditor('branch-editor');
+            })}>
+            <Pencil aria-hidden="true" />Editar <span className="sr-only">{item.code}</span>
           </Button></TableCell>
         </TableRow>)}</TableBody>
       </Table></div>}
-    <form key={branch ? JSON.stringify(branch) : 'new-branch'} onSubmit={saveBranch}>
+    {branchOpen && <form id="branch-editor" key={branch ? JSON.stringify(branch) : 'new-branch'} onSubmit={saveBranch}>
       <fieldset disabled={busy}>
         <legend>{branch ? 'Editar sucursal' : 'Crear sucursal'}</legend>
         {branch && <p>Identificador público: {branch.externalId}</p>}
@@ -98,20 +109,24 @@ export function Administration({ client, onError, onChanged }: Props) {
           <label>Código<Input name="code" required maxLength={64} defaultValue={branch?.code ?? ''} readOnly={!!branch} /></label>
           <label>Nombre<Input name="name" required maxLength={160} defaultValue={branch?.name ?? ''} /></label>
         </div>
-        <Button type="submit">Guardar sucursal</Button>
+        <Button type="submit"><Save aria-hidden="true" />Guardar sucursal</Button>
         {branch?.active && <Button variant="outline" className="text-destructive" type="button" onClick={() => {
           if (window.confirm(`¿Desactivar la sucursal ${branch.code}? Se verificará que no tenga existencias ni documentos pendientes.`)) {
             void run(async () => { setBranch(await client.deactivateBranch(branch.externalId)); await reload(); setMessage('Sucursal desactivada. Las cuentas no fueron desactivadas.'); });
           }
-        }}>Desactivar sucursal</Button>}
+        }}><Ban aria-hidden="true" />Desactivar sucursal</Button>}
+        <Button variant="ghost" type="button" onClick={() => { setBranchOpen(false); setBranch(null); }}><X aria-hidden="true" />Cerrar formulario</Button>
       </fieldset>
-    </form>
+    </form>}
     </> }, { label: 'Usuarios', content: <>
     <div className="list-heading">
       <div><h3>Usuarios</h3><p>Identidad, perfil y sucursal asignada de cada cuenta.</p></div>
-      <Button disabled={busy} onClick={() => setAccount(null)}>Nuevo usuario</Button>
+      <Button disabled={busy} onClick={() => {
+        if (account) setAccount(null);
+        setAccountOpen(true); revealEditor('user-editor');
+      }}><Plus aria-hidden="true" />Nuevo usuario</Button>
     </div>
-    {loaded && users.length === 0 && <p>No hay usuarios registrados.</p>}
+    {loaded && users.length === 0 && <p>No hay usuarios registrados. Use «Nuevo usuario» para crear el primero.</p>}
     {users.length > 0 && <div className="table-scroll" role="region" aria-label="Usuarios registrados" tabIndex={0}>
       <Table>
         <TableCaption>Usuarios registrados</TableCaption>
@@ -131,13 +146,15 @@ export function Administration({ client, onError, onChanged }: Props) {
               : item.branchExternalId ?? (item.role === 'ADMIN' ? 'Ámbito global' : 'Sin sucursal asignada')}</TableCell>
             <TableCell><StatusBadge active={item.active} /></TableCell>
             <TableCell className="text-right"><Button variant="outline" disabled={busy}
-              onClick={() => void run(async () => setAccount(await client.user(item.externalId)))}>
-              Editar <span className="sr-only">{item.code}</span>
+              onClick={() => void run(async () => {
+                setAccount(await client.user(item.externalId)); setAccountOpen(true); revealEditor('user-editor');
+              })}>
+              <Pencil aria-hidden="true" />Editar <span className="sr-only">{item.code}</span>
             </Button></TableCell>
           </TableRow>;
         })}</TableBody>
       </Table></div>}
-    <UserEditor key={account ? JSON.stringify(account) : 'new-user'} account={account} branches={branches} busy={busy}
+    {accountOpen && <UserEditor key={account ? JSON.stringify(account) : 'new-user'} account={account} branches={branches} busy={busy}
       onSave={(data, password) => run(async () => {
         const result = account
           ? await client.updateUser(account.externalId, data)
@@ -153,14 +170,15 @@ export function Administration({ client, onError, onChanged }: Props) {
             setAccount(await client.user(account.externalId)); await reload(); setMessage('Usuario desactivado.');
           });
         }
-      }} />
+      }}
+      onClose={() => { setAccountOpen(false); setAccount(null); }} />}
     </> }]} />
   </section>;
 }
 
-function UserEditor({ account, branches, busy, onSave, onDeactivate }: {
+function UserEditor({ account, branches, busy, onSave, onDeactivate, onClose }: {
   account: ManagedUser | null; branches: Branch[]; busy: boolean;
-  onSave: (data: UserInput, password: string) => Promise<void>; onDeactivate: () => void;
+  onSave: (data: UserInput, password: string) => Promise<void>; onDeactivate: () => void; onClose: () => void;
 }) {
   const [role, setRole] = useState<Role>(account?.role ?? 'OPERATOR');
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -174,7 +192,7 @@ function UserEditor({ account, branches, busy, onSave, onDeactivate }: {
     void onSave({ code: String(data.get('code')), fullName: String(data.get('fullName')), role,
       branchExternalId: String(data.get('branchExternalId') ?? '') || null }, password);
   }
-  return <form onSubmit={submit}>
+  return <form id="user-editor" onSubmit={submit}>
     <fieldset disabled={busy}>
       <legend>{account ? 'Editar usuario' : 'Crear usuario'}</legend>
       {account && <p>Identificador público: {account.externalId} · {account.active ? 'Activo' : 'Inactivo'}</p>}
@@ -191,10 +209,11 @@ function UserEditor({ account, branches, busy, onSave, onDeactivate }: {
         {branches.filter(b => b.active || b.externalId === account?.branchExternalId).map(b =>
           <option key={b.externalId} value={b.externalId} disabled={!b.active}>{b.code} · {b.name}{!b.active ? ' (inactiva)' : ''}</option>)}
       </select>
-      {!account && <label>Contraseña temporal individual<Input name="temporaryPassword" type="password" required
-        autoComplete="new-password" minLength={15} maxLength={128} /></label>}
-      <Button type="submit">Guardar usuario</Button>
-      {account?.active && <Button variant="outline" className="text-destructive" type="button" onClick={onDeactivate}>Desactivar usuario</Button>}
+      {!account && <PasswordField label="Contraseña temporal individual" name="temporaryPassword" required
+        autoComplete="new-password" minLength={15} maxLength={128} />}
+      <Button type="submit"><Save aria-hidden="true" />Guardar usuario</Button>
+      {account?.active && <Button variant="outline" className="text-destructive" type="button" onClick={onDeactivate}><Ban aria-hidden="true" />Desactivar usuario</Button>}
+      <Button variant="ghost" type="button" onClick={onClose}><X aria-hidden="true" />Cerrar formulario</Button>
     </fieldset>
   </form>;
 }
