@@ -22,7 +22,7 @@ public record BranchCreateRequest(String code, String name) {
         return value;
     }
 
-    static void validateFields(JsonNode body, Set<String> fields) {
+    public static void validateFields(JsonNode body, Set<String> fields) {
         if (!body.isObject() || body.size() != fields.size() || !fields.stream().allMatch(body::has)) throw invalid();
     }
 

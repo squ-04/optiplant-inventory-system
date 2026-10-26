@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -36,6 +37,11 @@ public class ApiErrors {
         MethodArgumentTypeMismatchException.class})
     ResponseEntity<ProblemDetail> invalid(Exception error) {
         return ResponseEntity.badRequest().body(problem(400, "VALIDATION_FAILED", "La solicitud no es válida."));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ProblemDetail> method(HttpRequestMethodNotSupportedException error) {
+        return ResponseEntity.status(405).body(problem(405, "METHOD_NOT_ALLOWED", "La operación no está disponible para este recurso."));
     }
 
     @ExceptionHandler(Exception.class)
