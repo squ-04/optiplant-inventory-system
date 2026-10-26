@@ -38,12 +38,28 @@ export interface ProductBranch {
   branchExternalId: string; branchCode: string; branchName: string; branchActive: boolean;
   enabled: boolean; minimumQuantity: string | null;
 }
+/** A unit of one product; `factor` is the exact base equivalent of one unit as a decimal string (base unit: 1). */
+export interface ProductUnit { name: string; factor: string; divisible: boolean; base: boolean; active: boolean }
+export interface ProductUnitInput { name: string; factor: string; divisible: boolean }
+export interface ProductUnitChange { name: string; factor: string; active: boolean }
 export interface Product extends ProductAttributes {
   externalId: string;
   active: boolean;
   inUse: boolean;
   /** Local enablement, returned to administrators only. */
   branches: ProductBranch[] | null;
+  /** Units of the product, returned by the detail query only. */
+  units: ProductUnit[] | null;
+}
+export interface UnitConversion { unitName: string; quantity: string; factor: string; baseUnitName: string; baseQuantity: string }
+/** Products enabled in the session's own branch, with exact base-unit quantities. */
+export interface LocalCatalogItem {
+  productExternalId: string; sku: string; name: string; description: string | null; baseUnitName: string;
+  baseDivisible: boolean; minimumQuantity: string; physicalQuantity: string; availableQuantity: string;
+  inTransitQuantity: string; units: ProductUnit[];
+}
+export interface LocalCatalog {
+  branchExternalId: string; branchCode: string; branchName: string; branchActive: boolean; items: LocalCatalogItem[];
 }
 
 export interface InventoryItem { productExternalId: string; sku: string; name: string; physicalQuantity: string }
@@ -118,13 +134,33 @@ function productBranchDto(value: unknown): ProductBranch {
       !(value.minimumQuantity === null || decimal(value.minimumQuantity))) throw invalid();
   return value as unknown as ProductBranch;
 }
+function productUnitDto(value: unknown): ProductUnit {
+  if (!record(value) || !text(value.name) || !decimal(value.factor) || typeof value.divisible !== 'boolean' ||
+      typeof value.base !== 'boolean' || typeof value.active !== 'boolean') throw invalid();
+  return value as unknown as ProductUnit;
+}
 function productDto(value: unknown): Product {
   if (!record(value) || !uuid(value.externalId) || !text(value.sku) || !text(value.name) ||
       !(value.description === null || typeof value.description === 'string') || !text(value.baseUnitName) ||
       typeof value.baseDivisible !== 'boolean' || typeof value.active !== 'boolean' || typeof value.inUse !== 'boolean' ||
-      !(value.branches === null || Array.isArray(value.branches))) throw invalid();
+      !(value.branches === null || Array.isArray(value.branches)) ||
+      !(value.units === null || value.units === undefined || Array.isArray(value.units))) throw invalid();
   if (value.branches !== null) listDto(value.branches, productBranchDto);
-  return value as unknown as Product;
+  if (Array.isArray(value.units)) listDto(value.units, productUnitDto);
+  return { ...(value as unknown as Product), units: Array.isArray(value.units) ? value.units as ProductUnit[] : null };
+}
+function conversionDto(value: unknown): UnitConversion {
+  if (!record(value) || !text(value.unitName) || !decimal(value.quantity) || !decimal(value.factor) ||
+      !text(value.baseUnitName) || !decimal(value.baseQuantity)) throw invalid();
+  return value as unknown as UnitConversion;
+}
+function localItemDto(value: unknown): LocalCatalogItem {
+  if (!record(value) || !uuid(value.productExternalId) || !text(value.sku) || !text(value.name) ||
+      !(value.description === null || typeof value.description === 'string') || !text(value.baseUnitName) ||
+      typeof value.baseDivisible !== 'boolean' ||
+      !['minimumQuantity', 'physicalQuantity', 'availableQuantity', 'inTransitQuantity'].every(k => decimal(value[k]))) throw invalid();
+  listDto(value.units, productUnitDto);
+  return value as unknown as LocalCatalogItem;
 }
 function inventoryDto(value: unknown): InventoryItem {
   if (!record(value) || !uuid(value.productExternalId) || !text(value.sku) || !text(value.name) ||
@@ -276,6 +312,28 @@ export class ApiClient {
   }
   async reactivateProduct(id: string): Promise<Product> {
     return productDto(await this.request(`/products/${encodeURIComponent(id)}/reactivate`, 'POST'));
+  }
+  /** RF-0001: changes only the explicit minimum of an enabled product-branch combination. */
+  async updateMinimum(id: string, branchId: string, minimumQuantity: string): Promise<Product> {
+    return productDto(await this.request(
+      `/products/${encodeURIComponent(id)}/branches/${encodeURIComponent(branchId)}/minimum`, 'POST', { minimumQuantity }));
+  }
+  async createUnit(id: string, data: ProductUnitInput): Promise<Product> {
+    return productDto(await this.request(`/products/${encodeURIComponent(id)}/units`, 'POST', data));
+  }
+  async updateUnit(id: string, data: ProductUnitChange): Promise<Product> {
+    return productDto(await this.request(`/products/${encodeURIComponent(id)}/units/update`, 'POST', data));
+  }
+  async convertUnit(id: string, unit: string, quantity: string): Promise<UnitConversion> {
+    const query = new URLSearchParams({ unit, quantity });
+    return conversionDto(await this.request(`/products/${encodeURIComponent(id)}/units/convert?${query}`));
+  }
+  /** RF-0012: the branch always comes from the session. */
+  async localCatalog(): Promise<LocalCatalog> {
+    const value = await this.request('/products/local');
+    if (!record(value) || !uuid(value.branchExternalId) || !text(value.branchCode) || !text(value.branchName) ||
+        typeof value.branchActive !== 'boolean') throw invalid();
+    return { ...(value as unknown as LocalCatalog), items: listDto(value.items, localItemDto) };
   }
   async visibleBranches(): Promise<Branch[]> {
     return listDto(await this.request('/visibility/branches'), branchDto);
