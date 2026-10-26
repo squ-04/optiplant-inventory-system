@@ -1,10 +1,16 @@
 package com.optiplant.catalog.controller;
 
 import com.optiplant.catalog.dto.ProductCreateRequest;
+import com.optiplant.catalog.dto.LocalCatalogResponse;
 import com.optiplant.catalog.dto.ProductEnablementRequest;
+import com.optiplant.catalog.dto.ProductMinimumRequest;
 import com.optiplant.catalog.dto.ProductResponse;
+import com.optiplant.catalog.dto.ProductUnitRequest;
 import com.optiplant.catalog.dto.ProductUpdateRequest;
+import com.optiplant.catalog.dto.UnitConversionResponse;
+import com.optiplant.catalog.service.LocalCatalogService;
 import com.optiplant.catalog.service.ProductService;
+import com.optiplant.catalog.service.ProductUnitService;
 import com.optiplant.common.exception.ApiException;
 import com.optiplant.identity.dto.EmptyCommandBody;
 import com.optiplant.identity.service.SessionPrincipal;
@@ -18,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
@@ -27,14 +34,30 @@ import tools.jackson.databind.JsonNode;
 @RequestMapping("/api/v1/products")
 public class ProductController {
     private static final Set<String> READERS = Set.of("ADMIN", "MANAGER", "OPERATOR");
+    private static final Set<String> LOCAL = Set.of("MANAGER", "OPERATOR");
     private final ProductService products;
+    private final ProductUnitService units;
+    private final LocalCatalogService local;
 
-    public ProductController(ProductService products) { this.products = products; }
+    public ProductController(ProductService products, ProductUnitService units, LocalCatalogService local) {
+        this.products = products;
+        this.units = units;
+        this.local = local;
+    }
 
     @GetMapping
     public List<ProductResponse> list(@AuthenticationPrincipal SessionPrincipal principal) {
         requireReader(principal);
         return products.list();
+    }
+
+    /** RF-0012: catalog of the session's own branch. The branch always comes from the session, never from the request. */
+    @GetMapping("/local")
+    public LocalCatalogResponse local(@AuthenticationPrincipal SessionPrincipal principal) {
+        if (!LOCAL.contains(principal.role()) || principal.branchExternalId() == null) {
+            throw new ApiException(403, "ROLE_FORBIDDEN", "El catálogo local corresponde a la sucursal asignada a gerentes y operadores.");
+        }
+        return local.find(principal.branchExternalId());
     }
 
     @GetMapping("/{externalId}")
@@ -62,6 +85,37 @@ public class ProductController {
         @RequestBody JsonNode body) {
         requireAdmin(principal);
         return products.enable(externalId, ProductEnablementRequest.from(body));
+    }
+
+    /** RF-0001: the administrator changes the explicit minimum of an enabled product-branch combination. */
+    @PostMapping("/{externalId}/branches/{branchExternalId}/minimum")
+    public ProductResponse updateMinimum(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID externalId,
+        @PathVariable UUID branchExternalId, @RequestBody JsonNode body) {
+        requireAdmin(principal);
+        return products.updateMinimum(externalId, branchExternalId, ProductMinimumRequest.from(body));
+    }
+
+    /** RF-0013: only the administrator configures units and factors. */
+    @PostMapping("/{externalId}/units")
+    public ProductResponse createUnit(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID externalId,
+        @RequestBody JsonNode body) {
+        requireAdmin(principal);
+        return units.create(externalId, ProductUnitRequest.create(body));
+    }
+
+    @PostMapping("/{externalId}/units/update")
+    public ProductResponse updateUnit(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID externalId,
+        @RequestBody JsonNode body) {
+        requireAdmin(principal);
+        return units.update(externalId, ProductUnitRequest.update(body));
+    }
+
+    /** RF-0013: every profile may consult the exact base equivalent of a quantity in an active unit. */
+    @GetMapping("/{externalId}/units/convert")
+    public UnitConversionResponse convert(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID externalId,
+        @RequestParam String unit, @RequestParam String quantity) {
+        requireReader(principal);
+        return units.convert(externalId, unit, ProductEnablementRequest.quantity(quantity));
     }
 
     @PostMapping("/{externalId}/deactivate")

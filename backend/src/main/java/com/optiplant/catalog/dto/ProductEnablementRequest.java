@@ -16,9 +16,8 @@ public record ProductEnablementRequest(UUID branchExternalId, BigDecimal minimum
         BranchCreateRequest.validateFields(body, Set.of("branchExternalId", "minimumQuantity"));
         JsonNode branch = body.path("branchExternalId");
         JsonNode minimum = body.path("minimumQuantity");
-        if (!branch.isTextual() || !minimum.isTextual() || !QUANTITY.matcher(minimum.asText()).matches()) {
-            throw ProductUpdateRequest.invalid();
-        }
+        if (!branch.isTextual()) throw ProductUpdateRequest.invalid();
+        BigDecimal minimumQuantity = quantity(minimum);
         UUID reference;
         try {
             reference = UUID.fromString(branch.asText());
@@ -28,11 +27,26 @@ public record ProductEnablementRequest(UUID branchExternalId, BigDecimal minimum
         if (reference.version() != 4 || reference.variant() != 2 || !reference.toString().equalsIgnoreCase(branch.asText())) {
             throw ProductUpdateRequest.invalid();
         }
-        return new ProductEnablementRequest(reference, new BigDecimal(minimum.asText()));
+        return new ProductEnablementRequest(reference, minimumQuantity);
+    }
+
+    /** Parses an exact base-unit quantity string: zero or positive, at most three decimals. */
+    public static BigDecimal quantity(JsonNode value) {
+        if (!value.isTextual()) throw ProductUpdateRequest.invalid();
+        return quantity(value.asText());
+    }
+
+    public static BigDecimal quantity(String value) {
+        if (value == null || !QUANTITY.matcher(value).matches()) throw ProductUpdateRequest.invalid();
+        return new BigDecimal(value);
     }
 
     /** Indivisible base units only admit whole minimums. */
     public boolean admits(boolean baseDivisible) {
-        return baseDivisible || minimumQuantity.stripTrailingZeros().scale() <= 0;
+        return admits(minimumQuantity, baseDivisible);
+    }
+
+    public static boolean admits(BigDecimal quantity, boolean divisible) {
+        return divisible || quantity.stripTrailingZeros().scale() <= 0;
     }
 }

@@ -2,6 +2,7 @@ package com.optiplant.catalog.service;
 
 import com.optiplant.catalog.dto.ProductCreateRequest;
 import com.optiplant.catalog.dto.ProductEnablementRequest;
+import com.optiplant.catalog.dto.ProductMinimumRequest;
 import com.optiplant.catalog.dto.ProductResponse;
 import com.optiplant.catalog.dto.ProductUpdateRequest;
 import com.optiplant.catalog.entity.Product;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Product maintenance (RF-0008–RF-0011). Products are never physically deleted (H v1.3/01): removal is
+ * Product maintenance (RF-0008–RF-0011) and minimum stock configuration (RF-0001). Products are never physically deleted (H v1.3/01): removal is
  * exclusively {@code active=false}, and the runtime database role has no DELETE privilege on the table.
  */
 @Service
@@ -46,7 +47,7 @@ public class ProductService {
     public List<ProductResponse> list() {
         Set<Long> used = new HashSet<>(jdbc.queryForList(USAGE, Long.class));
         return products.findAllByOrderBySkuAsc().stream()
-            .map(product -> response(product, used.contains(product.getId()), null)).toList();
+            .map(product -> response(product, used.contains(product.getId()), null, null)).toList();
     }
 
     @Transactional(readOnly = true)
@@ -94,6 +95,11 @@ public class ProductService {
                 throw new ApiException(409, "PRODUCT_MINIMUM_FRACTIONAL",
                     "Hay mínimos fraccionarios configurados: la unidad base debe seguir siendo divisible.");
             }
+            if (!request.baseDivisible() && exists("SELECT EXISTS (SELECT 1 FROM catalog_product_unit WHERE product_id=? "
+                + "AND NOT is_base AND (divisible OR factor<>trunc(factor)))", product.getId())) {
+                throw new ApiException(409, "PRODUCT_UNITS_INCOMPATIBLE",
+                    "Hay unidades comerciales fraccionables o con factor decimal: la unidad base debe seguir siendo divisible.");
+            }
             try {
                 jdbc.update("UPDATE catalog_product_unit SET name=?,divisible=?,updated_at=? WHERE product_id=? AND is_base",
                     request.baseUnitName(), request.baseDivisible(), now(), product.getId());
@@ -135,6 +141,29 @@ public class ProductService {
             jdbc.update("UPDATE catalog_branch_product SET enabled=TRUE,minimum_qty=?,updated_at=? WHERE branch_id=? AND product_id=?",
                 request.minimumQuantity(), now, branch, product.getId());
         }
+        return response(product, true);
+    }
+
+    /**
+     * Changes only the explicit minimum of an enabled product-branch combination (RF-0001). Stock, costs, documents
+     * and restock history are untouched; nothing is blocked or purchased automatically.
+     */
+    @Transactional
+    public ProductResponse updateMinimum(UUID externalId, UUID branchExternalId, ProductMinimumRequest request) {
+        Product product = locked(externalId);
+        if (!ProductEnablementRequest.admits(request.minimumQuantity(), product.isBaseDivisible())) {
+            throw new ApiException(400, "VALIDATION_FAILED", "La unidad base no es divisible: el mínimo debe ser entero.");
+        }
+        List<Long> branch = jdbc.queryForList("SELECT id FROM identity_branch WHERE external_id=?", Long.class, branchExternalId);
+        if (branch.isEmpty()) throw new ApiException(404, "BRANCH_NOT_FOUND", "La sucursal no existe.");
+        List<Boolean> enabled = jdbc.queryForList("SELECT enabled FROM catalog_branch_product WHERE branch_id=? AND product_id=? "
+            + "FOR UPDATE", Boolean.class, branch.getFirst(), product.getId());
+        if (!enabled.contains(Boolean.TRUE)) {
+            throw new ApiException(409, "PRODUCT_NOT_ENABLED",
+                "El producto no está habilitado en la sucursal: habilítelo indicando su stock mínimo.");
+        }
+        jdbc.update("UPDATE catalog_branch_product SET minimum_qty=?,updated_at=? WHERE branch_id=? AND product_id=?",
+            request.minimumQuantity(), now(), branch.getFirst(), product.getId());
         return response(product, true);
     }
 
@@ -191,12 +220,24 @@ public class ProductService {
     }
 
     private ProductResponse response(Product product, boolean withBranches) {
-        return response(product, inUse(product.getId()), withBranches ? branches(product.getId()) : null);
+        return response(product, inUse(product.getId()), withBranches ? branches(product.getId()) : null, units(product.getId()));
     }
 
-    private ProductResponse response(Product product, boolean inUse, List<ProductResponse.Branch> branches) {
+    private ProductResponse response(Product product, boolean inUse, List<ProductResponse.Branch> branches,
+        List<ProductResponse.Unit> units) {
         return new ProductResponse(product.getExternalId(), product.getSku(), product.getName(), product.getDescription(),
-            product.getBaseUnitName(), product.isBaseDivisible(), product.isActive(), inUse, branches);
+            product.getBaseUnitName(), product.isBaseDivisible(), product.isActive(), inUse, branches, units);
+    }
+
+    /** Base unit first, then commercial units by name; inactive units are listed for administration and history. */
+    private List<ProductResponse.Unit> units(long productId) {
+        return jdbc.query("SELECT name,factor,divisible,is_base,active FROM catalog_product_unit WHERE product_id=? "
+            + "ORDER BY is_base DESC,name", (row, index) -> unit(row), productId);
+    }
+
+    static ProductResponse.Unit unit(java.sql.ResultSet row) throws java.sql.SQLException {
+        return new ProductResponse.Unit(row.getString("name"), exact(row.getBigDecimal("factor")),
+            row.getBoolean("divisible"), row.getBoolean("is_base"), row.getBoolean("active"));
     }
 
     private List<ProductResponse.Branch> branches(long productId) {
@@ -207,6 +248,12 @@ public class ProductService {
                     row.getString("name"), row.getBoolean("active"), row.getBoolean("enabled"),
                     minimum == null ? null : minimum.setScale(3).toPlainString());
             }, productId);
+    }
+
+    /** Plain decimal string with at least three decimals; never rounds a stored value. */
+    static String exact(BigDecimal value) {
+        BigDecimal stripped = value.stripTrailingZeros();
+        return (stripped.scale() < 3 ? stripped.setScale(3) : stripped).toPlainString();
     }
 
     private boolean inUse(long productId) {
