@@ -40,7 +40,8 @@ La autorización del responsable permite instalar y adaptar componentes oficiale
 | Contexto de usuario y sucursal | `.session-panel`, sin ocultar ni abreviar los identificadores. |
 | Acción principal | `Button` compartido, variante predeterminada naranja; texto que describe la operación. |
 | Acción secundaria o destructiva | `Button variant="outline"`; las bajas añaden texto rojo y conservan confirmaciones y reglas existentes. |
-| Campos | `Input` compartido, con nombres, límites, autocompletado y validación HTML existentes. Mantener `select` nativo cuando no se necesite una interacción adicional. |
+| Campos | `Input` compartido, con nombres, límites, autocompletado y validación HTML existentes; `Textarea` para texto libre opcional. Mantener `select` y casillas nativas (`.checkbox-field`) cuando no se necesite una interacción adicional. |
+| Catálogo de productos | Tabla con SKU destacado, nombre y descripción, unidad base y estado; edición por registro solo para administración. La habilitación local se muestra en una tabla separada de los datos del producto y nunca como existencias. La desactivación es una acción destructiva con confirmación; la reactivación, una acción secundaria. Los rechazos de negocio se muestran en la vista; solo los problemas de sesión se elevan al contenedor. |
 | Administración tabular | `Table` compartido con código destacado, nombre legible, estado textual con `StatusBadge` y edición por registro. Los usuarios muestran perfil traducido y sucursal asignada desde datos ya consultados, sin nuevas llamadas ni campos de negocio. |
 | Consulta tabular | `.table-scroll`, región con nombre y foco de teclado; conservar `caption`, encabezados y precisión textual de cantidades. |
 | Carga y resultado confirmado | `role="status"`; conservar las regiones vivas y `aria-busy` existentes. |
@@ -67,6 +68,7 @@ Incorporación manual y adaptación del registro oficial `new-york-v4`, consulta
 | Badge | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/badge.json) | Estado activo/inactivo, mediante `StatusBadge`. |
 | Table | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/table.json) | Sucursales, usuarios y existencias. |
 | Tabs | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/tabs.json) | Navegación contextual de administración mediante `SectionTabs`. |
+| Textarea | [Registro](https://ui.shadcn.com/r/styles/new-york-v4/textarea.json) | Descripción opcional del producto en el catálogo. |
 
 SHA-256 del campo `files[0].content` original, antes de las adaptaciones locales; sirve para identificar la instantánea consultada, no como hash del archivo adaptado:
 
@@ -76,9 +78,10 @@ input  0c9457181f6ddc80969bcf854e92c362903a55b6e889fbef3fd85343ecc4af5b
 badge  13a9380dfff853ee730c14a52df49f22aecd31f40f2998d7c1e7ec458b6e1650
 table  bd1a9fc83a5a2149e504038e274bb7e5a0351af59f6896df52ac4d5b439695ac
 tabs   e1df6e2f95ece373ca909c1d54b8ba8cf4c47dd425c1784bbb9a01c38dd0936b
+textarea 5cafcfeeee29534f449387a16b585f5923d2faab1a0cdc50a874416b175f59ce
 ```
 
-**Adaptaciones locales:** alias `@/lib/utils` para `cn`; primitivas individuales oficiales `@radix-ui/react-tabs` y `@radix-ui/react-slot` en lugar de importar el conjunto completo `radix-ui`; tamaños táctiles mínimos de 44 px; variantes y colores OptiPlant; sin variantes oscuras, verticales o tamaños no utilizados. La tabla usa una sola región externa identificada y enfocable para desplazarla con teclado, evitando dos contenedores de scroll. El montaje persistente de las pestañas se configura en la composición compartida. No se presenta el código adaptado como una copia sin modificaciones del registro.
+**Adaptaciones locales:** alias `@/lib/utils` para `cn`; `Textarea` con superficie, foco y altura mínima alineados con `Input`, sin variantes oscuras; primitivas individuales oficiales `@radix-ui/react-tabs` y `@radix-ui/react-slot` en lugar de importar el conjunto completo `radix-ui`; tamaños táctiles mínimos de 44 px; variantes y colores OptiPlant; sin variantes oscuras, verticales o tamaños no utilizados. La tabla usa una sola región externa identificada y enfocable para desplazarla con teclado, evitando dos contenedores de scroll. El montaje persistente de las pestañas se configura en la composición compartida. No se presenta el código adaptado como una copia sin modificaciones del registro.
 
 **Dependencias directas necesarias:** `@radix-ui/react-tabs` 1.2.1, `@radix-ui/react-slot` 1.5.0, `class-variance-authority` 0.7.1, `clsx` 2.1.1 y `tailwind-merge` 3.7.0. Tailwind y `@tailwindcss/vite` 4.3.3 son herramientas de construcción. Sus versiones exactas y transitivas quedan fijadas en el manifiesto y lockfile; no se añaden iconos, gráficas, calendarios ni otro sistema de componentes para esta mejora.
 
