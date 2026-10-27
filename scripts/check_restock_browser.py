@@ -100,6 +100,63 @@ STAGES = {
       check(overflow <= 0, 'Desplazamiento horizontal del documento en móvil: ' + overflow + ' px');
       await page.screenshot({ path: config.screenshot, fullPage: true });
       return 'alerta reabierta por el nuevo mínimo visible en la red y filtrada por sucursal; sin desbordamiento a 390 px';""",
+    "administrador-confirmacion": """
+      // Deactivation goes through the shared Alert Dialog: only its action may reach the API.
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const sent = [];
+      page.on('request', request => { if (request.url().endsWith('/deactivate')) sent.push(request.url()); });
+      await page.getByRole('link', { name: 'Administración', exact: true }).click();
+      await page.getByRole('button', { name: 'Editar ' + config.disposableBranch, exact: true }).click();
+      const trigger = page.getByRole('button', { name: 'Desactivar sucursal', exact: true });
+      const dialog = page.getByRole('alertdialog');
+      const branchRow = () => page.getByRole('row').filter({ hasText: config.disposableBranch });
+      for (const dismiss of ['Escape', 'Cancelar']) {
+        await trigger.click();
+        await dialog.waitFor();
+        check(await dialog.getByRole('heading', { name: '¿Desactivar la sucursal ' + config.disposableBranch + '?' }).count() === 1,
+          'Diálogo sin el registro afectado');
+        check(await page.evaluate(() => document.activeElement?.textContent?.trim()) === 'Cancelar', 'El foco inicial no está en Cancelar');
+        if (dismiss === 'Escape') await page.keyboard.press('Escape');
+        else await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
+        await dialog.waitFor({ state: 'detached' });
+        // Radix restores focus on a macrotask after unmounting the dialog.
+        await page.waitForFunction(() => document.activeElement?.textContent?.trim() === 'Desactivar sucursal', null, { timeout: 2000 })
+          .catch(() => { throw new Error('El foco no volvió al botón tras ' + dismiss); });
+        check(sent.length === 0, dismiss + ' envió la desactivación');
+        check((await branchRow().allInnerTexts()).join(' ').includes('Activa'), 'La sucursal cambió tras ' + dismiss);
+      }
+      await trigger.click();
+      await dialog.getByRole('button', { name: 'Desactivar sucursal', exact: true }).click();
+      await page.getByText('Sucursal desactivada. Las cuentas no fueron desactivadas.', { exact: true }).waitFor();
+      check(sent.length === 1, 'Se esperaba una sola desactivación; enviadas: ' + sent.length);
+      await branchRow().filter({ hasText: 'Inactiva' }).waitFor();
+      await logout();
+      return 'Escape y Cancelar no envían la baja y devuelven el foco; la acción del diálogo desactiva una sola vez';""",
+    "operador-catalogo-tras-movimiento": """
+      // H1: the local catalog stays mounted while hidden and must show the stock left by a movement, without reloading.
+      await login(config.operator);
+      await page.evaluate(() => { window.__sameDocument = true; });
+      const row = () => page.getByRole('row').filter({ hasText: config.sku });
+      await page.getByRole('link', { name: 'Catálogo', exact: true }).click();
+      await page.getByRole('tab', { name: 'Mi sucursal' }).click();
+      await row().filter({ hasText: '6,000 unidad' }).first().waitFor();
+      await page.getByRole('link', { name: 'Movimientos', exact: true }).click();
+      await page.getByRole('button', { name: 'Nuevo movimiento', exact: true }).click();
+      await page.getByLabel('Producto', { exact: true }).selectOption({ label: config.sku + ' Helecho de prueba: 6,000 unidad en existencia' });
+      await page.getByLabel(/^Cantidad/).fill('2');
+      await page.getByLabel('Motivo', { exact: true }).fill('Ingreso de prueba desde la interfaz');
+      await page.getByRole('button', { name: 'Registrar movimiento', exact: true }).click();
+      await page.getByText(/Existencias resultantes: 8,000 unidad/).waitFor();
+      await page.getByRole('link', { name: 'Catálogo', exact: true }).click();
+      await page.getByRole('tab', { name: 'Mi sucursal' }).click();
+      const cells = async () => (await row().first().getByRole('cell').allInnerTexts()).slice(2, 4);
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline && (await cells())[0] !== '8,000 unidad') await page.waitForTimeout(200);
+      const shown = await cells();
+      check(shown[0] === '8,000 unidad' && shown[1] === '8,000 unidad', 'Existencias locales desactualizadas: ' + shown.join(' | '));
+      check(await page.evaluate(() => window.__sameDocument === true), 'La vista se recargó');
+      await logout();
+      return 'tras registrar +2 en Movimientos, «Mi sucursal» muestra 8,000 unidad sin recargar el navegador';""",
 }
 
 
@@ -156,6 +213,7 @@ def main():
     config = {"sku": SKU, "admin": {"code": "ADMIN", "password": admin_new},
               "operator": {"code": "OP-SUR", "password": operator_password},
               "manager": {"code": "GER-SUR", "password": manager_password},
+              "disposableBranch": "BAJA-PRUEBA",
               "screenshot": str(directory / "alertas-movil.png")}
 
     def stage(name):
@@ -193,6 +251,9 @@ def main():
         admin = Client(base)
         expect(admin.request("/auth/login", "POST", {"code": "ADMIN", "password": admin_new}), 200, "acceso administrador")
         branch = expect(admin.request("/branches", "POST", {"code": "SUR", "name": "Sucursal Sur"}), 201, "alta de sucursal")["externalId"]
+        # Without stock or documents, so the confirmation stage can deactivate it.
+        expect(admin.request("/branches", "POST", {"code": config["disposableBranch"], "name": "Sucursal para baja de prueba"}),
+               201, "alta de sucursal desechable")
         operator = local_user(admin, base, "OP-SUR", "Operador Sur", "OPERATOR", branch, operator_password)
         local_user(admin, base, "GER-SUR", "Gerente Sur", "MANAGER", branch, manager_password)
         # RF-0019: explicit minimum 5 at enablement; with zero stock the condition already holds.
@@ -213,6 +274,8 @@ def main():
         # RF-0019-CA-02: raising the minimum to the current stock reopens the alert without another parameter.
         expect(admin.request(f"/products/{product}/branches/{branch}/minimum", "POST", {"minimumQuantity": "6"}), 200, "nuevo mínimo")
         stage("administrador-red-y-movil")
+        stage("administrador-confirmacion")
+        stage("operador-catalogo-tras-movimiento")
         print(f"Navegador OK: {len(STAGES)} escenarios de stock mínimo y alertas de reabastecimiento (RF-0019/RF-0020).")
         return 0
     except (AssertionError, OSError, RuntimeError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:

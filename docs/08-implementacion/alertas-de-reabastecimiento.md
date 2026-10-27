@@ -30,7 +30,7 @@ Errores: `400 VALIDATION_FAILED` (estado o límite inválidos, referencia no UUI
 6. Como administrador, cambiar el mínimo de `SUR` a `6`: se abre un episodio nuevo con mínimo `6,000` (RF-0019-CA-02). **Alertas** con «Todas las sucursales» lo muestra con la columna **Sucursal**; elegir `SUR` filtra la consulta.
 7. Un retiro del operador que deje el disponible en `6` o menos mantiene o abre la alerta; desactivar el producto (sin existencias) o la sucursal la cierra y conserva su historia.
 
-`scripts/check_restock_browser.py` automatiza los pasos 2–6 con `playwright-cli` en una pila Compose desechable con nombre único y datos de demostración, que elimina con su volumen al terminar. No imprime credenciales; los diagnósticos privados quedan en `result.log` del directorio temporal indicado, que quien ejecuta debe retirar.
+`scripts/check_restock_browser.py` automatiza los pasos 2–6 y dos regresiones de la exploración E2E (seis escenarios): la confirmación de baja con el diálogo compartido (Escape y «Cancelar» no envían la baja y devuelven el foco; la acción desactiva una sola vez) y la actualización de «Mi sucursal» tras registrar un movimiento, sin recargar el navegador. Usa `playwright-cli` en una pila Compose desechable con nombre único y datos de demostración, que elimina con su volumen al terminar. No imprime credenciales; los diagnósticos privados quedan en `result.log` del directorio temporal indicado, que quien ejecuta debe retirar.
 
 ## Alcance y límites
 
