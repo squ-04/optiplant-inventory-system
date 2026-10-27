@@ -117,7 +117,7 @@ export function App() {
       {!user.mustChangePassword && <>
       {user.role === 'ADMIN' && <div hidden={current !== 'administration-title'}><Administration client={client} onError={showError} onChanged={() => setRevision(value => value + 1)} /></div>}
       <div hidden={current !== 'catalog-title'}><Catalog client={client} user={user} onError={showError} revision={revision} /></div>
-      <div hidden={current !== 'visibility-title'}><Visibility client={client} user={user} onError={showError} revision={revision} /></div>
+      <div hidden={current !== 'visibility-title'}><Visibility client={client} user={user} onError={showError} revision={revision} visible={current === 'visibility-title'} /></div>
       </>}
     </>}
   </AppShell>;
