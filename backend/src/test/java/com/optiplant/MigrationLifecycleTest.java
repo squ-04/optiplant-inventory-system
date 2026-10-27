@@ -87,7 +87,7 @@ class MigrationLifecycleTest {
             """, Long.class)).isEqualTo(32);
         assertThat(database().queryForObject("SELECT count(*) FROM identity_branch", Long.class)).isEqualTo(2);
         assertThat(database().queryForObject("SELECT count(*) FROM identity_user_account WHERE role='ADMIN'", Long.class)).isEqualTo(1);
-        assertThat(database().queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Long.class)).isEqualTo(8);
+        assertThat(database().queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Long.class)).isEqualTo(9);
     }
 
     @Test @Order(4)
@@ -156,7 +156,7 @@ class MigrationLifecycleTest {
             "--spring.datasource.url=" + POSTGRES.getJdbcUrl(), "--spring.datasource.username=optiplant_test_runtime",
             "--spring.datasource.password=test-runtime-not-for-deployment",
             "--spring.flyway.user=" + POSTGRES.getUsername(), "--spring.flyway.password=" + POSTGRES.getPassword(),
-            "--spring.flyway.locations=" + locations, "--app.admin-code=lifecycle-admin", "--app.admin-password=" + password);
+            "--spring.flyway.locations=" + locations, "--app.demo-data=" + demo, "--app.admin-code=lifecycle-admin", "--app.admin-password=" + password);
     }
 
     private void assertHealth(ConfigurableApplicationContext context) throws Exception {

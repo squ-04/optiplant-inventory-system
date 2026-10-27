@@ -13,6 +13,9 @@ spring:
       hibernate.jdbc.time_zone: UTC
   flyway:
     locations: classpath:db/migration,classpath:db/demo/${app.demo-data}
+    # Demonstration seeds use V100; structural migrations added later get lower versions and must still apply.
+    # Only demo databases relax the order: without the seed there is no V100 and production keeps strict order.
+    out-of-order: ${app.demo-data}
     clean-disabled: true
     user: ${APP_DB_MIGRATION_USER:${APP_DB_USER}}
     password: ${APP_DB_MIGRATION_PASSWORD:${APP_DB_PASSWORD}}
