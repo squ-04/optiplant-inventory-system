@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ApiClient, ApiError } from '../lib/api/client.ts';
+import { ApiClient, sessionProblem } from '../lib/api/client.ts';
 import type {
   Branch, LocalCatalog, Product, ProductAttributes, ProductEnablement, ProductUnit, ProductUnitChange, ProductUnitInput,
   UnitConversion, User,
 } from '../lib/api/client.ts';
 import { RestockBadge } from '../components/shared/RestockBadge.tsx';
+import { useConfirmation } from '../components/shared/ConfirmDialog.tsx';
 import { StatusBadge } from '../components/shared/StatusBadge';
 import { SectionTabs } from '../components/shared/SectionTabs.tsx';
 import { revealEditor } from '../components/shared/revealEditor.ts';
@@ -14,11 +15,13 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { apiDecimal, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
 
-// Base-unit quantities keep at most three decimals; indivisible units admit whole numbers only.
-const quantityPattern = (divisible: boolean) => divisible ? '\\d{1,15}(\\.\\d{1,3})?' : '\\d{1,15}';
-const quantityHint = (divisible: boolean) => divisible ? 'Hasta 3 decimales, por ejemplo 2.5.' : 'Número entero, por ejemplo 4.';
-const equivalence = (unit: ProductUnit, baseUnitName: string) => unit.base ? 'Unidad base' : `1 ${unit.name} = ${unit.factor} ${baseUnitName}`;
+// Base-unit quantities keep at most three decimals; indivisible units admit whole numbers only. Decimals are typed with a
+// comma and sent to the API with a dot.
+const quantityPattern = (divisible: boolean) => decimalInputPattern(divisible ? 3 : 0);
+const quantityHint = (divisible: boolean) => divisible ? 'Hasta 3 decimales con coma, por ejemplo 2,5.' : 'Número entero, por ejemplo 4.';
+const equivalence = (unit: ProductUnit, baseUnitName: string) => unit.base ? 'Unidad base' : `1 ${unit.name} = ${decimal(unit.factor)} ${baseUnitName}`;
 
 function failure(reason: unknown) {
   return reason instanceof TypeError
@@ -26,9 +29,9 @@ function failure(reason: unknown) {
     : reason instanceof Error ? reason.message : 'No se pudo completar la solicitud.';
 }
 
-interface Props { client: ApiClient; user: User; onError: (reason: unknown) => void; revision: number }
+interface Props { client: ApiClient; user: User; onError: (reason: unknown) => void; revision: number; visible: boolean }
 
-export function Catalog({ client, user, onError, revision }: Props) {
+export function Catalog({ client, user, onError, revision, visible }: Props) {
   const admin = user.role === 'ADMIN';
   const [products, setProducts] = useState<Product[]>([]);
   // Local profiles also see the catalog of their own branch (RF-0012); administrators have no branch of their own.
@@ -41,6 +44,7 @@ export function Catalog({ client, user, onError, revision }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const { confirm, dialog } = useConfirmation();
 
   const fetchAll = () => Promise.all([client.products(), admin ? client.branches() : Promise.resolve([]),
     admin ? Promise.resolve(null) : client.localCatalog()]);
@@ -49,6 +53,8 @@ export function Catalog({ client, user, onError, revision }: Props) {
     setProducts(nextProducts); setBranches(nextBranches); setLocal(nextLocal); setLoaded(true);
   }
   useEffect(() => {
+    // The view stays mounted while hidden; reading on each display keeps local stock current after movements elsewhere.
+    if (!visible) return;
     let active = true;
     setBusy(true);
     fetchAll().then(([p, b, l]) => {
@@ -56,7 +62,7 @@ export function Catalog({ client, user, onError, revision }: Props) {
     }).catch(reason => { if (active) onError(reason); })
       .finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [client, admin, revision]); // Administration changes (new or inactive branches) refresh the choices.
+  }, [client, admin, revision, visible]); // Administration changes (new or inactive branches) refresh the choices.
 
   async function run(action: () => Promise<void>) {
     setBusy(true); setMessage(''); setError('');
@@ -64,7 +70,7 @@ export function Catalog({ client, user, onError, revision }: Props) {
     catch (reason) {
       setError(failure(reason));
       // Business rejections stay in this view; only session problems are escalated to the shell.
-      if (reason instanceof ApiError && (reason.status === 401 || reason.problem.code === 'PASSWORD_CHANGE_REQUIRED')) onError(reason);
+      if (sessionProblem(reason)) onError(reason);
     } finally { setBusy(false); }
   }
 
@@ -129,18 +135,19 @@ export function Catalog({ client, user, onError, revision }: Props) {
           setSelected(result); await load();
           setMessage(selected ? 'Producto actualizado.' : 'Producto creado. No se registraron existencias.');
         })}
-        onDeactivate={() => {
-          if (selected && window.confirm(`¿Desactivar el producto ${selected.sku}? Se conservará con su historial; `
-            + 'se verificará que no tenga existencias ni operaciones pendientes y se retirará de todas las sucursales.')) {
+        onDeactivate={async () => {
+          if (selected && await confirm({ title: `¿Desactivar el producto ${selected.sku}?`, confirmLabel: 'Desactivar producto',
+            destructive: true, description: 'Se conservará con su historial; se verificará que no tenga existencias ni '
+              + 'operaciones pendientes y se retirará de todas las sucursales.' })) {
             void run(async () => {
               const result = await client.deactivateProduct(selected.externalId);
               setSelected(result); await load(); setMessage('Producto desactivado. Su registro e historial se conservan.');
             });
           }
         }}
-        onReactivate={() => {
-          if (selected && window.confirm(`¿Reactivar el producto ${selected.sku}? Volverá al catálogo general, `
-            + 'pero cada sucursal deberá habilitarlo de nuevo con su mínimo.')) {
+        onReactivate={async () => {
+          if (selected && await confirm({ title: `¿Reactivar el producto ${selected.sku}?`, confirmLabel: 'Reactivar producto',
+            description: 'Volverá al catálogo general, pero cada sucursal deberá habilitarlo de nuevo con su mínimo.' })) {
             void run(async () => {
               const result = await client.reactivateProduct(selected.externalId);
               setSelected(result); await load();
@@ -167,6 +174,7 @@ export function Catalog({ client, user, onError, revision }: Props) {
           setMessage(`Unidad ${change.name} actualizada. Los documentos y saldos anteriores conservan su unidad y factor.`);
         })} />}
     </>}
+    {dialog}
   </section>;
 }
 
@@ -187,7 +195,7 @@ function ProductEditor({ product, branches, busy, onSave, onDeactivate, onReacti
     void onSave({ sku: String(data.get('sku')), name: String(data.get('name')), description: description || null,
       baseUnitName: String(data.get('baseUnitName')), baseDivisible: divisible },
     activeBranches.filter(branch => chosen.includes(branch.externalId)).map(branch => ({
-      branchExternalId: branch.externalId, minimumQuantity: String(data.get(`minimum-${branch.externalId}`)) })));
+      branchExternalId: branch.externalId, minimumQuantity: apiDecimal(String(data.get(`minimum-${branch.externalId}`))) })));
   }
 
   return <form id="product-editor" onSubmit={submit}>
@@ -250,7 +258,7 @@ function EnablementPanel({ product, branches, busy, onEnable, onMinimum }: {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    onEnable({ branchExternalId: String(data.get('branchExternalId')), minimumQuantity: String(data.get('minimumQuantity')) });
+    onEnable({ branchExternalId: String(data.get('branchExternalId')), minimumQuantity: apiDecimal(String(data.get('minimumQuantity'))) });
   }
 
   return <div role="group" aria-labelledby="enablement-title">
@@ -271,7 +279,7 @@ function EnablementPanel({ product, branches, busy, onEnable, onMinimum }: {
             <TableCell><strong className="block font-medium">{item.branchName}</strong>
               <span className="text-muted-foreground">{item.branchCode}{item.branchActive ? '' : ' (inactiva)'}</span></TableCell>
             <TableCell><StatusBadge active={item.enabled} activeLabel="Habilitado" inactiveLabel="No habilitado" /></TableCell>
-            <TableCell className="quantity">{item.minimumQuantity ?? 'Sin mínimo'}</TableCell>
+            <TableCell className="quantity">{item.minimumQuantity === null ? 'Sin mínimo' : decimal(item.minimumQuantity)}</TableCell>
             <TableCell className="text-right">{item.enabled ? <Button variant="outline" disabled={busy} onClick={() => {
               setEditing(item.branchExternalId); revealEditor('minimum-editor');
             }}><Pencil aria-hidden="true" />Cambiar mínimo <span className="sr-only">en {item.branchCode}</span></Button>
@@ -280,14 +288,14 @@ function EnablementPanel({ product, branches, busy, onEnable, onMinimum }: {
         </Table></div>}
     {editedBranch && <form id="minimum-editor" onSubmit={event => {
       event.preventDefault();
-      onMinimum(editedBranch.branchExternalId, String(new FormData(event.currentTarget).get('minimumQuantity')));
+      onMinimum(editedBranch.branchExternalId, apiDecimal(String(new FormData(event.currentTarget).get('minimumQuantity'))));
     }}>
       <fieldset disabled={busy}>
         <legend>Stock mínimo de {product.sku} en {editedBranch.branchCode}</legend>
         <p className="text-muted-foreground">Se usa para las alertas de reabastecimiento y para identificar productos próximos a
           agotarse. Cambiarlo no modifica existencias, costos ni documentos, no bloquea operaciones ni genera compras.</p>
         <label>Nuevo stock mínimo ({product.baseUnitName})<Input name="minimumQuantity" required
-          defaultValue={editedBranch.minimumQuantity ?? ''} inputMode={product.baseDivisible ? 'decimal' : 'numeric'}
+          defaultValue={editedBranch.minimumQuantity === null ? '' : inputDecimal(editedBranch.minimumQuantity)} inputMode={product.baseDivisible ? 'decimal' : 'numeric'}
           pattern={quantityPattern(product.baseDivisible)} title={quantityHint(product.baseDivisible)} /></label>
         <p className="text-muted-foreground">{quantityHint(product.baseDivisible)} Se acepta cero.</p>
         <Button type="submit"><Save aria-hidden="true" />Guardar mínimo</Button>
@@ -326,13 +334,13 @@ function UnitsPanel({ client, product, busy, onCreate, onUpdate }: {
   function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    onCreate({ name: String(data.get('name')), factor: String(data.get('factor')), divisible: product.baseDivisible && divisible });
+    onCreate({ name: String(data.get('name')), factor: apiDecimal(String(data.get('factor'))), divisible: product.baseDivisible && divisible });
   }
 
   function update(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    if (edited) onUpdate({ name: edited.name, factor: String(data.get('factor')), active: data.get('active') === 'on' });
+    if (edited) onUpdate({ name: edited.name, factor: apiDecimal(String(data.get('factor'))), active: data.get('active') === 'on' });
   }
 
   return <div role="group" aria-labelledby="units-title">
@@ -384,7 +392,7 @@ function UnitsPanel({ client, product, busy, onCreate, onUpdate }: {
         <legend>Editar unidad {edited.name}</legend>
         <p className="notice-warning">El nuevo factor rige desde ahora. Los documentos y saldos anteriores conservan la unidad, el
           factor y las cantidades con que se registraron.</p>
-        <label>Equivale a ({product.baseUnitName})<Input name="factor" required defaultValue={edited.factor}
+        <label>Equivale a ({product.baseUnitName})<Input name="factor" required defaultValue={inputDecimal(edited.factor)}
           inputMode={product.baseDivisible ? 'decimal' : 'numeric'} pattern={quantityPattern(product.baseDivisible)}
           title={quantityHint(product.baseDivisible)} /></label>
         <label className="checkbox-field"><input type="checkbox" name="active" defaultChecked={edited.active} />
@@ -412,7 +420,7 @@ function ConversionForm({ client, productId, sku, baseUnitName, units }: {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const quantity = String(new FormData(event.currentTarget).get('quantity'));
+    const quantity = apiDecimal(String(new FormData(event.currentTarget).get('quantity')));
     setBusy(true); setResult(null); setError('');
     try { setResult(await client.convertUnit(productId, unitName, quantity)); }
     catch (reason) { setError(failure(reason)); }
@@ -434,8 +442,8 @@ function ConversionForm({ client, productId, sku, baseUnitName, units }: {
       </div>
       <Button type="submit" variant="outline"><Calculator aria-hidden="true" />Calcular equivalencia</Button>
     </fieldset>
-    <p role="status">{result ? `${result.quantity} ${result.unitName} = ${result.baseQuantity} ${result.baseUnitName} `
-      + `(factor ${result.factor}).` : ''}</p>
+    <p role="status">{result ? `${decimal(result.quantity)} ${result.unitName} = ${decimal(result.baseQuantity)} ${result.baseUnitName} `
+      + `(factor ${decimal(result.factor)}).` : ''}</p>
     {error && <p role="alert">{error}</p>}
   </form>;
 }
@@ -467,10 +475,10 @@ function LocalCatalogPanel({ client, catalog, loaded }: { client: ApiClient; cat
             <TableCell><span className="record-code whitespace-nowrap">{entry.sku}</span></TableCell>
             <TableCell><strong className="block font-medium">{entry.name}</strong>
               {entry.description && <span className="text-muted-foreground">{entry.description}</span>}</TableCell>
-            <TableCell className="quantity">{entry.physicalQuantity} {entry.baseUnitName}</TableCell>
-            <TableCell className="quantity">{entry.availableQuantity} {entry.baseUnitName}</TableCell>
-            <TableCell className="quantity">{entry.inTransitQuantity} {entry.baseUnitName}</TableCell>
-            <TableCell className="quantity">{entry.minimumQuantity} {entry.baseUnitName}</TableCell>
+            <TableCell className="quantity">{decimal(entry.physicalQuantity)} {entry.baseUnitName}</TableCell>
+            <TableCell className="quantity">{decimal(entry.availableQuantity)} {entry.baseUnitName}</TableCell>
+            <TableCell className="quantity">{decimal(entry.inTransitQuantity)} {entry.baseUnitName}</TableCell>
+            <TableCell className="quantity">{decimal(entry.minimumQuantity)} {entry.baseUnitName}</TableCell>
             <TableCell><RestockBadge active={entry.restockAlert} /></TableCell>
             <TableCell><ul>{entry.units.map(unit => <li key={unit.name}>{equivalence(unit, entry.baseUnitName)
               .replace('Unidad base', `${unit.name} (unidad base)`)}</li>)}</ul></TableCell>

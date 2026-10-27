@@ -132,12 +132,12 @@ async (page) => {
   await page.waitForFunction(() => document.activeElement?.id === 'visibility-title');
   await page.locator('#visibility-branch').selectOption(id);
   await page.getByRole('button', { name: 'Consultar datos actuales' }).click();
-  await page.getByRole('cell', { name: '1250.000' }).waitFor();
+  await page.getByRole('cell', { name: '1.250,000' }).waitFor();
   const table = page.getByRole('region', { name: 'Existencias por producto' });
   await table.focus();
   assert(await table.evaluate(el => el === document.activeElement), 'Table region must be keyboard focusable');
-  assert(await page.getByRole('cell', { name: '1250.000' }).evaluate(el =>
-    getComputedStyle(el).textAlign === 'right'), 'Quantities must align right without changing decimal strings');
+  assert(await page.getByRole('cell', { name: '1.250,000' }).evaluate(el =>
+    getComputedStyle(el).textAlign === 'right'), 'Quantities must align right with comma decimals and dot thousands');
   await noOverflow();
   for (const width of [768, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });

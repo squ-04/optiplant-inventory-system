@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
+import { roleLabel } from '../lib/format.ts';
 import type { User } from '../lib/api/client.ts';
 import { Administration } from './Administration.tsx';
 import { Catalog } from './Catalog.tsx';
@@ -23,7 +24,8 @@ export function App() {
   const [error, setError] = useState('');
   const [location, setLocation] = useState(() => window.location.hash.slice(1));
   useEffect(() => {
-    const update = () => setLocation(window.location.hash.slice(1));
+    // A shell alert belongs to the view where it happened; navigating away dismisses it.
+    const update = () => { setLocation(window.location.hash.slice(1)); setError(''); };
     window.addEventListener('hashchange', update);
     return () => window.removeEventListener('hashchange', update);
   }, []);
@@ -61,8 +63,12 @@ export function App() {
     const form = event.currentTarget;
     const data = new FormData(form);
     void run(async () => {
-      try { setUser(await client.login(String(data.get('code')), String(data.get('password')))); }
-      finally { form.reset(); }
+      try {
+        setUser(await client.login(String(data.get('code')), String(data.get('password'))));
+        // Each session starts on its own landing view, not on the view the previous session left in the URL.
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        setLocation('');
+      } finally { form.reset(); }
     });
   }
 
@@ -118,7 +124,7 @@ export function App() {
     </section> : <>
       <section hidden={current !== 'account-title'} className="session-panel" aria-labelledby="account-title"><h2 id="account-title" tabIndex={-1}>Contexto de sesión</h2>
         <dl><dt>Usuario</dt><dd>{user.code}</dd><dt>Identificador público</dt><dd>{user.externalId}</dd>
-          <dt>Rol</dt><dd>{user.role}</dd><dt>Sucursal</dt><dd>{user.branchExternalId ?? 'Ámbito global'}</dd></dl>
+          <dt>Rol</dt><dd>{roleLabel(user.role)}</dd><dt>Sucursal</dt><dd>{user.branchExternalId ?? 'Ámbito global'}</dd></dl>
         <Button variant="outline" disabled={busy} onClick={() => void run(async () => { await client.logout(); setMessage('Sesión cerrada.'); })}><LogOut aria-hidden="true" />Cerrar sesión</Button>
       </section>
       <section hidden={current !== 'password-title'} aria-labelledby="password-title"><h2 id="password-title" tabIndex={-1}>{user.mustChangePassword ? 'Cambio inicial obligatorio' : 'Cambiar contraseña'}</h2>
@@ -133,7 +139,8 @@ export function App() {
       </section>
       {!user.mustChangePassword && <>
       {user.role === 'ADMIN' && <div hidden={current !== 'administration-title'}><Administration client={client} onError={showError} onChanged={() => setRevision(value => value + 1)} /></div>}
-      <div hidden={current !== 'catalog-title'}><Catalog client={client} user={user} onError={showError} revision={revision} /></div>
+      <div hidden={current !== 'catalog-title'}><Catalog client={client} user={user} onError={showError} revision={revision}
+        visible={current === 'catalog-title'} /></div>
       <div hidden={current !== 'movements-title'}><Movements client={client} user={user} onError={showError} revision={revision} visible={current === 'movements-title'} /></div>
       {alertsAllowed && <div hidden={current !== 'alerts-title'}><ReorderAlerts client={client} user={user} onError={showError}
         revision={revision} visible={current === 'alerts-title'} /></div>}

@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ApiClient } from '../lib/api/client.ts';
+import { ApiClient, sessionProblem } from '../lib/api/client.ts';
 import type { Branch, ManagedUser, Role, UserInput } from '../lib/api/client.ts';
+import { roleLabel } from '../lib/format.ts';
 import { SectionTabs } from '../components/shared/SectionTabs.tsx';
 import { PasswordField } from '../components/shared/PasswordField.tsx';
 import { revealEditor } from '../components/shared/revealEditor.ts';
+import { useConfirmation } from '../components/shared/ConfirmDialog.tsx';
 import { Ban, Pencil, Plus, RefreshCw, Save, X } from 'lucide-react';
 import { StatusBadge } from '../components/shared/StatusBadge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-
-const roleNames: Record<Role, string> = { ADMIN: 'Administrador', MANAGER: 'Gerente', OPERATOR: 'Operador' };
 
 interface Props { client: ApiClient; onError: (reason: unknown) => void; onChanged: () => void }
 
@@ -27,6 +27,7 @@ export function Administration({ client, onError, onChanged }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const { confirm, dialog } = useConfirmation();
 
   async function reload() {
     const [nextBranches, nextUsers] = await Promise.all([client.branches(), client.users()]);
@@ -49,7 +50,8 @@ export function Administration({ client, onError, onChanged }: Props) {
       setError(reason instanceof TypeError
         ? 'Sin comunicación con el servidor. No se confirmó la operación; las consultas pueden estar desactualizadas. Verifique el listado antes de reintentar.'
         : reason instanceof Error ? reason.message : 'No se pudo completar la solicitud.');
-      onError(reason);
+      // Business rejections stay in this view; only session problems are escalated to the shell.
+      if (sessionProblem(reason)) onError(reason);
     } finally { setBusy(false); }
   }
 
@@ -110,8 +112,9 @@ export function Administration({ client, onError, onChanged }: Props) {
           <label>Nombre<Input name="name" required maxLength={160} defaultValue={branch?.name ?? ''} /></label>
         </div>
         <Button type="submit"><Save aria-hidden="true" />Guardar sucursal</Button>
-        {branch?.active && <Button variant="outline" className="text-destructive" type="button" onClick={() => {
-          if (window.confirm(`¿Desactivar la sucursal ${branch.code}? Se verificará que no tenga existencias ni documentos pendientes.`)) {
+        {branch?.active && <Button variant="outline" className="text-destructive" type="button" onClick={async () => {
+          if (await confirm({ title: `¿Desactivar la sucursal ${branch.code}?`, confirmLabel: 'Desactivar sucursal', destructive: true,
+            description: 'Se verificará que no tenga existencias ni documentos pendientes. Las cuentas asignadas no se desactivan.' })) {
             void run(async () => { setBranch(await client.deactivateBranch(branch.externalId)); await reload(); setMessage('Sucursal desactivada. Las cuentas no fueron desactivadas.'); });
           }
         }}><Ban aria-hidden="true" />Desactivar sucursal</Button>}
@@ -140,7 +143,7 @@ export function Administration({ client, onError, onChanged }: Props) {
           return <TableRow key={item.externalId}>
             <TableCell><span className="record-code">{item.code}</span></TableCell>
             <TableCell className="font-medium">{item.fullName}</TableCell>
-            <TableCell>{roleNames[item.role]}</TableCell>
+            <TableCell>{roleLabel(item.role)}</TableCell>
             <TableCell>{assigned ? <><strong className="block font-medium">{assigned.name}</strong>
               <span className="text-muted-foreground">{assigned.code}{assigned.active ? '' : ' (inactiva)'}</span></>
               : item.branchExternalId ?? (item.role === 'ADMIN' ? 'Ámbito global' : 'Sin sucursal asignada')}</TableCell>
@@ -163,8 +166,9 @@ export function Administration({ client, onError, onChanged }: Props) {
         await client.me(); // A self-change of role or branch must discard the previous UI context.
         await reload(); setMessage('Usuario guardado. Entregue la contraseña temporal por un canal privado, si corresponde.');
       })}
-      onDeactivate={() => {
-        if (account && window.confirm(`¿Desactivar el usuario ${account.code}? Sus accesos previos quedarán revocados.`)) {
+      onDeactivate={async () => {
+        if (account && await confirm({ title: `¿Desactivar el usuario ${account.code}?`, confirmLabel: 'Desactivar usuario',
+          destructive: true, description: 'Sus accesos previos quedarán revocados. La cuenta y su historial se conservan.' })) {
           void run(async () => {
             await client.deactivateUser(account.externalId); await client.me();
             setAccount(await client.user(account.externalId)); await reload(); setMessage('Usuario desactivado.');
@@ -173,6 +177,7 @@ export function Administration({ client, onError, onChanged }: Props) {
       }}
       onClose={() => { setAccountOpen(false); setAccount(null); }} />}
     </> }]} />
+    {dialog}
   </section>;
 }
 
@@ -209,8 +214,11 @@ function UserEditor({ account, branches, busy, onSave, onDeactivate, onClose }: 
         {branches.filter(b => b.active || b.externalId === account?.branchExternalId).map(b =>
           <option key={b.externalId} value={b.externalId} disabled={!b.active}>{b.code} · {b.name}{!b.active ? ' (inactiva)' : ''}</option>)}
       </select>
-      {!account && <PasswordField label="Contraseña temporal individual" name="temporaryPassword" required
-        autoComplete="new-password" minLength={15} maxLength={128} />}
+      {!account && <>
+        <PasswordField label="Contraseña temporal individual" name="temporaryPassword" required
+          autoComplete="new-password" minLength={15} maxLength={128} aria-describedby="temporary-password-hint" />
+        <p id="temporary-password-hint">De 15 a 128 caracteres y distinta del código de usuario.</p>
+      </>}
       <Button type="submit"><Save aria-hidden="true" />Guardar usuario</Button>
       {account?.active && <Button variant="outline" className="text-destructive" type="button" onClick={onDeactivate}><Ban aria-hidden="true" />Desactivar usuario</Button>}
       <Button variant="ghost" type="button" onClick={onClose}><X aria-hidden="true" />Cerrar formulario</Button>

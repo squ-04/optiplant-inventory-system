@@ -85,8 +85,8 @@ test('each role is offered only the movements it may register (INC-009/D03)', ()
   assert.deepEqual(kindsFor('MANAGER').map(k => k.direction), [null, 'OUT']);
   assert.deepEqual(kindsFor('ADMIN'), []);
   assert.equal(kindLabel('PURCHASE_RECEIPT'), 'Recepción de compra');
-  assert.equal(signedQuantity({ direction: 'OUT', commercialQuantity: '2.500' }), '−2.500');
-  assert.equal(signedQuantity({ direction: 'IN', commercialQuantity: '2.500' }), '+2.500');
+  assert.equal(signedQuantity({ direction: 'OUT', commercialQuantity: '2.500' }), '−2,500');
+  assert.equal(signedQuantity({ direction: 'IN', commercialQuantity: '2.500' }), '+2,500');
 });
 
 test('compensations reference only movements that still admit them', () => {

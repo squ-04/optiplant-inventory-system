@@ -74,7 +74,7 @@ STAGES = {
       await page.getByRole('link', { name: 'Ver alertas de reabastecimiento' }).click();
       await page.getByRole('heading', { name: 'Alertas de reabastecimiento', level: 2 }).waitFor();
       const cells = await alertRow().getByRole('cell').allInnerTexts();
-      check(cells.some(c => c.startsWith('0.000')) && cells.some(c => c.startsWith('5.000')) && cells.some(c => c.startsWith('Activa')),
+      check(cells.some(c => c.startsWith('0,000')) && cells.some(c => c.startsWith('5,000')) && cells.some(c => c.startsWith('Activa')),
         'Fila inesperada: ' + cells.join(' | '));
       return 'aviso persistente, conteo accesible y alerta activa con disponible 0 y mínimo 5';""",
     "gerente-resolucion-automatica": """

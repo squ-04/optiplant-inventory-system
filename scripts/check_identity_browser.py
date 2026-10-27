@@ -118,9 +118,9 @@ def main():
         await login(operator, user, config.userPassword);
         await operator.getByRole('heading', { name: 'Consulta de sucursal' }).waitFor();
         stage = 'deactivation-revocation';
-        // The CLI suspends run-code on native dialogs; simulate acceptance only in this disposable test page.
-        await page.evaluate(() => { window.confirm = () => true; });
+        // Deactivations are confirmed in the shared Alert Dialog, not with a native confirm.
         await page.getByRole('button', { name: 'Desactivar usuario', exact: true }).click();
+        await page.getByRole('alertdialog').getByRole('button', { name: 'Desactivar usuario', exact: true }).click();
         await page.getByText('Usuario desactivado.', { exact: true }).waitFor();
         await operator.getByRole('button', { name: 'Consultar datos actuales' }).click();
         await operator.getByRole('heading', { name: 'Iniciar sesión', exact: true }).waitFor();
@@ -131,8 +131,8 @@ def main():
       stage = 'branch-deactivation';
       await page.getByRole('tab', { name: 'Sucursales', exact: true }).click();
       await page.getByRole('button', { name: 'Editar ' + a, exact: true }).click();
-      await page.evaluate(() => { window.confirm = () => true; });
       await page.getByRole('button', { name: 'Desactivar sucursal', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Desactivar sucursal', exact: true }).click();
       await page.getByText('Sucursal desactivada. Las cuentas no fueron desactivadas.', { exact: true }).waitFor();
       stage = 'logout';
       await page.getByRole('link', { name: 'Mi sesión', exact: true }).click();

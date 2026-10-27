@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { roleLabel } from '../../lib/format.ts';
 
 /** `count` is shown next to the label; `accessibleLabel` then carries its meaning, since the number alone is ambiguous. */
 interface NavigationItem { id: string; label: string; icon?: LucideIcon; count?: number; accessibleLabel?: string }
@@ -30,7 +31,7 @@ export function AppShell({ children, navigation, current, busy, session }: {
           {item.count !== undefined && item.count > 0 && <span className="nav-count" aria-hidden="true">{item.count}</span>}</a>)}
       </nav>
       <div className="sidebar-session"><span className="session-avatar" aria-hidden="true">{session.code.slice(0, 2)}</span>
-        <div><strong>{session.code}</strong><span>{session.role}</span><a href="#account-title">Ver mi sesión</a></div>
+        <div><strong>{session.code}</strong><span>{roleLabel(session.role)}</span><a href="#account-title">Ver mi sesión</a></div>
       </div>
     </aside>}
     <main className="app-main" aria-busy={busy}>
