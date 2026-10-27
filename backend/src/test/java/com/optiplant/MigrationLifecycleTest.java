@@ -156,7 +156,7 @@ class MigrationLifecycleTest {
             "--spring.datasource.url=" + POSTGRES.getJdbcUrl(), "--spring.datasource.username=optiplant_test_runtime",
             "--spring.datasource.password=test-runtime-not-for-deployment",
             "--spring.flyway.user=" + POSTGRES.getUsername(), "--spring.flyway.password=" + POSTGRES.getPassword(),
-            "--spring.flyway.locations=" + locations, "--app.admin-code=lifecycle-admin", "--app.admin-password=" + password);
+            "--spring.flyway.locations=" + locations, "--app.demo-data=" + demo, "--app.admin-code=lifecycle-admin", "--app.admin-password=" + password);
     }
 
     private void assertHealth(ConfigurableApplicationContext context) throws Exception {
