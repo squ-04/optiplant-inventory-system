@@ -171,11 +171,17 @@ class UserManagementHttpTest {
             "role", "ADMIN", "temporaryPassword", "x".repeat(128)));
         assertThat(maximum.statusCode()).isEqualTo(201);
         assertThat(maximum.body()).doesNotContain("x".repeat(128));
-        assertProblem(admin.post("/api/v1/users", Map.of("code", "short-" + suffix, "fullName", "Short " + suffix,
-            "role", "ADMIN", "temporaryPassword", "x".repeat(14))), 400, "VALIDATION_FAILED");
+        var tooShort = admin.post("/api/v1/users", Map.of("code", "short-" + suffix, "fullName", "Short " + suffix,
+            "role", "ADMIN", "temporaryPassword", "x".repeat(14)));
+        assertProblem(tooShort, 400, "VALIDATION_FAILED");
+        assertThat(json.readTree(tooShort.body()).path("detail").asText())
+            .isEqualTo("La contraseña temporal debe tener entre 15 y 128 caracteres.");
         String reusedCode = "individual-code-" + suffix;
-        assertProblem(admin.post("/api/v1/users", Map.of("code", reusedCode, "fullName", "Reuse " + suffix,
-            "role", "ADMIN", "temporaryPassword", reusedCode)), 400, "VALIDATION_FAILED");
+        var reused = admin.post("/api/v1/users", Map.of("code", reusedCode, "fullName", "Reuse " + suffix,
+            "role", "ADMIN", "temporaryPassword", reusedCode));
+        assertProblem(reused, 400, "VALIDATION_FAILED");
+        assertThat(json.readTree(reused.body()).path("detail").asText())
+            .isEqualTo("La contraseña temporal debe ser distinta del código de usuario.");
     }
 
     private UUID createBranch(String code) {

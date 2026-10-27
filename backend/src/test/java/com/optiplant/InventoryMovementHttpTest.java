@@ -225,6 +225,8 @@ class InventoryMovementHttpTest {
         var exceeded = account("OPERATOR", a).post("/inventory/movements", exit(product, "3"));
         assertThat(exceeded.statusCode()).isEqualTo(409);
         assertThat(code(exceeded)).isEqualTo("INSUFFICIENT_STOCK");
+        assertThat(json.readTree(exceeded.body()).path("detail").asText())
+            .isEqualTo("La salida de 3,000 excede las existencias físicas disponibles (2,000). No se registró ningún movimiento.");
         assertThat(count("inventory_operation")).isEqualTo(operations);
         assertThat(count("inventory_movement")).isEqualTo(movements);
         assertThat(count("app_idempotency")).isEqualTo(replays);
@@ -366,6 +368,8 @@ class InventoryMovementHttpTest {
         var four = operator.post("/inventory/movements", movement("SALE_RETURN", "reference", sale, "quantity", "4", "reason", "Cliente devolvió"));
         assertThat(four.statusCode()).isEqualTo(409);
         assertThat(code(four)).isEqualTo("COMPENSATION_EXCEEDS_PENDING");
+        assertThat(json.readTree(four.body()).path("detail").asText()).contains("(pendiente: ").contains(",000 en unidad base)")
+            .doesNotContain(".000 en unidad base");
         assertThat(count("inventory_operation")).isEqualTo(operations);
         var three = operator.post("/inventory/movements", movement("SALE_RETURN", "reference", sale, "quantity", "3", "reason", "Cliente devolvió"));
         assertThat(three.statusCode()).isEqualTo(201);

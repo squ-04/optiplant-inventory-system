@@ -10,15 +10,16 @@ import {
   signedQuantity,
 } from '../lib/inventory/movements.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
+import { apiDecimal, dateTime as when, decimal, decimalInputPattern } from '../lib/format.ts';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
-const when = (value: string) => new Date(value).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'medium' });
-// Indivisible units admit whole numbers only; quantities keep at most three decimals (RF-0013).
-const quantityPattern = (divisible: boolean) => divisible ? '\\d{1,15}(\\.\\d{1,3})?' : '\\d{1,15}';
-const costPattern = '\\d{1,27}(\\.\\d{1,6})?';
+// Indivisible units admit whole numbers only; quantities keep at most three decimals (RF-0013). Decimals are typed
+// with a comma and sent to the API with a dot.
+const quantityPattern = (divisible: boolean) => decimalInputPattern(divisible ? 3 : 0);
+const costPattern = decimalInputPattern(6, 27);
 
 interface Draft {
   kind: MovementKind | ''; direction: MovementDirection; product: string; unit: string; reference: string;
@@ -95,10 +96,10 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
     event.preventDefault();
     if (!draft.kind) return;
     const input = {
-      kind: draft.kind, quantity: draft.quantity.trim(), reason: draft.reason.trim(),
+      kind: draft.kind, quantity: apiDecimal(draft.quantity), reason: draft.reason.trim(),
       ...(option?.direction === null ? { direction } : {}),
       ...(referenced ? { reference: draft.reference } : { product: draft.product, unit: draft.unit }),
-      ...(showCost && draft.unitCost.trim() ? { unitCost: draft.unitCost.trim() } : {}),
+      ...(showCost && draft.unitCost.trim() ? { unitCost: apiDecimal(draft.unitCost) } : {}),
     };
     setBusy(true); setFormError(''); setConfirmed(null);
     client.registerMovement(input, idempotencyKey).then(movement => {
@@ -146,7 +147,7 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
       <Button onClick={open}><Plus aria-hidden="true" />Nuevo movimiento</Button>}
     {confirmed && <p role="status">
       Movimiento registrado: {kindLabel(confirmed.kind)} de {signedQuantity(confirmed)} {confirmed.unit} de {confirmed.sku}.
-      Existencias resultantes: {confirmed.resultingPhysicalQuantity} {confirmed.baseUnitName}.
+      Existencias resultantes: {decimal(confirmed.resultingPhysicalQuantity)} {confirmed.baseUnitName}.
     </p>}
 
     {editorOpen && kinds.length > 0 && <form id="movement-editor" onSubmit={submit} aria-describedby={formError ? 'movement-error' : undefined}>
@@ -178,8 +179,8 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
             onChange={event => change({ reference: event.target.value, unitCost: '' })}>
             <option value="">{draft.kind === 'ENTRY_CORRECTION' ? 'Seleccione la entrada' : 'Sin venta de referencia'}</option>
             {candidates.map(item => <option key={item.externalId} value={item.externalId}>
-              {when(item.occurredAt)}: {kindLabel(item.kind)} de {item.commercialQuantity} {item.unit} de {item.sku}
-              {item.pendingQuantity !== null ? ` (pendiente: ${item.pendingQuantity} ${item.baseUnitName})` : ''}
+              {when(item.occurredAt)}: {kindLabel(item.kind)} de {decimal(item.commercialQuantity)} {item.unit} de {item.sku}
+              {item.pendingQuantity !== null ? ` (pendiente: ${decimal(item.pendingQuantity)} ${item.baseUnitName})` : ''}
             </option>)}
           </select>
           {candidates.length === 0 && <p className="text-muted-foreground">
@@ -201,7 +202,7 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
             }}>
             <option value="">Seleccione un producto habilitado</option>
             {catalog?.items.map(item => <option key={item.productExternalId} value={item.productExternalId}>
-              {item.sku} {item.name}: {item.physicalQuantity} {item.baseUnitName} en existencia
+              {item.sku} {item.name}: {decimal(item.physicalQuantity)} {item.baseUnitName} en existencia
             </option>)}
           </select>
           {catalog && catalog.items.length === 0 && <p className="text-muted-foreground">
@@ -211,7 +212,7 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
             <label htmlFor="movement-unit">Unidad</label>
             <select id="movement-unit" value={draft.unit} required onChange={event => change({ unit: event.target.value })}>
               {units.map(item => <option key={item.name} value={item.name}>
-                {item.base ? `${item.name} (unidad base)` : `${item.name} (${item.factor} ${product.baseUnitName})`}
+                {item.base ? `${item.name} (unidad base)` : `${item.name} (${decimal(item.factor)} ${product.baseUnitName})`}
               </option>)}
             </select>
           </>}
@@ -220,15 +221,15 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
         <label>Cantidad{unit && !referenced ? ` en ${unit.name}` : reference ? ` en ${reference.unit}` : ''}
           <Input value={draft.quantity} onChange={event => change({ quantity: event.target.value })} required
             inputMode={quantityDivisible ? 'decimal' : 'numeric'} pattern={quantityPattern(quantityDivisible)}
-            title={quantityDivisible ? 'Hasta 3 decimales.' : 'Número entero.'} /></label>
+            title={quantityDivisible ? 'Hasta 3 decimales con coma, por ejemplo 2,5.' : 'Número entero.'} /></label>
         {draft.kind === 'ENTRY_CORRECTION' && reference && <p className="text-muted-foreground">
-          Puede descontar hasta {reference.pendingQuantity} {reference.baseUnitName} de esta entrada.
+          Puede descontar hasta {reference.pendingQuantity === null ? '' : decimal(reference.pendingQuantity)} {reference.baseUnitName} de esta entrada.
         </p>}
 
         {showCost && product && <>
           <label>Costo unitario justificado por {product.baseUnitName}
             <Input value={draft.unitCost} onChange={event => change({ unitCost: event.target.value })} required
-              inputMode="decimal" pattern={costPattern} title="Decimal no negativo con hasta 6 decimales." /></label>
+              inputMode="decimal" pattern={costPattern} title="Decimal no negativo con hasta 6 decimales y coma, por ejemplo 1500,25." /></label>
           <p className="text-muted-foreground">
             La sucursal no tiene existencias de este producto, así que no hay costo promedio que aplicar. Indique el costo que
             justifica el ingreso; con existencias se usa el promedio vigente.
@@ -293,21 +294,21 @@ function HistoryTable({ history }: { history: MovementHistory }) {
         <TableCell className="quantity">
           {signedQuantity(item)} {item.unit}
           {item.commercialQuantity !== item.baseQuantity || item.unit !== item.baseUnitName
-            ? <span className="cell-note">{item.baseQuantity} {item.baseUnitName}</span> : null}
+            ? <span className="cell-note">{decimal(item.baseQuantity)} {item.baseUnitName}</span> : null}
         </TableCell>
         <TableCell className="cell-text">{item.reason}</TableCell>
         <TableCell>{item.responsible.fullName}<span className="cell-note">{item.responsible.code}</span></TableCell>
         <TableCell className="cell-text">
           {referenceText(item)}
-          {item.pendingQuantity !== null && <span className="cell-note">Pendiente de compensar: {item.pendingQuantity} {item.baseUnitName}</span>}
+          {item.pendingQuantity !== null && <span className="cell-note">Pendiente de compensar: {decimal(item.pendingQuantity)} {item.baseUnitName}</span>}
         </TableCell>
         {valued && <>
-          <TableCell className="quantity">{item.valuation?.unitCost}</TableCell>
+          <TableCell className="quantity">{item.valuation && decimal(item.valuation.unitCost)}</TableCell>
           <TableCell className="quantity">
-            {item.valuation?.totalAmount}
+            {item.valuation && decimal(item.valuation.totalAmount)}
             {item.valuation?.differenceKind && <span className="cell-note">
-              Incluye {DIFFERENCE_LABELS[item.valuation.differenceKind] ?? item.valuation.differenceKind}: {item.valuation.exactDifferenceAmount}
-              {' '}(al costo aplicado: {item.valuation.baseAmount})
+              Incluye {DIFFERENCE_LABELS[item.valuation.differenceKind] ?? item.valuation.differenceKind}: {item.valuation.exactDifferenceAmount && decimal(item.valuation.exactDifferenceAmount)}
+              {' '}(al costo aplicado: {decimal(item.valuation.baseAmount)})
             </span>}
           </TableCell>
         </>}

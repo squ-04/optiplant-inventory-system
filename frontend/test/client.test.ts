@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ApiClient, ApiError } from '../src/lib/api/client.ts';
+import { ApiClient, ApiError, sessionProblem } from '../src/lib/api/client.ts';
 
 const user = {
   externalId: 'df06cdfe-a745-4bf4-bc81-e10db132724b', code: 'ADMIN',
@@ -103,4 +103,15 @@ test('invalid CSRF cannot send a mutation and non-JSON HTTP errors retain status
   assert.equal(h.calls.length, 1);
   const unavailable = harness([new Response('unavailable', { status: 503 })]);
   await assert.rejects(unavailable.client.me(), (e: unknown) => e instanceof ApiError && e.status === 503);
+});
+
+test('only session problems are escalated to the shell alert', () => {
+  const problem = (status: number, code: string) => new ApiError(status, { status, code, detail: 'x' });
+  assert.equal(sessionProblem(problem(401, 'UNAUTHENTICATED')), true);
+  assert.equal(sessionProblem(problem(403, 'PASSWORD_CHANGE_REQUIRED')), true);
+  // Business rejections and connection loss stay in the view that produced them.
+  assert.equal(sessionProblem(problem(409, 'BRANCH_CODE_CONFLICT')), false);
+  assert.equal(sessionProblem(problem(400, 'VALIDATION_FAILED')), false);
+  assert.equal(sessionProblem(problem(403, 'ROLE_FORBIDDEN')), false);
+  assert.equal(sessionProblem(new TypeError('Failed to fetch')), false);
 });

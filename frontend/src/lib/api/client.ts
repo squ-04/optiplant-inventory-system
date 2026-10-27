@@ -150,6 +150,10 @@ export class ApiError extends Error {
   }
 }
 
+/** Session loss or a pending password change concern the whole shell; other rejections stay in their own view. */
+export const sessionProblem = (reason: unknown) => reason instanceof ApiError
+  && (reason.status === 401 || reason.problem.code === 'PASSWORD_CHANGE_REQUIRED');
+
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;

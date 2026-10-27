@@ -59,7 +59,7 @@ STAGES = {
       await page.getByRole('button', { name: 'Consultar sucursal' }).click();
       await page.getByRole('heading', { name: 'Inventario de Demostración Bogotá (DEMO-BOG)' }).waitFor();
       const cells = await row().getByRole('cell').allInnerTexts();
-      check(cells[2].startsWith('8.000') && cells[3].startsWith('8.000'), 'Existencias inesperadas: ' + cells.join(' | '));
+      check(cells[2].startsWith('8,000') && cells[3].startsWith('8,000'), 'Existencias inesperadas: ' + cells.join(' | '));
       check(await page.getByText('estas existencias pertenecen a otra sucursal').count() === 1, 'Falta el aviso de solo lectura');
       check(!/costo|valor/i.test(await view().locator('table').innerText()), 'Se muestran costos o valoración');
       const polls = await count(6100);
@@ -67,13 +67,13 @@ STAGES = {
       return 'existencias de DEMO-BOG sin costos; ' + polls + ' lecturas automáticas en 6,1 s';""",
     "cambio-visible-sin-pulsar": """
       const start = Date.now();
-      await row().getByRole('cell').nth(2).filter({ hasText: /^5\\.000/ }).waitFor({ timeout: 10000 });
+      await row().getByRole('cell').nth(2).filter({ hasText: /^5,000/ }).waitFor({ timeout: 10000 });
       return 'saldo actualizado visible tras ' + (Date.now() - start) + ' ms de espera en la página';""",
     "backend-detenido": """
       await alert().waitFor({ timeout: 10000 });
       const text = await alert().innerText();
       check(/pueden\\s+estar desactualizados/.test(text) && /no confirma ninguna operación/.test(text), 'Advertencia incompleta');
-      check((await row().getByRole('cell').nth(2).innerText()).startsWith('5.000'), 'Se perdió la última lectura');
+      check((await row().getByRole('cell').nth(2).innerText()).startsWith('5,000'), 'Se perdió la última lectura');
       return 'advertencia visible y última lectura conservada';""",
     "backend-recuperado": """
       await alert().waitFor({ state: 'detached', timeout: 15000 });

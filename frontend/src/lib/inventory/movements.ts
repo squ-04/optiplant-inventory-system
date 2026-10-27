@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client.ts';
+import { decimal } from '../format.ts';
 import type { MovementDirection, MovementHistoryEntry, MovementKind } from '../api/client.ts';
 
 /** Presentation rules for manual movements; the server validates and decides every effect (RF-0016–RF-0018). */
@@ -35,7 +36,7 @@ export const DIFFERENCE_LABELS: Record<string, string> = {
 
 /** Quantity with the sign of its effect on stock; the decimal string itself is never converted to a number. */
 export const signedQuantity = (entry: { direction: MovementDirection; commercialQuantity: string }) =>
-  `${entry.direction === 'IN' ? '+' : '−'}${entry.commercialQuantity}`;
+  `${entry.direction === 'IN' ? '+' : '−'}${decimal(entry.commercialQuantity)}`;
 
 const CORRECTABLE = ['PURCHASE_RECEIPT', 'MANUAL_ENTRY', 'SALE_RETURN'];
 const positive = (value: string | null) => value !== null && /[1-9]/.test(value);

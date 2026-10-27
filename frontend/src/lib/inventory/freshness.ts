@@ -4,6 +4,11 @@ import { ApiError } from '../api/client.ts';
 export const INVENTORY_POLL_MS = 2000;
 /** A read slower than the approved five-second freshness target (RNF-REN-01) is aborted and treated as communication loss. */
 export const INVENTORY_TIMEOUT_MS = 5000;
+/**
+ * Reads run even when the browser reports no network, so an offline device shows the stale-data warning (RF-0015-CA-02)
+ * instead of a silently paused query that keeps the last read as if it were current.
+ */
+export const INVENTORY_NETWORK_MODE = 'always' as const;
 
 export type Freshness =
   | { kind: 'loading' }

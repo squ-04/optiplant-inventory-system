@@ -5,10 +5,12 @@ import { ApiClient } from '../lib/api/client.ts';
 import { Button } from '../components/ui/button';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness } from '../lib/inventory/freshness.ts';
+import {
+  INVENTORY_NETWORK_MODE, INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness,
+} from '../lib/inventory/freshness.ts';
 import type { Branch, BranchInventory, OperationalDocument, User, Visibility as Snapshot } from '../lib/api/client.ts';
-
-const time = (value: string) => new Date(value).toLocaleTimeString();
+import { kindLabel } from '../lib/inventory/movements.ts';
+import { clockTime as time, dateTime, decimal, directionLabel, documentStatusLabel } from '../lib/format.ts';
 
 export function Visibility({ client, user, onError, revision, visible }: {
   client: ApiClient; user: User; onError: (reason: unknown) => void; revision: number; visible: boolean;
@@ -38,6 +40,7 @@ export function Visibility({ client, user, onError, revision, visible }: {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: query => query.state.error === null || connectionFailure(query.state.error) ? 'always' : false,
     refetchOnReconnect: 'always',
+    networkMode: INVENTORY_NETWORK_MODE,
     retry: false,
   });
   // Only communication loss is shown inline; session, permission and validation rejections go to the shell.
@@ -88,14 +91,14 @@ export function Visibility({ client, user, onError, revision, visible }: {
         La actualización automática se detuvo porque el servidor rechazó la consulta. Los datos mostrados pueden estar desactualizados.
       </p>}
       {state.kind === 'live' && !stopped && <p role="status" aria-live="off">
-        Se actualiza automáticamente cada {INVENTORY_POLL_MS / 1000} segundos mientras esta vista está abierta. Última lectura del servidor: {time(state.readAt)}.
+        Se actualiza automáticamente cada {INVENTORY_POLL_MS / 1000} segundos mientras esta vista está abierta. Última lectura del servidor: {time(state.readAt)}
       </p>}
       {state.kind === 'stale' && <p role="alert" className="notice-warning">
         Sin comunicación con el servidor o servicio no disponible (último intento: {time(state.failedAt)}). Se muestran los datos leídos a las {time(state.readAt)} y pueden
         estar desactualizados. Esta consulta no confirma ninguna operación; se reintentará automáticamente.
       </p>}
       {state.kind === 'unavailable' && <p role="alert">
-        No se pudo leer el inventario: sin comunicación con el servidor (último intento: {time(state.failedAt)}). Se reintentará automáticamente; también puede actualizar ahora.
+        No se pudo leer el inventario: sin comunicación con el servidor o servicio no disponible (último intento: {time(state.failedAt)}). Se reintentará automáticamente; también puede actualizar ahora.
       </p>}
       {data && (data.items.length === 0
         ? <p>Esta sucursal no tiene productos habilitados, saldos ni tránsito registrados.</p>
@@ -110,9 +113,9 @@ export function Visibility({ client, user, onError, revision, visible }: {
             </TableRow></TableHeader>
             <TableBody>{data.items.map(item => <TableRow key={item.productExternalId}>
               <TableCell className="font-semibold">{item.sku}</TableCell><TableCell>{item.name}</TableCell>
-              <TableCell className="quantity">{item.physicalQuantity} {item.baseUnitName}</TableCell>
-              <TableCell className="quantity">{item.availableQuantity} {item.baseUnitName}</TableCell>
-              <TableCell className="quantity">{item.inTransitQuantity} {item.baseUnitName}</TableCell>
+              <TableCell className="quantity">{decimal(item.physicalQuantity)} {item.baseUnitName}</TableCell>
+              <TableCell className="quantity">{decimal(item.availableQuantity)} {item.baseUnitName}</TableCell>
+              <TableCell className="quantity">{decimal(item.inTransitQuantity)} {item.baseUnitName}</TableCell>
             </TableRow>)}</TableBody>
           </Table>
         </div>)}
@@ -125,7 +128,7 @@ export function Visibility({ client, user, onError, revision, visible }: {
       <Documents title="Transferencias de origen o destino" items={snapshot.transfers} />
       <h3>Movimientos registrados</h3>
       {snapshot.movements.length === 0 ? <p>Sin movimientos registrados.</p> : <ul>{snapshot.movements.map(item =>
-        <li key={item.externalId}>{item.occurredAt} · {item.kind} · {item.direction} · {item.sku} · {item.quantity} {item.unit} · Responsable: {item.actorCode} · Ref.: {item.externalId}</li>)}</ul>}
+        <li key={item.externalId}>{dateTime(item.occurredAt)} · {kindLabel(item.kind)} · {directionLabel(item.direction)} · {item.sku} · {decimal(item.quantity)} {item.unit} · Responsable: {item.actorCode} · Ref.: {item.externalId}</li>)}</ul>}
     </>}
     <p>Los ingresos y retiros se registran en «Movimientos». Compras, ventas y transferencias se incorporan en sus entregas funcionales; no se simulan desde esta pantalla.</p>
   </section>;
@@ -133,5 +136,5 @@ export function Visibility({ client, user, onError, revision, visible }: {
 
 function Documents({ title, items }: { title: string; items: OperationalDocument[] }) {
   return <><h3>{title}</h3>{items.length === 0 ? <p>Sin registros.</p> : <ul>{items.map(item =>
-    <li key={item.externalId}>{item.code} · {item.status} · {item.occurredAt} · Ref.: {item.externalId}</li>)}</ul>}</>;
+    <li key={item.externalId}>{item.code} · {documentStatusLabel(item.status)} · {dateTime(item.occurredAt)} · Ref.: {item.externalId}</li>)}</ul>}</>;
 }
