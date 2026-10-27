@@ -81,6 +81,8 @@ test('movementHistory rejects entries without the audit data of RF-0018', async 
 test('each role is offered only the movements it may register (INC-009/D03)', () => {
   assert.deepEqual(kindsFor('OPERATOR').map(k => k.kind), ['MANUAL_ENTRY', 'SALE_RETURN', 'MANUAL_EXIT']);
   assert.deepEqual(kindsFor('MANAGER').map(k => k.kind), ['COUNT_ADJUSTMENT', 'ENTRY_CORRECTION']);
+  // Decision L14: only count adjustments choose a direction; corrections always decrease.
+  assert.deepEqual(kindsFor('MANAGER').map(k => k.direction), [null, 'OUT']);
   assert.deepEqual(kindsFor('ADMIN'), []);
   assert.equal(kindLabel('PURCHASE_RECEIPT'), 'Recepción de compra');
   assert.equal(signedQuantity({ direction: 'OUT', commercialQuantity: '2.500' }), '−2.500');
@@ -95,10 +97,9 @@ test('compensations reference only movements that still admit them', () => {
     entry({ externalId: 'a4', kind: 'PURCHASE_RECEIPT', pendingQuantity: '4.000' }),
     entry({ externalId: 'a5', kind: 'COUNT_ADJUSTMENT', pendingQuantity: null }),
   ];
-  assert.deepEqual(referenceCandidates(history, 'SALE_RETURN', 'IN').map(i => i.externalId), ['a1']);
-  assert.deepEqual(referenceCandidates(history, 'ENTRY_CORRECTION', 'OUT').map(i => i.externalId), ['a4']);
-  assert.deepEqual(referenceCandidates(history, 'ENTRY_CORRECTION', 'IN').map(i => i.externalId), ['a3', 'a4']);
-  assert.deepEqual(referenceCandidates(history, 'MANUAL_ENTRY', 'IN'), []);
+  assert.deepEqual(referenceCandidates(history, 'SALE_RETURN').map(i => i.externalId), ['a1']);
+  assert.deepEqual(referenceCandidates(history, 'ENTRY_CORRECTION').map(i => i.externalId), ['a4']);
+  assert.deepEqual(referenceCandidates(history, 'MANUAL_ENTRY'), []);
 });
 
 test('a justified unit cost is asked only for entries without reference and without stock', () => {

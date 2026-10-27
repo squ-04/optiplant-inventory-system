@@ -321,6 +321,41 @@ class InventoryMovementHttpTest {
         assertThat(balance(a, product)).containsExactly("1", "0", "0");
     }
 
+    /** L14 (1-A): a return later corrected no longer consumes the returnable quantity of its sale. */
+    @Test void correctedReturnReleasesItsUnitsForALaterReturn() throws Exception {
+        valuedEntry(a, product, "10", "7");
+        String sale = sale(a, product, "5");
+        Browser operator = account("OPERATOR", a);
+        String wrong = json.readTree(operator.post("/inventory/movements", movement("SALE_RETURN", "reference", sale,
+            "quantity", "2", "reason", "Devolución registrada por error")).body()).get("movementExternalId").asText();
+        assertThat(account("MANAGER", a).post("/inventory/movements", movement("ENTRY_CORRECTION", "reference", wrong,
+            "quantity", "2", "reason", "El cliente no devolvió nada")).statusCode()).isEqualTo(201);
+        JsonNode saleEntry = null;
+        for (JsonNode item : json.readTree(operator.get("/inventory/branches/" + a + "/movements").body()).get("items")) {
+            if (item.get("externalId").asText().equals(sale)) saleEntry = item;
+        }
+        assertThat(saleEntry.get("pendingQuantity").asText()).isEqualTo("5.000");
+        assertThat(code(operator.post("/inventory/movements", movement("SALE_RETURN", "reference", sale, "quantity", "6",
+            "reason", "Devolución completa")))).isEqualTo("COMPENSATION_EXCEEDS_PENDING");
+        assertThat(operator.post("/inventory/movements", movement("SALE_RETURN", "reference", sale, "quantity", "5",
+            "reason", "Devolución completa")).statusCode()).isEqualTo(201);
+        assertThat(balance(a, product)).containsExactly("10", "70", "7");
+    }
+
+    /** L14 (2-A): corrections only remove units registered in excess; missing units enter as a new movement. */
+    @Test void correctionsOnlyDecreaseAnIdentifiedEntry() throws Exception {
+        Browser operator = account("OPERATOR", a);
+        String original = json.readTree(operator.post("/inventory/movements", entry(product, "unidad", "8", "10",
+            "Llegaron 10, se registraron 8")).body()).get("movementExternalId").asText();
+        int operations = count("inventory_operation");
+        var upward = account("MANAGER", a).post("/inventory/movements", movement("ENTRY_CORRECTION", "direction", "IN",
+            "reference", original, "quantity", "2", "reason", "Faltaron 2"));
+        assertThat(upward.statusCode()).isEqualTo(400);
+        assertThat(json.readTree(upward.body()).get("detail").asText()).contains("nuevo ingreso");
+        assertThat(count("inventory_operation")).isEqualTo(operations);
+        assertThat(balance(a, product)).containsExactly("8", "80", "10");
+    }
+
     @Test void returnLinkedToASaleNeverExceedsWhatWasSoldAsInRf0016Ca03() throws Exception {
         valuedEntry(a, product, "10", "7");
         String sale = sale(a, product, "5");

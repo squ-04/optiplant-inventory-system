@@ -22,8 +22,9 @@ public record ManualMovementRequest(Kind kind, Direction direction, UUID product
     /** Kinds a person registers manually; documents (purchases, sales, transfers) post their own operations. */
     public static final Set<Kind> MANUAL = Set.of(Kind.MANUAL_ENTRY, Kind.SALE_RETURN, Kind.MANUAL_EXIT,
         Kind.COUNT_ADJUSTMENT, Kind.ENTRY_CORRECTION);
+    // A correction only removes units registered in excess (decision L14); missing units enter as a new movement.
     private static final Map<Kind, Direction> FIXED = Map.of(Kind.MANUAL_ENTRY, Direction.IN, Kind.SALE_RETURN, Direction.IN,
-        Kind.MANUAL_EXIT, Direction.OUT);
+        Kind.MANUAL_EXIT, Direction.OUT, Kind.ENTRY_CORRECTION, Direction.OUT);
     private static final Set<String> FIELDS = Set.of("kind", "direction", "product", "unit", "quantity", "unitCost",
         "reference", "reason");
     // inventory_movement.historical_base_cost is NUMERIC(33,6).
@@ -89,6 +90,10 @@ public record ManualMovementRequest(Kind kind, Direction direction, UUID product
             direction = Direction.valueOf(value);
         } catch (IllegalArgumentException error) {
             throw invalid("La dirección debe ser IN u OUT.");
+        }
+        if (kind == Kind.ENTRY_CORRECTION && direction != fixed) {
+            throw invalid("Una corrección solo descuenta unidades registradas de más. Registre las unidades faltantes como "
+                + "un nuevo ingreso o un ajuste por conteo.");
         }
         if (fixed != null && fixed != direction) throw invalid("La dirección no corresponde al tipo de movimiento.");
         return direction;

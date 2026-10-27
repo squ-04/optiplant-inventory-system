@@ -29,6 +29,14 @@ public class ManualMovementService {
     private static final Map<String, Set<Kind>> PERMITTED = Map.of(
         "OPERATOR", Set.of(Kind.MANUAL_ENTRY, Kind.SALE_RETURN, Kind.MANUAL_EXIT),
         "MANAGER", Set.of(Kind.COUNT_ADJUSTMENT, Kind.ENTRY_CORRECTION));
+    /**
+     * Base quantity of movement {@code m} still open to compensation: a sale exit minus its net returns (a return later
+     * corrected releases its units, decision L14), or an identified entry minus its downward corrections.
+     */
+    static final String PENDING = """
+        m.base_qty - coalesce((SELECT sum(c.base_qty - coalesce((SELECT sum(cc.base_qty) FROM inventory_movement cc
+            WHERE cc.original_movement_id=c.id AND cc.direction<>c.direction),0))
+            FROM inventory_movement c WHERE c.original_movement_id=m.id AND c.direction<>m.direction),0)""";
     /** Identified entries whose quantity a manager may correct at their historical cost (H v0.13). */
     static final Set<String> CORRECTABLE = Set.of("PURCHASE_RECEIPT", "MANUAL_ENTRY", "SALE_RETURN");
 
@@ -87,11 +95,9 @@ public class ManualMovementService {
                     throw new ApiException(409, "CORRECTION_REFERENCE_INVALID",
                         "Solo se corrigen entradas identificadas: compras recibidas, ingresos ordinarios o devoluciones.");
                 }
-                if (request.direction() == Direction.OUT) {
-                    requireWithin(base, original.pending(), "La corrección supera la cantidad pendiente de corregir de la entrada");
-                }
+                requireWithin(base, original.pending(), "La corrección supera la cantidad pendiente de corregir de la entrada");
                 line = new InventoryLedger.Line(original.productId(), original.unitId(), original.factor(), request.quantity(), base,
-                    request.direction(), new Cost.Historical(original.cost()), null, null, original.id());
+                    Direction.OUT, new Cost.Historical(original.cost()), null, null, original.id());
                 originalOperation = original.operationId();
             }
         } else {
@@ -144,11 +150,10 @@ public class ManualMovementService {
         return jdbc.query("""
             SELECT m.id,m.operation_id,o.kind,m.direction,m.product_id,m.product_unit_id,m.factor_snapshot,
                 m.historical_base_cost,m.sale_line_id,u.divisible,p.base_divisible,
-                m.base_qty - coalesce((SELECT sum(CASE WHEN c.direction=m.direction THEN -c.base_qty ELSE c.base_qty END)
-                    FROM inventory_movement c WHERE c.original_movement_id=m.id),0) AS pending
+                %s AS pending
             FROM inventory_movement m JOIN inventory_operation o ON o.id=m.operation_id
             JOIN catalog_product_unit u ON u.id=m.product_unit_id JOIN catalog_product p ON p.id=m.product_id
-            WHERE m.external_id=? AND m.branch_id=?""", (row, index) -> new Original(row.getLong("id"),
+            WHERE m.external_id=? AND m.branch_id=?""".formatted(PENDING), (row, index) -> new Original(row.getLong("id"),
                 row.getLong("operation_id"), row.getString("kind"), row.getString("direction"), row.getLong("product_id"),
                 row.getLong("product_unit_id"), row.getBigDecimal("factor_snapshot"), row.getBigDecimal("historical_base_cost"),
                 (Long) row.getObject("sale_line_id", Long.class), row.getBigDecimal("pending"), row.getBoolean("divisible"),

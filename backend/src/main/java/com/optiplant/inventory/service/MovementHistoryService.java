@@ -59,14 +59,13 @@ public class MovementHistoryService {
                 d.component_kind AS difference_kind,d.amount AS difference_amount,
                 CASE WHEN (o.kind='SALE' AND m.direction='OUT') OR (o.kind IN ('PURCHASE_RECEIPT','MANUAL_ENTRY','SALE_RETURN')
                         AND m.direction='IN')
-                    THEN m.base_qty - coalesce((SELECT sum(CASE WHEN c.direction=m.direction THEN -c.base_qty ELSE c.base_qty END)
-                        FROM inventory_movement c WHERE c.original_movement_id=m.id),0) END AS pending
+                    THEN %s END AS pending
             FROM inventory_movement m JOIN inventory_operation o ON o.id=m.operation_id
             JOIN identity_branch b ON b.id=m.branch_id JOIN catalog_product p ON p.id=m.product_id
             JOIN identity_user_account u ON u.id=o.actor_id
             LEFT JOIN inventory_movement r ON r.id=m.original_movement_id
             LEFT JOIN inventory_valuation_component d ON d.movement_id=m.id AND d.component_kind<>'BASE'
-            WHERE b.external_id=?""" + (product == null ? "" : " AND p.external_id=?")
+            WHERE b.external_id=?""".formatted(ManualMovementService.PENDING) + (product == null ? "" : " AND p.external_id=?")
             + " ORDER BY o.occurred_at DESC,m.id DESC LIMIT ?", (r, i) -> {
                 BigDecimal pending = r.getBigDecimal("pending");
                 Valuation value = null;

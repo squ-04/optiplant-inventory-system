@@ -70,7 +70,7 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
 
   const option = kinds.find(item => item.kind === draft.kind);
   const direction: MovementDirection = option?.direction ?? draft.direction;
-  const candidates = draft.kind ? referenceCandidates(history?.items ?? [], draft.kind, direction) : [];
+  const candidates = draft.kind ? referenceCandidates(history?.items ?? [], draft.kind) : [];
   const reference = candidates.find(item => item.externalId === draft.reference);
   const referenced = draft.kind === 'ENTRY_CORRECTION' || (draft.kind === 'SALE_RETURN' && draft.reference !== '');
   const product = catalog?.items.find(item => item.productExternalId === draft.product);
@@ -184,7 +184,7 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
           </select>
           {candidates.length === 0 && <p className="text-muted-foreground">
             {draft.kind === 'ENTRY_CORRECTION'
-              ? 'No hay entradas identificadas que admitan esta corrección en el historial consultado.'
+              ? 'No hay entradas con unidades por corregir en el historial consultado. Si faltaron unidades, regístrelas con un ajuste por conteo o pida al operador un nuevo ingreso.'
               : 'No hay ventas con unidades por devolver. Registre la devolución sin referencia, con su motivo.'}
           </p>}
         </>}
@@ -221,7 +221,7 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
           <Input value={draft.quantity} onChange={event => change({ quantity: event.target.value })} required
             inputMode={quantityDivisible ? 'decimal' : 'numeric'} pattern={quantityPattern(quantityDivisible)}
             title={quantityDivisible ? 'Hasta 3 decimales.' : 'Número entero.'} /></label>
-        {draft.kind === 'ENTRY_CORRECTION' && reference && direction === 'OUT' && <p className="text-muted-foreground">
+        {draft.kind === 'ENTRY_CORRECTION' && reference && <p className="text-muted-foreground">
           Puede descontar hasta {reference.pendingQuantity} {reference.baseUnitName} de esta entrada.
         </p>}
 

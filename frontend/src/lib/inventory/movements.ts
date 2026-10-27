@@ -11,7 +11,8 @@ const OPERATOR_KINDS: KindOption[] = [
 ];
 const MANAGER_KINDS: KindOption[] = [
   { kind: 'COUNT_ADJUSTMENT', label: 'Ajuste por conteo', description: 'Iguala el sistema con el conteo físico, al costo promedio vigente.', direction: null },
-  { kind: 'ENTRY_CORRECTION', label: 'Corrección de una entrada', description: 'Compensa la cantidad mal registrada de una entrada, a su costo histórico.', direction: null },
+  // A correction only removes units registered in excess; missing units enter as a new entry or a count adjustment.
+  { kind: 'ENTRY_CORRECTION', label: 'Corrección de una entrada', description: 'Descuenta unidades registradas de más en una entrada, a su costo histórico.', direction: 'OUT' },
 ];
 
 /** INC-009/D03: operators register ordinary movements, managers adjustments and corrections; administrators none. */
@@ -39,14 +40,11 @@ export const signedQuantity = (entry: { direction: MovementDirection; commercial
 const CORRECTABLE = ['PURCHASE_RECEIPT', 'MANUAL_ENTRY', 'SALE_RETURN'];
 const positive = (value: string | null) => value !== null && /[1-9]/.test(value);
 
-/**
- * Movements a compensation may reference: sale exits with quantity still returnable, or identified entries. A downward
- * correction needs pending quantity; an upward one may reference any identified entry.
- */
-export function referenceCandidates(history: MovementHistoryEntry[], kind: MovementKind, direction: MovementDirection) {
+/** Movements a compensation may reference: sale exits with units still returnable, or entries with units to correct. */
+export function referenceCandidates(history: MovementHistoryEntry[], kind: MovementKind) {
   if (kind === 'SALE_RETURN') return history.filter(item => item.kind === 'SALE' && item.direction === 'OUT' && positive(item.pendingQuantity));
   if (kind === 'ENTRY_CORRECTION') return history.filter(item => CORRECTABLE.includes(item.kind) && item.direction === 'IN'
-    && (direction === 'IN' || positive(item.pendingQuantity)));
+    && positive(item.pendingQuantity));
   return [];
 }
 
