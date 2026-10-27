@@ -142,6 +142,8 @@ STAGES = {
       await row().filter({ hasText: '6,000 unidad' }).first().waitFor();
       await page.getByRole('link', { name: 'Movimientos', exact: true }).click();
       await page.getByRole('button', { name: 'Nuevo movimiento', exact: true }).click();
+      // The editor moves focus to its first field on the next frame; filling earlier would type into the wrong field.
+      await page.waitForFunction(() => document.activeElement?.closest('#movement-editor') !== null);
       await page.getByLabel('Producto', { exact: true }).selectOption({ label: config.sku + ' Helecho de prueba: 6,000 unidad en existencia' });
       await page.getByLabel(/^Cantidad/).fill('2');
       await page.getByLabel('Motivo', { exact: true }).fill('Ingreso de prueba desde la interfaz');

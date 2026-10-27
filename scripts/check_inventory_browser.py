@@ -67,7 +67,7 @@ STAGES = {
       return 'existencias de DEMO-BOG sin costos; ' + polls + ' lecturas automáticas en 6,1 s';""",
     "cambio-visible-sin-pulsar": """
       const start = Date.now();
-      await row().getByRole('cell').nth(2).filter({ hasText: /^5\\.000/ }).waitFor({ timeout: 10000 });
+      await row().getByRole('cell').nth(2).filter({ hasText: /^5,000/ }).waitFor({ timeout: 10000 });
       return 'saldo actualizado visible tras ' + (Date.now() - start) + ' ms de espera en la página';""",
     "backend-detenido": """
       await alert().waitFor({ timeout: 10000 });

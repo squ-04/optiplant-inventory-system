@@ -43,6 +43,8 @@ def main():
         ]);
         return response.status();
       };
+      // Opened editors move focus to their first field on the next frame; filling earlier would type into the wrong field.
+      const editorReady = id => page.waitForFunction(editor => document.activeElement?.closest('#' + editor) !== null, id);
       const change = async (p, current, replacement) => {
         await p.getByLabel('Contraseña actual', { exact: true }).fill(current);
         await p.getByLabel('Nueva contraseña', { exact: true }).fill(replacement);
@@ -61,6 +63,7 @@ def main():
       stage = 'create-branches';
       for (const code of [a, b]) {
         await page.getByRole('button', { name: 'Nueva sucursal', exact: true }).click();
+        await editorReady('branch-editor');
         const form = page.getByRole('group', { name: 'Crear sucursal', exact: true });
         await form.getByLabel('Código', { exact: true }).fill(code);
         await form.getByLabel('Nombre', { exact: true }).fill(code);
@@ -75,6 +78,7 @@ def main():
       await page.getByRole('link', { name: 'Administración', exact: true }).click();
       await page.getByRole('tab', { name: 'Usuarios', exact: true }).click();
       await page.getByRole('button', { name: 'Nuevo usuario', exact: true }).click();
+      await editorReady('user-editor');
       const userForm = page.getByRole('group', { name: 'Crear usuario', exact: true });
       await userForm.getByLabel('Nombre completo').fill('Persona de prueba UI');
       await userForm.getByLabel('Código de usuario', { exact: true }).fill(user);
@@ -95,16 +99,18 @@ def main():
         await login(operator, user, config.userPassword);
         await operator.getByRole('heading', { name: 'Consulta de sucursal' }).waitFor();
         check(await operator.getByRole('heading', { name: 'Administración de la red' }).count() === 0, 'Operator sees administration');
-        await operator.getByRole('button', { name: 'Consultar datos actuales' }).click();
+        // Own branch: live stock plus its operational history (RF-0014); another branch: stock only.
+        const query = () => operator.getByRole('button', { name: 'Consultar sucursal', exact: true }).click();
+        await query();
         await operator.getByRole('heading', { name: 'Compras', exact: true }).waitFor();
         await operator.getByLabel('Sucursal', { exact: true }).selectOption({ label: b + ' · ' + b });
-        await operator.getByRole('button', { name: 'Consultar datos actuales' }).click();
-        await operator.getByRole('heading', { name: 'Existencias físicas' }).waitFor();
+        await query();
+        await operator.getByRole('heading', { name: 'Inventario de ' + b + ' (' + b + ')', exact: true }).waitFor();
         check(await operator.getByRole('heading', { name: 'Compras', exact: true }).count() === 0, 'Cross-branch commerce leaked');
         stage = 'offline';
         await context.setOffline(true);
-        await operator.getByRole('button', { name: 'Consultar datos actuales' }).click();
-        await operator.getByRole('alert').filter({ hasText: 'Sin comunicación' }).waitFor();
+        await query();
+        await operator.getByRole('alert').filter({ hasText: /sin comunicación/i }).first().waitFor();
         await context.setOffline(false);
         // Change scope in the original administrator session, then probe the old live UI.
         stage = 'scope-revocation';
@@ -113,7 +119,7 @@ def main():
         await edit.getByLabel('Sucursal activa').selectOption({ label: b + ' · ' + b });
         await edit.getByRole('button', { name: 'Guardar usuario' }).click();
         await page.getByText('Usuario guardado.', { exact: false }).waitFor();
-        await operator.getByRole('button', { name: 'Consultar datos actuales' }).click();
+        await query();
         await operator.getByRole('heading', { name: 'Iniciar sesión', exact: true }).waitFor();
         await login(operator, user, config.userPassword);
         await operator.getByRole('heading', { name: 'Consulta de sucursal' }).waitFor();
@@ -122,7 +128,7 @@ def main():
         await page.getByRole('button', { name: 'Desactivar usuario', exact: true }).click();
         await page.getByRole('alertdialog').getByRole('button', { name: 'Desactivar usuario', exact: true }).click();
         await page.getByText('Usuario desactivado.', { exact: true }).waitFor();
-        await operator.getByRole('button', { name: 'Consultar datos actuales' }).click();
+        await query();
         await operator.getByRole('heading', { name: 'Iniciar sesión', exact: true }).waitFor();
         check(await login(operator, user, config.userPassword) === 401, 'Inactive account login was not rejected');
         await operator.getByRole('alert').waitFor();
