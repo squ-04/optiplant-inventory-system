@@ -203,14 +203,14 @@ export class ApiClient {
     this.onSessionExpired = onSessionExpired;
   }
 
-  private async request(path: string, method = 'GET', body?: unknown): Promise<unknown> {
+  private async request(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<unknown> {
     if (method !== 'GET' && !this.csrf) await this.refreshCsrf();
     const headers = new Headers({ Accept: 'application/json' });
     if (body !== undefined) headers.set('Content-Type', 'application/json');
     if (method !== 'GET' && this.csrf) headers.set(this.csrf.headerName, this.csrf.token);
     const transport = this.transport;
     const response = await transport(`${this.baseUrl}/api/v1${path}`, {
-      method, credentials: 'include', headers,
+      method, credentials: 'include', headers, signal,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (response.status === 401) {
@@ -353,8 +353,8 @@ export class ApiClient {
     return listDto(await this.request(`/visibility/inventory/${encodeURIComponent(id)}`), inventoryDto);
   }
   /** RF-0014/RF-0015: read-only stock of any branch; polled by the view, a GET never counts as session activity. */
-  async branchInventory(id: string): Promise<BranchInventory> {
-    const value = await this.request(`/visibility/branches/${encodeURIComponent(id)}/inventory`);
+  async branchInventory(id: string, signal?: AbortSignal): Promise<BranchInventory> {
+    const value = await this.request(`/visibility/branches/${encodeURIComponent(id)}/inventory`, 'GET', undefined, signal);
     if (!record(value) || !text(value.readAt) || !Number.isFinite(Date.parse(value.readAt))) throw invalid();
     return { branch: branchDto(value.branch), readAt: value.readAt, items: listDto(value.items, stockDto) };
   }

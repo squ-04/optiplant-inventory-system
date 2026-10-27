@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Search } from 'lucide-react';
-import { ApiClient, ApiError } from '../lib/api/client.ts';
+import { ApiClient } from '../lib/api/client.ts';
 import { Button } from '../components/ui/button';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { INVENTORY_POLL_MS, freshness } from '../lib/inventory/freshness.ts';
+import { INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness } from '../lib/inventory/freshness.ts';
 import type { Branch, BranchInventory, OperationalDocument, User, Visibility as Snapshot } from '../lib/api/client.ts';
 
 const time = (value: string) => new Date(value).toLocaleTimeString();
@@ -30,18 +30,19 @@ export function Visibility({ client, user, onError, revision, visible }: {
   // refreshes on focus, reconnection and when the view becomes visible again. A failed poll keeps the last read.
   const inventory = useQuery<BranchInventory>({
     queryKey: ['branch-inventory', consulted],
-    queryFn: () => client.branchInventory(consulted),
+    queryFn: ({ signal }) => client.branchInventory(consulted, AbortSignal.any([signal, AbortSignal.timeout(INVENTORY_TIMEOUT_MS)])),
     enabled: consulted !== '' && visible,
-    // A rejection by the server (session, permission, unknown branch) stops polling; connection loss keeps retrying.
-    refetchInterval: query => visible && !(query.state.error instanceof ApiError) ? INVENTORY_POLL_MS : false,
+    // A client rejection (session, permission, unknown branch) stops polling and focus refetches; connection loss
+    // and server outages keep retrying.
+    refetchInterval: query => visible && (query.state.error === null || connectionFailure(query.state.error)) ? INVENTORY_POLL_MS : false,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: 'always',
+    refetchOnWindowFocus: query => query.state.error === null || connectionFailure(query.state.error) ? 'always' : false,
     refetchOnReconnect: 'always',
     retry: false,
   });
-  // Only connection loss is shown inline; session, permission and validation problems go to the shell.
+  // Only communication loss is shown inline; session, permission and validation rejections go to the shell.
   useEffect(() => {
-    if (inventory.error instanceof ApiError) onError(inventory.error);
+    if (inventory.error && !connectionFailure(inventory.error)) onError(inventory.error);
   }, [inventory.errorUpdatedAt]);
 
   async function load() {
@@ -55,7 +56,8 @@ export function Visibility({ client, user, onError, revision, visible }: {
   }
   const branch = branches.find(item => item.externalId === selected);
   const data = consulted === '' ? undefined : inventory.data;
-  const state = freshness(data?.readAt, inventory.errorUpdatedAt || undefined, inventory.isError && !(inventory.error instanceof ApiError));
+  const state = freshness(data?.readAt, inventory.errorUpdatedAt || undefined, inventory.isError && connectionFailure(inventory.error));
+  const stopped = inventory.isError && !connectionFailure(inventory.error);
   const foreign = data && user.branchExternalId !== null && data.branch.externalId !== user.branchExternalId;
   return <section aria-labelledby="visibility-title" aria-busy={busy || inventory.isFetching}>
     <h2 id="visibility-title" tabIndex={-1}>{user.role === 'ADMIN' ? 'Visibilidad de la red' : 'Consulta de sucursal'}</h2>
@@ -82,11 +84,14 @@ export function Visibility({ client, user, onError, revision, visible }: {
       </div>
       {foreign && <p>Consulta de solo lectura: estas existencias pertenecen a otra sucursal y no se modifican desde aquí.</p>}
       {state.kind === 'loading' && <p role="status">Consultando inventario…</p>}
-      {state.kind === 'live' && <p role="status" aria-live="off">
+      {stopped && <p className="notice-warning">
+        La actualización automática se detuvo porque el servidor rechazó la consulta. Los datos mostrados pueden estar desactualizados.
+      </p>}
+      {state.kind === 'live' && !stopped && <p role="status" aria-live="off">
         Se actualiza automáticamente cada {INVENTORY_POLL_MS / 1000} segundos mientras esta vista está abierta. Última lectura del servidor: {time(state.readAt)}.
       </p>}
       {state.kind === 'stale' && <p role="alert" className="notice-warning">
-        Sin comunicación con el servidor (último intento: {time(state.failedAt)}). Se muestran los datos leídos a las {time(state.readAt)} y pueden
+        Sin comunicación con el servidor o servicio no disponible (último intento: {time(state.failedAt)}). Se muestran los datos leídos a las {time(state.readAt)} y pueden
         estar desactualizados. Esta consulta no confirma ninguna operación; se reintentará automáticamente.
       </p>}
       {state.kind === 'unavailable' && <p role="alert">

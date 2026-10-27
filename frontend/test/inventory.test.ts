@@ -53,3 +53,26 @@ test('freshness keeps the last read and flags it as potentially outdated after a
   // A later successful read clears the warning.
   assert.deepEqual(freshness('2026-10-26T15:00:08.000Z', failedAt, false), { kind: 'live', readAt: '2026-10-26T15:00:08.000Z' });
 });
+
+// RF-0015-CA-02: server-side outages (5xx) count as communication loss, keep polling and flag stale data;
+// client rejections (401/403/404) stop polling and are reported by the shell.
+test('connectionFailure keeps polling for network errors and 5xx, not for client rejections', async () => {
+  const { connectionFailure } = await import('../src/lib/inventory/freshness.ts');
+  assert.equal(connectionFailure(new TypeError('Failed to fetch')), true);
+  for (const status of [500, 502, 503]) assert.equal(connectionFailure(new ApiError(status, {})), true);
+  for (const status of [400, 401, 403, 404]) assert.equal(connectionFailure(new ApiError(status, {})), false);
+});
+
+// RF-0015-CA-02: a read that never answers is aborted and reported as communication loss instead of hanging.
+test('branchInventory forwards an abort signal so a hung read fails as communication loss', async () => {
+  const { connectionFailure } = await import('../src/lib/inventory/freshness.ts');
+  const client = new ApiClient('http://localhost:8080', (_input, options) => new Promise((_resolve, reject) => {
+    options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+  }));
+  // Node does not keep the process alive for AbortSignal.timeout timers; abort with the same reason explicitly.
+  const timeout = new AbortController();
+  setTimeout(() => timeout.abort(new DOMException('The operation timed out.', 'TimeoutError')), 20);
+  const error = await client.branchInventory(branch.externalId, timeout.signal).then(() => null, (reason: unknown) => reason);
+  assert.ok(error instanceof DOMException && error.name === 'TimeoutError');
+  assert.equal(connectionFailure(error), true);
+});
