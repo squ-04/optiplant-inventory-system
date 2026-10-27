@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Minimum stock control (RF-0019) and restock alerts (RF-0020). One condition is used everywhere: an operable
@@ -43,11 +44,13 @@ public class ReorderAlertService {
     private final JdbcTemplate jdbc;
     private final ScopePolicy policy;
     private final Clock clock;
+    private final TransactionTemplate transactions;
 
-    public ReorderAlertService(JdbcTemplate jdbc, ScopePolicy policy, Clock clock) {
+    public ReorderAlertService(JdbcTemplate jdbc, ScopePolicy policy, Clock clock, TransactionTemplate transactions) {
         this.jdbc = jdbc;
         this.policy = policy;
         this.clock = clock;
+        this.transactions = transactions;
     }
 
     /** The single restock condition of RF-0019, shared by alerts and the "about to run out" indicator (RF-0048). */
@@ -61,14 +64,17 @@ public class ReorderAlertService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void evaluate(long branchId, long productId) {
+        // Lock first, then read in a separate statement: its fresh snapshot sees every change committed while waiting,
+        // including a branch or product deactivation that did not modify this row.
+        if (jdbc.queryForList("SELECT id FROM catalog_branch_product WHERE branch_id=? AND product_id=? FOR UPDATE",
+            Long.class, branchId, productId).isEmpty()) return;
         List<Map<String, Object>> rows = jdbc.queryForList("""
             SELECT bp.id,bp.minimum_qty,(bp.enabled AND p.active AND b.active) AS operable,
                 coalesce(ib.physical_qty,0) AS quantity
             FROM catalog_branch_product bp JOIN catalog_product p ON p.id=bp.product_id
             JOIN identity_branch b ON b.id=bp.branch_id
             LEFT JOIN inventory_balance ib ON ib.branch_id=bp.branch_id AND ib.product_id=bp.product_id
-            WHERE bp.branch_id=? AND bp.product_id=? FOR UPDATE OF bp""", branchId, productId);
-        if (rows.isEmpty()) return;
+            WHERE bp.branch_id=? AND bp.product_id=?""", branchId, productId);
         Map<String, Object> row = rows.getFirst();
         long combination = ((Number) row.get("id")).longValue();
         BigDecimal minimum = (BigDecimal) row.get("minimum_qty");
@@ -116,11 +122,11 @@ public class ReorderAlertService {
      * evaluated (for instance the demonstration seed). Idempotent: an already consistent database is left unchanged.
      */
     @EventListener(ApplicationReadyEvent.class)
-    @Transactional
     public void reconcile() {
+        // One short transaction per combination: live requests never queue behind the whole catalog.
         jdbc.query("SELECT branch_id,product_id FROM catalog_branch_product ORDER BY branch_id,product_id",
                 (row, index) -> new long[] {row.getLong(1), row.getLong(2)})
-            .forEach(combination -> evaluate(combination[0], combination[1]));
+            .forEach(combination -> transactions.executeWithoutResult(status -> evaluate(combination[0], combination[1])));
     }
 
     /**
