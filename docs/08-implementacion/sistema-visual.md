@@ -51,6 +51,8 @@ La autorización del responsable permite instalar y adaptar componentes oficiale
 | Error o desconexión | `role="alert"`, texto explicativo y acento rojo. No confirmar éxito ni sincronización offline. |
 | Advertencia | `.notice-warning`, texto explícito y acento ámbar, como una sucursal inactiva. |
 | Existencias con actualización automática | Encabezado con sucursal identificada, `StatusBadge` de estado y «Actualizar ahora» (`RefreshCw`); estado con hora de la última lectura del servidor y `aria-live="off"` para no anunciar cada polling; ante desconexión, `.notice-warning` conserva la tabla previa. Físico, disponible y tránsito en columnas separadas con unidad base. |
+| Elección de tipo con efecto | `.choice-list` y `.choice`: radios nativos dentro de una etiqueta con nombre y descripción breve; la opción elegida se marca con borde azul oscuro además del radio, sin depender del color. `.choice-inline` para dos opciones cortas como «Incrementa»/«Disminuye». |
+| Historial auditable | Tabla `movement-history` en `.table-scroll`, con ancho mínimo para no partir palabras y desplazamiento horizontal propio; cantidad con signo (+/−) y unidad, equivalente en unidad base y responsable como `.cell-note`. Costos solo para perfiles autorizados. Icono de navegación `ArrowLeftRight`. |
 | Vacío y datos desactualizados | Conservar mensajes de ausencia de registros y fecha de consulta; no inventar datos ni estados de éxito. |
 
 Los controles tienen un mínimo de 44 px de alto con el tamaño de fuente predeterminado. El foco es visible; los estados no dependen exclusivamente del color. No se añaden animaciones automáticas y se respeta la preferencia de movimiento reducido. La región de tabla admite desplazamiento horizontal sin extender el documento.
