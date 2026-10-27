@@ -90,19 +90,25 @@ public class ReorderAlertService {
     /** Closes the active episodes of a product being deactivated; its rows stay as history. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void closeProduct(long productId) {
-        close("SELECT id FROM catalog_branch_product WHERE product_id=?", productId);
+        close("product_id=? ORDER BY branch_id", productId);
     }
 
     /** Closes the active episodes of a branch being deactivated; its rows stay as history. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void closeBranch(long branchId) {
-        close("SELECT id FROM catalog_branch_product WHERE branch_id=?", branchId);
+        close("branch_id=? ORDER BY product_id", branchId);
     }
 
+    /**
+     * Locks the combinations before their episodes, the same order {@link #evaluate} follows inside a stock operation
+     * (combination, then episode; products ascending within a branch), so a concurrent operation cannot deadlock.
+     */
     private void close(String combinations, long id) {
+        jdbc.queryForList("SELECT id FROM catalog_branch_product WHERE " + combinations + " FOR UPDATE", Long.class, id);
         Timestamp now = Timestamp.from(clock.instant());
         jdbc.update("UPDATE inventory_reorder_alert SET resolved_at=GREATEST(?,opened_at),updated_at=? WHERE resolved_at IS NULL "
-            + "AND branch_product_id IN (" + combinations + ")", now, now, id);
+            + "AND branch_product_id IN (SELECT id FROM catalog_branch_product WHERE " + combinations.substring(0,
+                combinations.indexOf(" ORDER BY")) + ")", now, now, id);
     }
 
     /**
