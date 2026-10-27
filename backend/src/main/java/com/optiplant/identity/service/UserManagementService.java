@@ -69,9 +69,13 @@ public class UserManagementService {
 
     private Values createValues(ManagedUserCreateRequest request) {
         if (request.getTemporaryPassword() == null || request.getTemporaryPassword().length() < 15
-            || request.getTemporaryPassword().length() > 128) throw invalid();
+            || request.getTemporaryPassword().length() > 128) {
+            throw invalid("La contraseña temporal debe tener entre 15 y 128 caracteres.");
+        }
         Values values = values(request.getCode(), request.getFullName(), request.getRole(), request.getBranchExternalId());
-        if (request.getTemporaryPassword().equals(values.code())) throw invalid();
+        if (request.getTemporaryPassword().equals(values.code())) {
+            throw invalid("La contraseña temporal debe ser distinta del código de usuario.");
+        }
         return values;
     }
 
@@ -123,7 +127,11 @@ public class UserManagementService {
     }
 
     private static ApiException invalid() {
-        return new ApiException(400, "VALIDATION_FAILED", "La solicitud no es válida.");
+        return invalid("La solicitud no es válida.");
+    }
+
+    private static ApiException invalid(String detail) {
+        return new ApiException(400, "VALIDATION_FAILED", detail);
     }
 
     private static ApiException notFound() {

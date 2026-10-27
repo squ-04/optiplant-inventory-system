@@ -151,6 +151,9 @@ class ProductConfigurationHttpTest {
             Map.of("name", "numero", "factor", 2, "divisible", false))) {
             assertProblem(unit(admin, product, invalid), 400, "VALIDATION_FAILED");
         }
+        var zeroFactor = unit(admin, product, Map.of("name", "cero", "factor", "0", "divisible", false));
+        assertThat(json.readTree(zeroFactor.body()).path("detail").asText())
+            .isEqualTo("El factor debe ser positivo y tener como máximo 3 decimales en la unidad base.");
         assertProblem(unitUpdate(admin, product, Map.of("name", "unidad", "factor", "2", "active", true)), 409, "PRODUCT_BASE_UNIT_FIXED");
         assertProblem(unitUpdate(admin, product, Map.of("name", "pallet", "factor", "2", "active", true)), 404, "PRODUCT_UNIT_NOT_FOUND");
         for (String code : new String[] {"unit-manager", "unit-operator"}) {

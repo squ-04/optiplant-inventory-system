@@ -1,5 +1,6 @@
 package com.optiplant.catalog.dto;
 
+import com.optiplant.common.exception.ApiException;
 import com.optiplant.identity.dto.BranchCreateRequest;
 import java.math.BigDecimal;
 import java.util.Set;
@@ -35,7 +36,11 @@ public record ProductUnitRequest(String name, BigDecimal factor, boolean divisib
 
     private static BigDecimal factor(JsonNode body) {
         BigDecimal factor = ProductEnablementRequest.quantity(body.path("factor"));
-        if (factor.signum() <= 0) throw ProductUpdateRequest.invalid();
+        if (factor.signum() <= 0) {
+            // Same wording as UnitConversion.requireValidFactor, which validates the factor against the product.
+            throw new ApiException(400, "VALIDATION_FAILED",
+                "El factor debe ser positivo y tener como máximo 3 decimales en la unidad base.");
+        }
         return factor;
     }
 }
