@@ -29,6 +29,7 @@ Todos los cambios usan cookie de sesión y CSRF; la autorización se comprueba e
 | `/visibility/branches` | GET: directorio de sucursales para consultas autorizadas |
 | `/visibility/branches/{uuid}` | GET: historial/saldos; administrador en red, perfiles locales solo su sucursal |
 | `/visibility/inventory/{uuid}` | GET: existencias consultables entre sucursales, sin costos/valoración ni permiso de escritura |
+| `/visibility/branches/{uuid}/inventory` | GET: existencias identificadas por sucursal con físico, disponible y tránsito separados; ver [inventario entre sucursales](inventario-entre-sucursales.md) |
 
 Errores: `400` solicitud inválida; `401` sin sesión/vencida/revocada; `403` sin permiso o CSRF inválido; `404` recurso inexistente autorizado; `409` duplicación/impedimentos. Las respuestas usan ProblemDetail. Las bajas no admiten DELETE ni reactivación implícita. Los campos desconocidos o identidades enviadas como editables se rechazan.
 
@@ -38,7 +39,7 @@ Errores: `400` solicitud inválida; `401` sin sesión/vencida/revocada; `403` si
 - RF-0004: consultas de datos operativos persistidos en todas las sucursales. Esta vista no reemplaza los detalles, indicadores, dashboards ni reportes de los RF que los definen.
 - RF-0005 y RF-0007: separación de consultas locales/globales y mantenimiento administrativo protegidos; consultar existencias ajenas no concede acceso al historial ajeno. La sucursal inactiva conserva consultas autorizadas.
 - Los comandos de ingresos/retiros, compras, ventas, ajustes, etapas de transferencias y exportación todavía no existen. Por ello los criterios de RF-0005/RF-0007 que exigen ejecutar esos comandos y verificar sus efectos no pueden declararse cumplidos por esta entrega. Se aplicarán y probarán con sus módulos dependientes; aquí no se sustituyen por endpoints ficticios ni se amplía el alcance para implementarlos.
-- La vista de consultas no usa polling ni promete cumplir las metas de frescura de RF-0015; requiere actualización explícita.
+- Desde RF-0014/RF-0015 la tabla de existencias de **Consultas** se actualiza por polling cada dos segundos y advierte datos potencialmente desactualizados; el historial operativo sigue requiriendo consulta explícita. Ver [inventario entre sucursales](inventario-entre-sucursales.md).
 
 ## Verificaciones
 
