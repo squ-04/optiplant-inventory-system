@@ -77,6 +77,36 @@ export interface Visibility {
   transfers: OperationalDocument[]; movements: Movement[];
 }
 
+export type MovementKind = 'MANUAL_ENTRY' | 'SALE_RETURN' | 'MANUAL_EXIT' | 'COUNT_ADJUSTMENT' | 'ENTRY_CORRECTION';
+export type MovementDirection = 'IN' | 'OUT';
+/**
+ * RF-0016/RF-0017: a manual movement of the session's own branch. Quantities and costs are exact decimal strings.
+ * A referenced return or a correction sends `reference` and omits product and unit.
+ */
+export interface ManualMovementInput {
+  kind: MovementKind; direction?: MovementDirection; product?: string; unit?: string; quantity: string;
+  unitCost?: string; reference?: string; reason: string;
+}
+export interface ManualMovement {
+  operationExternalId: string; movementExternalId: string; occurredAt: string; kind: string; direction: MovementDirection;
+  productExternalId: string; sku: string; productName: string; unit: string; commercialQuantity: string;
+  baseQuantity: string; baseUnitName: string; reason: string; responsibleCode: string; referenceExternalId: string | null;
+  resultingPhysicalQuantity: string;
+}
+/** Signed value effects at display precision; returned to managers and administrators only (RF-0026). */
+export interface MovementValuation {
+  unitCost: string; baseAmount: string; differenceKind: string | null; differenceAmount: string | null;
+  exactDifferenceAmount: string | null; totalAmount: string;
+}
+export interface MovementHistoryEntry {
+  externalId: string; operationExternalId: string; occurredAt: string; kind: string; direction: MovementDirection;
+  productExternalId: string; sku: string; productName: string; unit: string; commercialQuantity: string;
+  baseQuantity: string; baseUnitName: string; reason: string; responsible: { code: string; fullName: string };
+  referenceExternalId: string | null; pendingQuantity: string | null; valuation: MovementValuation | null;
+}
+/** RF-0018: auditable movements of one branch, newest first. */
+export interface MovementHistory { branch: Branch; readAt: string; items: MovementHistoryEntry[] }
+
 export interface BootstrapDto {
   externalId: string;
   occurredAt: string;
@@ -183,6 +213,36 @@ function documentDto(value: unknown): OperationalDocument {
       !text(value.occurredAt) || !Number.isFinite(Date.parse(value.occurredAt))) throw invalid();
   return value as unknown as OperationalDocument;
 }
+const signed = (value: unknown) => typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value);
+const direction = (value: unknown) => value === 'IN' || value === 'OUT';
+const instant = (value: unknown) => text(value) && Number.isFinite(Date.parse(value));
+function manualMovementDto(value: unknown): ManualMovement {
+  if (!record(value) || !uuid(value.operationExternalId) || !uuid(value.movementExternalId) || !instant(value.occurredAt) ||
+      !direction(value.direction) || !uuid(value.productExternalId) ||
+      !['kind', 'sku', 'productName', 'unit', 'baseUnitName', 'reason', 'responsibleCode'].every(k => text(value[k])) ||
+      !['commercialQuantity', 'baseQuantity', 'resultingPhysicalQuantity'].every(k => decimal(value[k])) ||
+      !(value.referenceExternalId === null || uuid(value.referenceExternalId))) throw invalid();
+  return value as unknown as ManualMovement;
+}
+function valuationDto(value: unknown): MovementValuation | null {
+  if (value === null) return null;
+  if (!record(value) || !decimal(value.unitCost) || !signed(value.baseAmount) || !signed(value.totalAmount) ||
+      !(value.differenceKind === null || text(value.differenceKind)) ||
+      !(value.differenceAmount === null || signed(value.differenceAmount)) ||
+      !(value.exactDifferenceAmount === null || signed(value.exactDifferenceAmount))) throw invalid();
+  return value as unknown as MovementValuation;
+}
+function historyEntryDto(value: unknown): MovementHistoryEntry {
+  if (!record(value) || !uuid(value.externalId) || !uuid(value.operationExternalId) || !instant(value.occurredAt) ||
+      !direction(value.direction) || !uuid(value.productExternalId) ||
+      !['kind', 'sku', 'productName', 'unit', 'baseUnitName', 'reason'].every(k => text(value[k])) ||
+      !['commercialQuantity', 'baseQuantity'].every(k => decimal(value[k])) ||
+      !record(value.responsible) || !text(value.responsible.code) || !text(value.responsible.fullName) ||
+      !(value.referenceExternalId === null || uuid(value.referenceExternalId)) ||
+      !(value.pendingQuantity === null || decimal(value.pendingQuantity))) throw invalid();
+  return { ...(value as unknown as MovementHistoryEntry), valuation: valuationDto(value.valuation) };
+}
+
 function movementDto(value: unknown): Movement {
   if (!record(value) || !uuid(value.externalId) || !text(value.occurredAt) ||
       !Number.isFinite(Date.parse(value.occurredAt)) ||
@@ -203,9 +263,10 @@ export class ApiClient {
     this.onSessionExpired = onSessionExpired;
   }
 
-  private async request(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<unknown> {
+  private async request(path: string, method = 'GET', body?: unknown, signal?: AbortSignal,
+                        extra: Record<string, string> = {}): Promise<unknown> {
     if (method !== 'GET' && !this.csrf) await this.refreshCsrf();
-    const headers = new Headers({ Accept: 'application/json' });
+    const headers = new Headers({ ...extra, Accept: 'application/json' });
     if (body !== undefined) headers.set('Content-Type', 'application/json');
     if (method !== 'GET' && this.csrf) headers.set(this.csrf.headerName, this.csrf.token);
     const transport = this.transport;
@@ -364,5 +425,23 @@ export class ApiClient {
     return { branch: branchDto(value.branch), inventory: listDto(value.inventory, inventoryDto),
       purchases: listDto(value.purchases, documentDto), sales: listDto(value.sales, documentDto),
       transfers: listDto(value.transfers, documentDto), movements: listDto(value.movements, movementDto) };
+  }
+  /**
+   * RF-0016/RF-0017: registers a manual movement in the session's own branch. Reuse the same key to retry a request
+   * whose outcome is unknown (connection loss): the server returns the original result without new effects.
+   */
+  async registerMovement(input: ManualMovementInput, idempotencyKey: string): Promise<ManualMovement> {
+    return manualMovementDto(await this.request('/inventory/movements', 'POST', input, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0018: movement history of a branch, newest first. */
+  async movementHistory(branch: string, options: { product?: string; limit?: number } = {}): Promise<MovementHistory> {
+    const query = new URLSearchParams();
+    if (options.product) query.set('product', options.product);
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    const suffix = query.size > 0 ? `?${query}` : '';
+    const value = await this.request(`/inventory/branches/${encodeURIComponent(branch)}/movements${suffix}`);
+    if (!record(value) || !instant(value.readAt)) throw invalid();
+    return { branch: branchDto(value.branch), readAt: value.readAt as string, items: listDto(value.items, historyEntryDto) };
   }
 }

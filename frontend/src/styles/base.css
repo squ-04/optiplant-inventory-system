@@ -171,6 +171,22 @@ textarea { font: inherit; font-weight: 400; max-width: 36rem; margin-top: var(--
 .record-code { display: inline-block; padding: .25rem .5rem; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-background); font-weight: 600; }
 [data-slot="table-container"] { border-radius: inherit; }
 pre { padding: var(--space-4); background: var(--color-background); overflow: auto; }
+.choice-list { margin-top: var(--space-4); }
+.choice-list legend { font-weight: 600; margin-bottom: var(--space-2); }
+.choice { display: flex; align-items: flex-start; gap: var(--space-3); max-width: 36rem; margin: 0 0 var(--space-2); padding: var(--space-3) var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-control); font-weight: 400; cursor: pointer; }
+.choice:has(input:checked) { border-color: var(--color-text); box-shadow: inset .25rem 0 0 var(--color-text); }
+.choice input[type="radio"] { width: 1.25rem; min-height: 1.25rem; height: 1.25rem; margin: .125rem 0 0; padding: 0; flex: none; accent-color: var(--color-text); }
+.choice strong { display: block; }
+.choice span span { display: block; color: var(--color-muted); font-size: .875rem; }
+.choice-inline { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.choice-inline legend { width: 100%; }
+.choice-inline .choice { margin: 0; }
+.cell-note { display: block; color: var(--color-muted); font-size: .8125rem; }
+.cell-text { min-width: 12rem; }
+/* Audit columns keep whole words; the table scrolls inside its region instead of breaking them. */
+table.movement-history { min-width: 72rem; }
+.movement-history td, .movement-history th { overflow-wrap: normal; }
+.movement-history td:nth-child(-n+3) { min-width: 9rem; }
 @media (min-width: 64rem) {
   .app-layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); }
   .app-sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; border-bottom: 0; border-right: 1px solid var(--color-border); overflow-y: auto; padding: var(--space-6) var(--space-4); }

@@ -4,12 +4,13 @@ import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { User } from '../lib/api/client.ts';
 import { Administration } from './Administration.tsx';
 import { Catalog } from './Catalog.tsx';
+import { Movements } from './Movements.tsx';
 import { Visibility } from './Visibility.tsx';
 import { AppShell } from '../components/shared/AppShell.tsx';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { PasswordField } from '../components/shared/PasswordField.tsx';
-import { Building2, KeyRound, LogIn, LogOut, Package, Search, UserRound } from 'lucide-react';
+import { ArrowLeftRight, Building2, KeyRound, LogIn, LogOut, Package, Search, UserRound } from 'lucide-react';
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -80,6 +81,7 @@ export function App() {
       // Consultas stays first for local profiles: the first entry is the landing view.
       { id: 'visibility-title', label: 'Consultas', icon: Search },
       { id: 'catalog-title', label: 'Catálogo', icon: Package },
+      { id: 'movements-title', label: 'Movimientos', icon: ArrowLeftRight },
     ] : []),
     { id: 'account-title', label: 'Mi sesión', icon: UserRound },
     { id: 'password-title', label: 'Contraseña', icon: KeyRound },
@@ -117,6 +119,7 @@ export function App() {
       {!user.mustChangePassword && <>
       {user.role === 'ADMIN' && <div hidden={current !== 'administration-title'}><Administration client={client} onError={showError} onChanged={() => setRevision(value => value + 1)} /></div>}
       <div hidden={current !== 'catalog-title'}><Catalog client={client} user={user} onError={showError} revision={revision} /></div>
+      <div hidden={current !== 'movements-title'}><Movements client={client} user={user} onError={showError} revision={revision} visible={current === 'movements-title'} /></div>
       <div hidden={current !== 'visibility-title'}><Visibility client={client} user={user} onError={showError} revision={revision} visible={current === 'visibility-title'} /></div>
       </>}
     </>}

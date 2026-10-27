@@ -127,7 +127,7 @@ export function Visibility({ client, user, onError, revision, visible }: {
       {snapshot.movements.length === 0 ? <p>Sin movimientos registrados.</p> : <ul>{snapshot.movements.map(item =>
         <li key={item.externalId}>{item.occurredAt} · {item.kind} · {item.direction} · {item.sku} · {item.quantity} {item.unit} · Responsable: {item.actorCode} · Ref.: {item.externalId}</li>)}</ul>}
     </>}
-    <p>Los comandos de inventario, compras, ventas y transferencias se incorporan en sus entregas funcionales; no se simulan desde esta pantalla.</p>
+    <p>Los ingresos y retiros se registran en «Movimientos». Compras, ventas y transferencias se incorporan en sus entregas funcionales; no se simulan desde esta pantalla.</p>
   </section>;
 }
 
