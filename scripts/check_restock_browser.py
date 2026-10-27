@@ -157,8 +157,21 @@ STAGES = {
       const shown = await cells();
       check(shown[0] === '8,000 unidad' && shown[1] === '8,000 unidad', 'Existencias locales desactualizadas: ' + shown.join(' | '));
       check(await page.evaluate(() => window.__sameDocument === true), 'La vista se recargó');
+      // A failed reload is reported inside the catalog; the shell alert is reserved for session problems.
+      const catalogAlert = page.locator('section[aria-labelledby="catalog-title"] > [role="alert"]');
+      await page.route('**/api/v1/products/local', route => route.fulfill({ status: 503, contentType: 'application/problem+json',
+        body: JSON.stringify({ status: 503, code: 'SERVICE_UNAVAILABLE', detail: 'Servicio no disponible.' }) }));
+      await page.getByRole('link', { name: 'Movimientos', exact: true }).click();
+      await page.getByRole('link', { name: 'Catálogo', exact: true }).click();
+      await catalogAlert.filter({ hasText: 'Servicio no disponible.' }).waitFor({ timeout: 5000 });
+      check(await page.locator('#feedback').count() === 0, 'El fallo de carga del catálogo llegó al aviso general');
+      await page.unroute('**/api/v1/products/local');
+      await page.getByRole('link', { name: 'Movimientos', exact: true }).click();
+      await page.getByRole('link', { name: 'Catálogo', exact: true }).click();
+      await catalogAlert.waitFor({ state: 'detached', timeout: 5000 });
       await logout();
-      return 'tras registrar +2 en Movimientos, «Mi sucursal» muestra 8,000 unidad sin recargar el navegador';""",
+      return 'tras registrar +2 en Movimientos, «Mi sucursal» muestra 8,000 unidad sin recargar el navegador; '
+        + 'un fallo de recarga se informa en el catálogo, no en el aviso general, y se retira al recargar';""",
 }
 
 

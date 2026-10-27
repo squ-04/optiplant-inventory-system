@@ -56,10 +56,15 @@ export function Catalog({ client, user, onError, revision, visible }: Props) {
     // The view stays mounted while hidden; reading on each display keeps local stock current after movements elsewhere.
     if (!visible) return;
     let active = true;
-    setBusy(true);
+    setBusy(true); setError('');
     fetchAll().then(([p, b, l]) => {
       if (active) { setProducts(p); setBranches(b); setLocal(l); setLoaded(true); }
-    }).catch(reason => { if (active) onError(reason); })
+    }).catch(reason => {
+      // Like the actions below, a failed read stays in this view; only session problems reach the shell.
+      if (!active) return;
+      setError(failure(reason));
+      if (sessionProblem(reason)) onError(reason);
+    })
       .finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [client, admin, revision, visible]); // Administration changes (new or inactive branches) refresh the choices.
