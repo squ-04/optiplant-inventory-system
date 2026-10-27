@@ -1,6 +1,7 @@
 package com.optiplant.inventory.service;
 
 import com.optiplant.common.exception.ApiException;
+import com.optiplant.common.text.SpanishDecimal;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
@@ -163,8 +164,8 @@ public class InventoryLedger {
             return new Valued(line, cost, amount, null, BigDecimal.ZERO, new Balance(resultingQuantity, resultingValue, average));
         }
         if (quantity.compareTo(balance.quantity()) > 0) {
-            throw new ApiException(409, "INSUFFICIENT_STOCK", "La salida de " + quantity.toPlainString()
-                + " excede las existencias físicas disponibles (" + balance.quantity().toPlainString()
+            throw new ApiException(409, "INSUFFICIENT_STOCK", "La salida de " + SpanishDecimal.format(quantity)
+                + " excede las existencias físicas disponibles (" + SpanishDecimal.format(balance.quantity())
                 + "). No se registró ningún movimiento.");
         }
         boolean historical = line.cost() instanceof Cost.Historical;

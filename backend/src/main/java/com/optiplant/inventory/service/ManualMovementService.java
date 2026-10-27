@@ -3,6 +3,7 @@ package com.optiplant.inventory.service;
 import com.optiplant.catalog.service.UnitConversion;
 import com.optiplant.common.exception.ApiException;
 import com.optiplant.common.idempotency.IdempotencyService;
+import com.optiplant.common.text.SpanishDecimal;
 import com.optiplant.identity.service.SessionPrincipal;
 import com.optiplant.inventory.dto.ManualMovementRequest;
 import com.optiplant.inventory.dto.ManualMovementResponse;
@@ -164,7 +165,7 @@ public class ManualMovementService {
     private static void requireWithin(BigDecimal base, BigDecimal pending, String detail) {
         if (base.compareTo(pending) > 0) {
             throw new ApiException(409, "COMPENSATION_EXCEEDS_PENDING", detail + " (pendiente: "
-                + pending.setScale(3).toPlainString() + " en unidad base). No se registró ningún movimiento.");
+                + SpanishDecimal.format(pending.setScale(3)) + " en unidad base). No se registró ningún movimiento.");
         }
     }
 }
