@@ -28,7 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
  * RF-0026 / INC-013: moving weighted average per product and branch, average at 6 decimals rounded half up, exits at the
  * current average, the remaining value absorbed by the exit that depletes the stock, and linked compensations at the
  * historical cost of the movement they correct (H v0.13), never below zero value (project decision L12 in
- * odd/tasks/rf-0016-0018.md).
+ * odd/tasks/rf-0016-0018.md). The restock alerts of the affected combinations are re-evaluated in the same transaction
+ * (RF-0020).
  *
  * <p>A document that must store the applied cost on its own line before posting (a sale line) calls {@link #lock}
  * first: the returned average cannot change until the transaction ends.
@@ -69,10 +70,12 @@ public class InventoryLedger {
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final ReorderAlertService alerts;
 
-    public InventoryLedger(JdbcTemplate jdbc, Clock clock) {
+    public InventoryLedger(JdbcTemplate jdbc, Clock clock, ReorderAlertService alerts) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.alerts = alerts;
     }
 
     /** Locks (creating it at zero when absent) and returns the balance of one product in one branch. */
@@ -137,6 +140,8 @@ public class InventoryLedger {
         balances.forEach((product, balance) -> jdbc.update("UPDATE inventory_balance SET physical_qty=?,inventory_value=?,"
                 + "average_base_cost=?,updated_at=? WHERE branch_id=? AND product_id=?",
             balance.quantity(), balance.value(), balance.average(), updated, operation.branchId(), product));
+        // RF-0019/RF-0020: every stock change re-evaluates the restock alert of its product-branch combination.
+        balances.keySet().forEach(product -> alerts.evaluate(operation.branchId(), product));
         return new Posted(operationExternalId, operationId, now, posted);
     }
 

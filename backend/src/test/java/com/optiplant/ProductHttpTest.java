@@ -301,8 +301,9 @@ class ProductHttpTest {
 
         long branchProduct = jdbc.queryForObject("SELECT bp.id FROM catalog_branch_product bp JOIN identity_branch b ON b.id=bp.branch_id "
             + "WHERE b.external_id=? AND bp.product_id=?", Long.class, branch, productId);
-        jdbc.update("INSERT INTO inventory_reorder_alert(external_id,branch_product_id,opened_at,minimum_snapshot,quantity_snapshot) "
-            + "VALUES (?,?,CURRENT_TIMESTAMP - INTERVAL '1 hour',4,0)", UUID.randomUUID(), branchProduct);
+        // The enablement at zero stock already opened its restock alert (RF-0020); deactivation must close it.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM inventory_reorder_alert WHERE branch_product_id=? AND resolved_at IS NULL",
+            Long.class, branchProduct)).isEqualTo(1);
 
         admin.csrf();
         HttpResponse<String> deactivated = admin.post("/api/v1/products/" + product + "/deactivate", Map.of());

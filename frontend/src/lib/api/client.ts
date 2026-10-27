@@ -56,7 +56,9 @@ export interface UnitConversion { unitName: string; quantity: string; factor: st
 export interface LocalCatalogItem {
   productExternalId: string; sku: string; name: string; description: string | null; baseUnitName: string;
   baseDivisible: boolean; minimumQuantity: string; physicalQuantity: string; availableQuantity: string;
-  inTransitQuantity: string; units: ProductUnit[];
+  inTransitQuantity: string;
+  /** RF-0020 operational indicator: an active restock alert exists for this product in the branch. */
+  restockAlert: boolean; units: ProductUnit[];
 }
 export interface LocalCatalog {
   branchExternalId: string; branchCode: string; branchName: string; branchActive: boolean; items: LocalCatalogItem[];
@@ -76,6 +78,20 @@ export interface Visibility {
   branch: Branch; inventory: InventoryItem[]; purchases: OperationalDocument[]; sales: OperationalDocument[];
   transfers: OperationalDocument[]; movements: Movement[];
 }
+
+export type ReorderAlertStatus = 'ACTIVE' | 'RESOLVED';
+/**
+ * RF-0020: one restock alert episode of a product in a branch. The minimum and stock captured when it opened are kept
+ * next to the current values; `currentMinimum` is null once the product is no longer enabled there.
+ */
+export interface ReorderAlert {
+  externalId: string; status: ReorderAlertStatus; branch: Branch;
+  product: { externalId: string; sku: string; name: string; baseUnitName: string };
+  openedAt: string; resolvedAt: string | null; minimumAtOpening: string; quantityAtOpening: string;
+  currentMinimum: string | null; currentQuantity: string;
+}
+/** `branch` is null when the administrator reads the whole network; `activeCount` ignores the row limit. */
+export interface ReorderAlerts { readAt: string; branch: Branch | null; activeCount: number; items: ReorderAlert[] }
 
 export type MovementKind = 'MANUAL_ENTRY' | 'SALE_RETURN' | 'MANUAL_EXIT' | 'COUNT_ADJUSTMENT' | 'ENTRY_CORRECTION';
 export type MovementDirection = 'IN' | 'OUT';
@@ -194,7 +210,8 @@ function localItemDto(value: unknown): LocalCatalogItem {
   if (!record(value) || !uuid(value.productExternalId) || !text(value.sku) || !text(value.name) ||
       !(value.description === null || typeof value.description === 'string') || !text(value.baseUnitName) ||
       typeof value.baseDivisible !== 'boolean' ||
-      !['minimumQuantity', 'physicalQuantity', 'availableQuantity', 'inTransitQuantity'].every(k => decimal(value[k]))) throw invalid();
+      !['minimumQuantity', 'physicalQuantity', 'availableQuantity', 'inTransitQuantity'].every(k => decimal(value[k])) ||
+      typeof value.restockAlert !== 'boolean') throw invalid();
   listDto(value.units, productUnitDto);
   return value as unknown as LocalCatalogItem;
 }
@@ -243,6 +260,16 @@ function historyEntryDto(value: unknown): MovementHistoryEntry {
   return { ...(value as unknown as MovementHistoryEntry), valuation: valuationDto(value.valuation) };
 }
 
+function reorderAlertDto(value: unknown): ReorderAlert {
+  if (!record(value) || !uuid(value.externalId) || !['ACTIVE', 'RESOLVED'].includes(String(value.status)) ||
+      !record(value.product) || !uuid(value.product.externalId) || !text(value.product.sku) || !text(value.product.name) ||
+      !text(value.product.baseUnitName) || !instant(value.openedAt) ||
+      (value.status === 'ACTIVE' ? value.resolvedAt !== null : !instant(value.resolvedAt)) ||
+      !['minimumAtOpening', 'quantityAtOpening', 'currentQuantity'].every(k => decimal(value[k])) ||
+      !(value.currentMinimum === null || decimal(value.currentMinimum))) throw invalid();
+  branchDto(value.branch);
+  return value as unknown as ReorderAlert;
+}
 function movementDto(value: unknown): Movement {
   if (!record(value) || !uuid(value.externalId) || !text(value.occurredAt) ||
       !Number.isFinite(Date.parse(value.occurredAt)) ||
@@ -443,5 +470,21 @@ export class ApiClient {
     const value = await this.request(`/inventory/branches/${encodeURIComponent(branch)}/movements${suffix}`);
     if (!record(value) || !instant(value.readAt)) throw invalid();
     return { branch: branchDto(value.branch), readAt: value.readAt as string, items: listDto(value.items, historyEntryDto) };
+  }
+  /**
+   * RF-0020: active restock alerts (default) or their whole history. Managers read their own branch; administrators a
+   * branch or, without one, the whole network. Operators are rejected and use the local catalog indicator instead.
+   */
+  async reorderAlerts(options: { branch?: string; history?: boolean; limit?: number } = {}, signal?: AbortSignal): Promise<ReorderAlerts> {
+    const query = new URLSearchParams();
+    if (options.branch) query.set('branch', options.branch);
+    if (options.history) query.set('status', 'ALL');
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    const suffix = query.size > 0 ? `?${query}` : '';
+    const value = await this.request(`/inventory/reorder-alerts${suffix}`, 'GET', undefined, signal);
+    if (!record(value) || !instant(value.readAt) || typeof value.activeCount !== 'number' ||
+        !Number.isInteger(value.activeCount) || value.activeCount < 0) throw invalid();
+    return { readAt: value.readAt as string, branch: value.branch === null ? null : branchDto(value.branch),
+      activeCount: value.activeCount, items: listDto(value.items, reorderAlertDto) };
   }
 }

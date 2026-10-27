@@ -13,7 +13,8 @@ RUN set -eu; \
     curl --fail --location --retry 3 "$base/OpenJDK25U-jre_${arch}_linux_hotspot_25.0.5_8.tar.gz" -o /opt/downloads/jre.tar.gz; \
     echo "$jre_sha  /opt/downloads/jre.tar.gz" | sha256sum --check --strict; \
     tar -xzf /opt/downloads/jdk.tar.gz -C /opt/temurin-jdk --strip-components=1; \
-    tar -xzf /opt/downloads/jre.tar.gz -C /opt/temurin-jre --strip-components=1
+    tar -xzf /opt/downloads/jre.tar.gz -C /opt/temurin-jre --strip-components=1; \
+    rm -rf /opt/downloads
 ENV JAVA_HOME=/opt/temurin-jdk
 ENV PATH="/opt/temurin-jdk/bin:${PATH}"
 WORKDIR /workspace

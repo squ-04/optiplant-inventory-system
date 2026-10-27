@@ -6,6 +6,7 @@ import com.optiplant.identity.dto.BranchResponse;
 import com.optiplant.identity.dto.BranchUpdateRequest;
 import com.optiplant.identity.entity.Branch;
 import com.optiplant.identity.repository.BranchRepository;
+import com.optiplant.inventory.service.ReorderAlertService;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
@@ -19,11 +20,13 @@ public class BranchService {
     private final BranchRepository branches;
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final ReorderAlertService alerts;
 
-    public BranchService(BranchRepository branches, JdbcTemplate jdbc, Clock clock) {
+    public BranchService(BranchRepository branches, JdbcTemplate jdbc, Clock clock, ReorderAlertService alerts) {
         this.branches = branches;
         this.jdbc = jdbc;
         this.clock = clock;
+        this.alerts = alerts;
     }
 
     public List<BranchResponse> list() {
@@ -75,6 +78,8 @@ public class BranchService {
             + "WHERE ld.status='OPEN' AND (t.origin_branch_id=? OR t.destination_branch_id=?))", branch.getId(), branch.getId())) {
             throw blocked("La sucursal tiene faltantes de transferencia pendientes de tratamiento.");
         }
+        // An inactive branch is no longer operable: its restock episodes close and stay as history (RF-0020).
+        alerts.closeBranch(branch.getId());
         branch.deactivate(clock.instant());
         return response(branch);
     }
