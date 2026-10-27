@@ -2,6 +2,7 @@ package com.optiplant.dashboard.service;
 
 import com.optiplant.dashboard.dto.VisibilityResponse;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
+import com.optiplant.dashboard.dto.VisibilityResponse.BranchInventory;
 import com.optiplant.dashboard.dto.VisibilityResponse.InventoryItem;
 import com.optiplant.dashboard.repository.VisibilityRepository;
 import com.optiplant.identity.service.ScopePolicy;
@@ -30,5 +31,14 @@ public class VisibilityService {
         data.branch(branch);
         // Cross-branch stock consultation does not expose valuation or authorize commands.
         return data.inventory(branch);
+    }
+    /**
+     * RF-0014: any authenticated profile consults the stock of any branch, including inactive ones, without valuation
+     * and without gaining write scope over it. RF-0015: clients poll this read to observe confirmed changes.
+     */
+    public BranchInventory branchInventory(UUID branch) {
+        policy.requirePublicReference(branch);
+        Branch found = data.branch(branch);
+        return new BranchInventory(found, data.snapshotTime(), data.stock(branch));
     }
 }

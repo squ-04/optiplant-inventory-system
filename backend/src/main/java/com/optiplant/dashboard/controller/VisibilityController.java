@@ -2,6 +2,7 @@ package com.optiplant.dashboard.controller;
 
 import com.optiplant.dashboard.dto.VisibilityResponse;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
+import com.optiplant.dashboard.dto.VisibilityResponse.BranchInventory;
 import com.optiplant.dashboard.dto.VisibilityResponse.InventoryItem;
 import com.optiplant.dashboard.service.VisibilityService;
 import com.optiplant.identity.service.SessionPrincipal;
@@ -21,6 +22,9 @@ public class VisibilityController {
     @GetMapping("/branches") public List<Branch> branches() { return service.branches(); }
     @GetMapping("/branches/{id}") public VisibilityResponse history(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID id) {
         return service.history(principal, id);
+    }
+    @GetMapping("/branches/{id}/inventory") public BranchInventory branchInventory(@PathVariable UUID id) {
+        return service.branchInventory(id);
     }
     @GetMapping("/inventory/{id}") public List<InventoryItem> inventory(@PathVariable UUID id) { return service.inventory(id); }
 }
