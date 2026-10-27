@@ -37,10 +37,17 @@ async (page) => {
       body = [account];
     } else if (path === `/api/v1/users/${id}`) {
       body = account;
-    } else if (path.includes('/visibility/branches/')) {
+    } else if (path === `/api/v1/visibility/branches/${id}/inventory`) {
+      // RF-0014/RF-0015 live stock read, polled while the query view is open.
+      body = { branch, readAt: new Date().toISOString(), items: [{ productExternalId: id, sku: 'MAT-001',
+        name: 'Material para mantenimiento de planta', baseUnitName: 'unidad', physicalQuantity: '1250.000',
+        availableQuantity: '1250.000', inTransitQuantity: '0.000' }] };
+    } else if (path === `/api/v1/visibility/branches/${id}`) {
       body = { branch, inventory: [{ productExternalId: id, sku: 'MAT-001',
         name: 'Material para mantenimiento de planta', physicalQuantity: '1250.000' }],
         purchases: [], sales: [], transfers: [], movements: [] };
+    } else if (path.endsWith('/inventory/reorder-alerts')) {
+      body = { readAt: new Date().toISOString(), branch: null, activeCount: 0, items: [] };
     }
     await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body),
       headers: { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true' } });
@@ -131,12 +138,14 @@ async (page) => {
   await page.getByRole('link', { name: 'Consultas', exact: true }).click();
   await page.waitForFunction(() => document.activeElement?.id === 'visibility-title');
   await page.locator('#visibility-branch').selectOption(id);
-  await page.getByRole('button', { name: 'Consultar datos actuales' }).click();
-  await page.getByRole('cell', { name: '1.250,000' }).waitFor();
-  const table = page.getByRole('region', { name: 'Existencias por producto' });
+  await page.getByRole('button', { name: 'Consultar sucursal', exact: true }).click();
+  const table = page.getByRole('region', { name: 'Existencias de Sucursal Norte' });
+  // Physical and available stock show the same quantity; the first is the physical column.
+  const quantity = table.getByRole('cell', { name: '1.250,000 unidad', exact: true }).first();
+  await quantity.waitFor();
   await table.focus();
   assert(await table.evaluate(el => el === document.activeElement), 'Table region must be keyboard focusable');
-  assert(await page.getByRole('cell', { name: '1.250,000' }).evaluate(el =>
+  assert(await quantity.evaluate(el =>
     getComputedStyle(el).textAlign === 'right'), 'Quantities must align right with comma decimals and dot thousands');
   await noOverflow();
   for (const width of [768, 390, 320]) {
@@ -146,7 +155,7 @@ async (page) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await table.focus();
   await page.keyboard.press('ArrowRight');
-  await page.waitForFunction(() => document.querySelector('[aria-label="Existencias por producto"]').scrollLeft > 0);
+  await page.waitForFunction(() => document.querySelector('[aria-label="Existencias de Sucursal Norte"]').scrollLeft > 0);
   await page.getByRole('link', { name: 'Administración', exact: true }).click();
   await page.getByRole('tab', { name: 'Usuarios', exact: true }).click();
   await page.getByLabel('Nombre completo', { exact: true }).fill('Borrador sin enviar');
