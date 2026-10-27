@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { User } from '../lib/api/client.ts';
 import { Administration } from './Administration.tsx';
 import { Catalog } from './Catalog.tsx';
 import { Movements } from './Movements.tsx';
+import { ReorderAlerts, reorderAlertsQuery } from './ReorderAlerts.tsx';
 import { Visibility } from './Visibility.tsx';
 import { AppShell } from '../components/shared/AppShell.tsx';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { PasswordField } from '../components/shared/PasswordField.tsx';
-import { ArrowLeftRight, Building2, KeyRound, LogIn, LogOut, Package, Search, UserRound } from 'lucide-react';
+import { alertsNavigationLabel, restockNotice } from '../lib/inventory/alerts.ts';
+import { ArrowLeftRight, BellRing, Building2, KeyRound, LogIn, LogOut, Package, Search, TriangleAlert, UserRound } from 'lucide-react';
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -75,6 +78,12 @@ export function App() {
     });
   }
 
+  // RF-0020 (INC-010/D04): managers and administrators keep a persistent notice while alerts are active; operators see
+  // the indicator of their local catalog instead.
+  const alertsAllowed = user !== null && !user.mustChangePassword && user.role !== 'OPERATOR';
+  const alerts = useQuery(reorderAlertsQuery(client, '', false, alertsAllowed));
+  const activeAlerts = alertsAllowed ? alerts.data?.activeCount ?? 0 : 0;
+
   const navigation = [
     ...(!user?.mustChangePassword ? [
       ...(user?.role === 'ADMIN' ? [{ id: 'administration-title', label: 'Administración', icon: Building2 }] : []),
@@ -82,6 +91,8 @@ export function App() {
       { id: 'visibility-title', label: 'Consultas', icon: Search },
       { id: 'catalog-title', label: 'Catálogo', icon: Package },
       { id: 'movements-title', label: 'Movimientos', icon: ArrowLeftRight },
+      ...(alertsAllowed ? [{ id: 'alerts-title', label: 'Alertas', icon: BellRing, count: activeAlerts,
+        accessibleLabel: alertsNavigationLabel(activeAlerts) }] : []),
     ] : []),
     { id: 'account-title', label: 'Mi sesión', icon: UserRound },
     { id: 'password-title', label: 'Contraseña', icon: KeyRound },
@@ -92,6 +103,10 @@ export function App() {
   return <AppShell navigation={navigation} current={current} busy={busy} session={user}>
     <p role="status" aria-live="polite">{busy ? 'Procesando solicitud…' : message}</p>
     {error && <p role="alert" id="feedback">{error}</p>}
+    {alertsAllowed && current !== 'alerts-title' && restockNotice(activeAlerts, user?.role === 'ADMIN') &&
+      <p className="notice-warning restock-notice"><TriangleAlert aria-hidden="true" />
+        <span>{restockNotice(activeAlerts, user?.role === 'ADMIN')}</span>
+        <a href="#alerts-title">Ver alertas de reabastecimiento</a></p>}
     {!user ? <section className="login-panel" aria-labelledby="login-title"><h2 id="login-title" tabIndex={-1}>Iniciar sesión</h2>
       <form onSubmit={login} aria-describedby={error ? 'feedback' : undefined}>
         <fieldset disabled={busy}><legend>Credenciales individuales</legend>
@@ -120,6 +135,8 @@ export function App() {
       {user.role === 'ADMIN' && <div hidden={current !== 'administration-title'}><Administration client={client} onError={showError} onChanged={() => setRevision(value => value + 1)} /></div>}
       <div hidden={current !== 'catalog-title'}><Catalog client={client} user={user} onError={showError} revision={revision} /></div>
       <div hidden={current !== 'movements-title'}><Movements client={client} user={user} onError={showError} revision={revision} visible={current === 'movements-title'} /></div>
+      {alertsAllowed && <div hidden={current !== 'alerts-title'}><ReorderAlerts client={client} user={user} onError={showError}
+        revision={revision} visible={current === 'alerts-title'} /></div>}
       <div hidden={current !== 'visibility-title'}><Visibility client={client} user={user} onError={showError} revision={revision} visible={current === 'visibility-title'} /></div>
       </>}
     </>}

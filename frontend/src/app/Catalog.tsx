@@ -5,6 +5,7 @@ import type {
   Branch, LocalCatalog, Product, ProductAttributes, ProductEnablement, ProductUnit, ProductUnitChange, ProductUnitInput,
   UnitConversion, User,
 } from '../lib/api/client.ts';
+import { RestockBadge } from '../components/shared/RestockBadge.tsx';
 import { StatusBadge } from '../components/shared/StatusBadge';
 import { SectionTabs } from '../components/shared/SectionTabs.tsx';
 import { revealEditor } from '../components/shared/revealEditor.ts';
@@ -459,6 +460,7 @@ function LocalCatalogPanel({ client, catalog, loaded }: { client: ApiClient; cat
             <TableHead scope="col" className="text-right">Disponible</TableHead>
             <TableHead scope="col" className="text-right">En tránsito hacia la sucursal</TableHead>
             <TableHead scope="col" className="text-right">Stock mínimo</TableHead>
+            <TableHead scope="col">Reabastecimiento</TableHead>
             <TableHead scope="col">Unidades</TableHead>
           </TableRow></TableHeader>
           <TableBody>{catalog.items.map(entry => <TableRow key={entry.productExternalId}>
@@ -469,6 +471,7 @@ function LocalCatalogPanel({ client, catalog, loaded }: { client: ApiClient; cat
             <TableCell className="quantity">{entry.availableQuantity} {entry.baseUnitName}</TableCell>
             <TableCell className="quantity">{entry.inTransitQuantity} {entry.baseUnitName}</TableCell>
             <TableCell className="quantity">{entry.minimumQuantity} {entry.baseUnitName}</TableCell>
+            <TableCell><RestockBadge active={entry.restockAlert} /></TableCell>
             <TableCell><ul>{entry.units.map(unit => <li key={unit.name}>{equivalence(unit, entry.baseUnitName)
               .replace('Unidad base', `${unit.name} (unidad base)`)}</li>)}</ul></TableCell>
           </TableRow>)}</TableBody>

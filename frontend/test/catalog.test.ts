@@ -106,12 +106,13 @@ test('unit conversion is computed by the server and encodes its query', async ()
 test('local catalog keeps physical, available and transit as separate exact strings', async () => {
   const local = { branchExternalId: branchId, branchCode: 'NORTH', branchName: 'Norte', branchActive: true, items: [{
     productExternalId: id, sku: 'SKU-1', name: 'Helecho', description: null, baseUnitName: 'unidad', baseDivisible: false,
-    minimumQuantity: '0.000', physicalQuantity: '0.000', availableQuantity: '0.000', inTransitQuantity: '3.000', units }] };
+    minimumQuantity: '0.000', physicalQuantity: '0.000', availableQuantity: '0.000', inTransitQuantity: '3.000', restockAlert: true, units }] };
   const h = harness([local]);
   assert.deepEqual(await h.client.localCatalog(), local);
   assert.deepEqual(paths(h.calls), ['/products/local']);
   for (const bad of [{ ...local, branchExternalId: 'x' }, { ...local, items: [{ ...local.items[0], physicalQuantity: 0 }] },
-    { ...local, items: [{ ...local.items[0], units: [{ name: 'caja' }] }] }, { ...local, items: null }]) {
+    { ...local, items: [{ ...local.items[0], units: [{ name: 'caja' }] }] }, { ...local, items: null },
+    { ...local, items: [{ ...local.items[0], restockAlert: 'true' }] }]) {
     await assert.rejects(harness([bad]).client.localCatalog(), /inválida/);
   }
   const forbidden = harness([Response.json({ code: 'ROLE_FORBIDDEN', detail: 'El catálogo local corresponde a la sucursal asignada.' },
