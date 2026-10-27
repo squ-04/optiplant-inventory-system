@@ -5,7 +5,9 @@ import { ApiClient } from '../lib/api/client.ts';
 import { Button } from '../components/ui/button';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness } from '../lib/inventory/freshness.ts';
+import {
+  INVENTORY_NETWORK_MODE, INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness,
+} from '../lib/inventory/freshness.ts';
 import type { Branch, BranchInventory, OperationalDocument, User, Visibility as Snapshot } from '../lib/api/client.ts';
 import { kindLabel } from '../lib/inventory/movements.ts';
 import { clockTime as time, dateTime, decimal, directionLabel, documentStatusLabel } from '../lib/format.ts';
@@ -38,6 +40,7 @@ export function Visibility({ client, user, onError, revision, visible }: {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: query => query.state.error === null || connectionFailure(query.state.error) ? 'always' : false,
     refetchOnReconnect: 'always',
+    networkMode: INVENTORY_NETWORK_MODE,
     retry: false,
   });
   // Only communication loss is shown inline; session, permission and validation rejections go to the shell.

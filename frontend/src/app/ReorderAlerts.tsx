@@ -6,7 +6,9 @@ import type { Branch, ReorderAlerts as Snapshot, User } from '../lib/api/client.
 import { Button } from '../components/ui/button';
 import { RestockBadge } from '../components/shared/RestockBadge.tsx';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness } from '../lib/inventory/freshness.ts';
+import {
+  INVENTORY_NETWORK_MODE, INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness,
+} from '../lib/inventory/freshness.ts';
 import { clockTime as time, dateTime as moment, decimal } from '../lib/format.ts';
 
 /**
@@ -23,6 +25,7 @@ export function reorderAlertsQuery(client: ApiClient, branch: string, history: b
       enabled && (query.state.error === null || connectionFailure(query.state.error)) ? INVENTORY_POLL_MS : false,
     refetchIntervalInBackground: false,
     refetchOnReconnect: 'always' as const,
+    networkMode: INVENTORY_NETWORK_MODE,
     retry: false,
   };
 }
