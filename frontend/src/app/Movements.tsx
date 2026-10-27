@@ -111,7 +111,8 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
       if (reason instanceof ApiError && reason.status === 401) { onError(reason); return; }
       setFormError(reason instanceof TypeError
         ? 'Sin comunicación con el servidor. No se sabe si el movimiento quedó registrado: envíelo de nuevo sin cambios '
-          + 'y no se duplicará. Si cambia los datos, se tratará como un movimiento nuevo.'
+          + 'y no se duplicará. Si cambia los datos y el envío anterior sí se registró, el servidor lo rechazará: '
+          + 'actualice el historial antes de registrar otro movimiento.'
         : reason instanceof ApiError && reason.status >= 500
           ? 'El servidor no pudo completar la solicitud. Envíela de nuevo sin cambios; no se duplicará.'
           : reason instanceof Error ? reason.message : 'No se pudo registrar el movimiento.');

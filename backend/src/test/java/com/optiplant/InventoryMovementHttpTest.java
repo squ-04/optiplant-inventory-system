@@ -301,6 +301,26 @@ class InventoryMovementHttpTest {
         assertThat(latest.get("valuation").get("totalAmount").asText()).isEqualTo("-30.00");
     }
 
+    /** L12: a correction leaving units never leaves a negative value; the excess is a separate valuation difference. */
+    @Test void correctionThatWouldLeaveNegativeValueRecordsTheExcessAsAValuationDifference() throws Exception {
+        Browser operator = account("OPERATOR", a);
+        valuedEntry(a, product, "10", "10");
+        assertThat(operator.post("/inventory/movements", entry(product, "unidad", "10", null, "Ingreso al promedio")).statusCode()).isEqualTo(201);
+        valuedEntry(a, product, "10", "1000");
+        assertThat(balance(a, product)).containsExactly("30", "10200", "340");
+        assertThat(operator.post("/inventory/movements", exit(product, "25")).statusCode()).isEqualTo(201);
+        assertThat(balance(a, product)).containsExactly("5", "1700", "340");
+        String expensive = jdbc.queryForObject("SELECT m.external_id::text FROM inventory_movement m JOIN catalog_product p ON p.id=m.product_id "
+            + "WHERE p.external_id=? AND m.historical_base_cost=1000", String.class, product);
+
+        var correction = account("MANAGER", a).post("/inventory/movements", movement("ENTRY_CORRECTION", "direction", "OUT",
+            "reference", expensive, "quantity", "4", "reason", "Costo de entrada mal registrado"));
+        assertThat(correction.statusCode()).isEqualTo(201);
+        assertThat(components(json.readTree(correction.body()).get("movementExternalId").asText()))
+            .containsExactly("BASE -4000", "HISTORICAL_CORRECTION 2300");
+        assertThat(balance(a, product)).containsExactly("1", "0", "0");
+    }
+
     @Test void returnLinkedToASaleNeverExceedsWhatWasSoldAsInRf0016Ca03() throws Exception {
         valuedEntry(a, product, "10", "7");
         String sale = sale(a, product, "5");

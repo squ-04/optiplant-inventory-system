@@ -27,7 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
  * rejection throws before the first write, so a failed operation leaves no trace (RF-0017-CA-03). Valuation follows
  * RF-0026 / INC-013: moving weighted average per product and branch, average at 6 decimals rounded half up, exits at the
  * current average, the remaining value absorbed by the exit that depletes the stock, and linked compensations at the
- * historical cost of the movement they correct (H v0.13).
+ * historical cost of the movement they correct (H v0.13), never below zero value (project decision L12 in
+ * odd/tasks/rf-0016-0018.md).
  *
  * <p>A document that must store the applied cost on its own line before posting (a sale line) calls {@link #lock}
  * first: the returned average cannot change until the transaction ends.
@@ -176,6 +177,13 @@ public class InventoryLedger {
             BigDecimal adjustment = resultingValue.negate();
             return new Valued(line, cost, amount, historical ? "HISTORICAL_CORRECTION" : "FINAL_ROUNDING", adjustment,
                 new Balance(resultingQuantity, BigDecimal.ZERO, balance.average()));
+        }
+        if (historical && resultingValue.signum() < 0) {
+            // Project decision (odd/tasks/rf-0016-0018.md L12, extending H v0.13): a compensation never leaves a negative
+            // value. It reaches zero and the excess is recorded as a separate valuation difference; the remaining units
+            // keep a zero average until the next valued entry.
+            return new Valued(line, cost, amount, "HISTORICAL_CORRECTION", resultingValue.negate(),
+                new Balance(resultingQuantity, BigDecimal.ZERO, BigDecimal.ZERO.setScale(AVERAGE_SCALE)));
         }
         // Ordinary exits do not change the average (INC-013/D04); a compensation recomputes it from the corrected value.
         BigDecimal average = historical ? resultingValue.divide(resultingQuantity, AVERAGE_SCALE, RoundingMode.HALF_UP)
