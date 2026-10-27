@@ -46,7 +46,9 @@ public class LocalCatalogService {
             }, branchId);
 
         List<LocalCatalogResponse.Item> items = jdbc.query("SELECT p.id,p.external_id,p.sku,p.name,p.description,p.base_unit_name,"
-            + "p.base_divisible,bp.minimum_qty,coalesce(ib.physical_qty,0) AS physical FROM catalog_branch_product bp "
+            + "p.base_divisible,bp.minimum_qty,coalesce(ib.physical_qty,0) AS physical,"
+            + "EXISTS (SELECT 1 FROM inventory_reorder_alert a WHERE a.branch_product_id=bp.id AND a.resolved_at IS NULL) AS restock "
+            + "FROM catalog_branch_product bp "
             + "JOIN catalog_product p ON p.id=bp.product_id LEFT JOIN inventory_balance ib ON ib.branch_id=bp.branch_id "
             + "AND ib.product_id=bp.product_id WHERE bp.branch_id=? AND bp.enabled AND p.active ORDER BY p.sku", (row, index) -> {
                 long productId = row.getLong("id");
@@ -55,7 +57,7 @@ public class LocalCatalogService {
                 return new LocalCatalogResponse.Item(row.getObject("external_id", UUID.class), row.getString("sku"),
                     row.getString("name"), row.getString("description"), row.getString("base_unit_name"),
                     row.getBoolean("base_divisible"), ProductService.exact(row.getBigDecimal("minimum_qty")), physical, physical,
-                    ProductService.exact(transit.getOrDefault(productId, BigDecimal.ZERO)), units.getOrDefault(productId, List.of()));
+                    ProductService.exact(transit.getOrDefault(productId, BigDecimal.ZERO)), row.getBoolean("restock"), units.getOrDefault(productId, List.of()));
             }, branchId);
         return new LocalCatalogResponse(branchExternalId, (String) branch.getFirst().get("code"),
             (String) branch.getFirst().get("name"), (Boolean) branch.getFirst().get("active"), items);

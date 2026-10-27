@@ -83,8 +83,11 @@ class ProductConfigurationHttpTest {
         assertThat(minimumOf(json.readTree(admin.get("/api/v1/products/" + whole).body()), "MIN-NORTH")).isEqualTo("12.000");
         assertThat(minimum(admin, fraction, north, "2.5").statusCode()).isEqualTo(200);
         assertThat(minimumOf(json.readTree(admin.get("/api/v1/products/" + fraction).body()), "MIN-NORTH")).isEqualTo("2.500");
-        // Stock, cost, documents and restock history keep their values; no purchase is created.
+        // Stock, cost and documents keep their values; no purchase is created.
         assertThat(operationsDigest()).isEqualTo(operations);
+        // RF-0019-CA-02: restock alerts follow the new minimum (stock 4: resolved above 0, reopened at 12); history is kept.
+        assertThat(alerts(whole, north)).containsExactly("RESOLVED 5 0", "ACTIVE 12 4");
+        assertThat(alerts(whole, south)).containsExactly("ACTIVE 3 0");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM purchases_order", Long.class)).isEqualTo(orders);
 
         String before = catalogDigest();
@@ -321,10 +324,19 @@ class ProductConfigurationHttpTest {
         throw new AssertionError("Branch not listed: " + branchCode);
     }
 
+    /** Restock episodes of a product-branch, oldest first: "status minimumSnapshot quantitySnapshot". */
+    private List<String> alerts(UUID product, UUID branch) {
+        return jdbc.queryForList("SELECT CASE WHEN a.resolved_at IS NULL THEN 'ACTIVE' ELSE 'RESOLVED' END||' '||"
+            + "trim_scale(a.minimum_snapshot)||' '||trim_scale(a.quantity_snapshot) FROM inventory_reorder_alert a "
+            + "JOIN catalog_branch_product bp ON bp.id=a.branch_product_id JOIN identity_branch b ON b.id=bp.branch_id "
+            + "JOIN catalog_product p ON p.id=bp.product_id WHERE p.external_id=? AND b.external_id=? ORDER BY a.id",
+            String.class, product, branch);
+    }
+
     private String operationsDigest() {
         StringBuilder digest = new StringBuilder();
         for (String table : new String[]{"inventory_balance", "inventory_movement", "inventory_operation", "purchases_order",
-            "purchases_line", "inventory_reorder_alert"}) {
+            "purchases_line"}) {
             digest.append(jdbc.queryForObject("SELECT md5(coalesce(string_agg(row_to_json(t)::text, '' ORDER BY id),'')) FROM "
                 + table + " t", String.class));
         }

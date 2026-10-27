@@ -8,6 +8,7 @@ import com.optiplant.catalog.dto.ProductUpdateRequest;
 import com.optiplant.catalog.entity.Product;
 import com.optiplant.catalog.repository.ProductRepository;
 import com.optiplant.common.exception.ApiException;
+import com.optiplant.inventory.service.ReorderAlertService;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Clock;
@@ -22,7 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Product maintenance (RF-0008–RF-0011) and minimum stock configuration (RF-0001). Products are never physically deleted (H v1.3/01): removal is
+ * Product maintenance (RF-0008–RF-0011) and minimum stock configuration (RF-0001); minimum and enablement changes
+ * re-evaluate restock alerts (RF-0019/RF-0020). Products are never physically deleted (H v1.3/01): removal is
  * exclusively {@code active=false}, and the runtime database role has no DELETE privilege on the table.
  */
 @Service
@@ -36,11 +38,13 @@ public class ProductService {
     private final ProductRepository products;
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final ReorderAlertService alerts;
 
-    public ProductService(ProductRepository products, JdbcTemplate jdbc, Clock clock) {
+    public ProductService(ProductRepository products, JdbcTemplate jdbc, Clock clock, ReorderAlertService alerts) {
         this.products = products;
         this.jdbc = jdbc;
         this.clock = clock;
+        this.alerts = alerts;
     }
 
     @Transactional(readOnly = true)
@@ -74,6 +78,7 @@ public class ProductService {
         for (int index = 0; index < branches.size(); index++) {
             jdbc.update("INSERT INTO catalog_branch_product(branch_id,product_id,enabled,minimum_qty,created_at,updated_at) "
                 + "VALUES (?,?,TRUE,?,?,?)", branches.get(index), product.getId(), request.branches().get(index).minimumQuantity(), now, now);
+            alerts.evaluate(branches.get(index), product.getId());
         }
         return response(product, true);
     }
@@ -141,6 +146,8 @@ public class ProductService {
             jdbc.update("UPDATE catalog_branch_product SET enabled=TRUE,minimum_qty=?,updated_at=? WHERE branch_id=? AND product_id=?",
                 request.minimumQuantity(), now, branch, product.getId());
         }
+        // A new enablement starts a new evaluation against its explicit minimum (RF-0019).
+        alerts.evaluate(branch, product.getId());
         return response(product, true);
     }
 
@@ -164,6 +171,8 @@ public class ProductService {
         }
         jdbc.update("UPDATE catalog_branch_product SET minimum_qty=?,updated_at=? WHERE branch_id=? AND product_id=?",
             request.minimumQuantity(), now(), branch.getFirst(), product.getId());
+        // RF-0019-CA-02: the next evaluation already uses the new minimum; no other threshold exists.
+        alerts.evaluate(branch.getFirst(), product.getId());
         return response(product, true);
     }
 
@@ -195,8 +204,7 @@ public class ProductService {
         }
         Timestamp now = now();
         // Disabling closes active restock episodes; rows are kept for history and references.
-        jdbc.update("UPDATE inventory_reorder_alert SET resolved_at=GREATEST(?,opened_at),updated_at=? WHERE resolved_at IS NULL "
-            + "AND branch_product_id IN (SELECT id FROM catalog_branch_product WHERE product_id=?)", now, now, id);
+        alerts.closeProduct(id);
         jdbc.update("UPDATE catalog_branch_product SET enabled=FALSE,minimum_qty=NULL,updated_at=? WHERE product_id=? "
             + "AND (enabled OR minimum_qty IS NOT NULL)", now, id);
         product.deactivate(clock.instant());
