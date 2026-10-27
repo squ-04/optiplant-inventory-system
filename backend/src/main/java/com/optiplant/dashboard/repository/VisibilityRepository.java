@@ -5,8 +5,10 @@ import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
 import com.optiplant.dashboard.dto.VisibilityResponse.Document;
 import com.optiplant.dashboard.dto.VisibilityResponse.InventoryItem;
 import com.optiplant.dashboard.dto.VisibilityResponse.Movement;
+import com.optiplant.dashboard.dto.VisibilityResponse.StockItem;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -35,6 +37,37 @@ public class VisibilityRepository {
             JOIN identity_branch b ON b.id=ib.branch_id JOIN catalog_product p ON p.id=ib.product_id
             WHERE b.external_id=? ORDER BY p.sku
             """, (r, i) -> new InventoryItem(r.getObject(1, UUID.class), r.getString(2), r.getString(3), r.getBigDecimal(4).toPlainString()), branch);
+    }
+    /**
+     * Products with a balance, enabled in the branch catalog or with pending transit towards the branch. Transit is
+     * reported apart and never added to physical or available stock. Costs and valuation are not selected.
+     */
+    public List<StockItem> stock(UUID branch) {
+        return jdbc.query("""
+            WITH b AS (SELECT id FROM identity_branch WHERE external_id=?),
+            transit AS (
+                SELECT l.product_id,sum(i.pending_base_qty) AS qty FROM inventory_transit i
+                JOIN logistics_dispatch_line dl ON dl.id=i.dispatch_line_id JOIN transfers_line l ON l.id=dl.transfer_line_id
+                JOIN transfers_transfer t ON t.id=l.transfer_id JOIN b ON b.id=t.destination_branch_id
+                WHERE i.pending_base_qty>0 GROUP BY l.product_id)
+            SELECT p.external_id,p.sku,p.name,p.base_unit_name,coalesce(ib.physical_qty,0::numeric(18,3)) AS physical,
+                coalesce(tr.qty,0::numeric(18,3)) AS transit
+            FROM catalog_product p CROSS JOIN b
+            LEFT JOIN inventory_balance ib ON ib.branch_id=b.id AND ib.product_id=p.id
+            LEFT JOIN catalog_branch_product bp ON bp.branch_id=b.id AND bp.product_id=p.id
+            LEFT JOIN transit tr ON tr.product_id=p.id
+            WHERE ib.id IS NOT NULL OR tr.qty IS NOT NULL OR (bp.enabled AND p.active)
+            ORDER BY p.sku
+            """, (r, i) -> {
+                // No reservations exist (glossary §5.3): available equals the operable physical stock.
+                String physical = r.getBigDecimal("physical").setScale(3).toPlainString();
+                return new StockItem(r.getObject("external_id", UUID.class), r.getString("sku"), r.getString("name"),
+                    r.getString("base_unit_name"), physical, physical, r.getBigDecimal("transit").setScale(3).toPlainString());
+            }, branch);
+    }
+    /** Transaction start time: under the service's repeatable-read transaction it dates the consulted snapshot. */
+    public Instant snapshotTime() {
+        return jdbc.queryForObject("SELECT CURRENT_TIMESTAMP", OffsetDateTime.class).toInstant();
     }
     public List<Document> purchases(UUID branch) {
         return jdbc.query("""

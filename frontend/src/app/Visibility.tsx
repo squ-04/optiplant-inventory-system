@@ -1,60 +1,125 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { RefreshCw, Search } from 'lucide-react';
 import { ApiClient } from '../lib/api/client.ts';
 import { Button } from '../components/ui/button';
+import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import type { Branch, InventoryItem, OperationalDocument, User, Visibility as Snapshot } from '../lib/api/client.ts';
+import { INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness } from '../lib/inventory/freshness.ts';
+import type { Branch, BranchInventory, OperationalDocument, User, Visibility as Snapshot } from '../lib/api/client.ts';
 
-export function Visibility({ client, user, onError, revision }: {
-  client: ApiClient; user: User; onError: (reason: unknown) => void; revision: number;
+const time = (value: string) => new Date(value).toLocaleTimeString();
+
+export function Visibility({ client, user, onError, revision, visible }: {
+  client: ApiClient; user: User; onError: (reason: unknown) => void; revision: number; visible: boolean;
 }) {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selected, setSelected] = useState(user.branchExternalId ?? '');
+  const [consulted, setConsulted] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
   const [busy, setBusy] = useState(false);
-  const [readAt, setReadAt] = useState('');
   useEffect(() => {
     let active = true;
-    setSnapshot(null); setInventory(null); setReadAt('');
+    setSnapshot(null);
     client.visibleBranches().then(items => { if (active) setBranches(items); })
       .catch(reason => { if (active) onError(reason); });
     return () => { active = false; };
   }, [client, revision]);
 
+  // RF-0015: confirmed changes reach this view by REST polling (ARQ PEN-003) while it is on screen; the query also
+  // refreshes on focus, reconnection and when the view becomes visible again. A failed poll keeps the last read.
+  const inventory = useQuery<BranchInventory>({
+    queryKey: ['branch-inventory', consulted],
+    queryFn: ({ signal }) => client.branchInventory(consulted, AbortSignal.any([signal, AbortSignal.timeout(INVENTORY_TIMEOUT_MS)])),
+    enabled: consulted !== '' && visible,
+    // A client rejection (session, permission, unknown branch) stops polling and focus refetches; connection loss
+    // and server outages keep retrying.
+    refetchInterval: query => visible && (query.state.error === null || connectionFailure(query.state.error)) ? INVENTORY_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: query => query.state.error === null || connectionFailure(query.state.error) ? 'always' : false,
+    refetchOnReconnect: 'always',
+    retry: false,
+  });
+  // Only communication loss is shown inline; session, permission and validation rejections go to the shell.
+  useEffect(() => {
+    if (inventory.error && !connectionFailure(inventory.error)) onError(inventory.error);
+  }, [inventory.errorUpdatedAt]);
+
   async function load() {
-    setBusy(true); setSnapshot(null); setInventory(null); setReadAt('');
+    setBusy(true); setSnapshot(null);
     try {
-      if (user.role === 'ADMIN' || selected === user.branchExternalId) {
-        const result = await client.visibility(selected); setSnapshot(result); setInventory(result.inventory);
-      } else setInventory(await client.inventory(selected));
-      setReadAt(new Date().toLocaleString());
+      if (consulted === selected) await inventory.refetch();
+      setConsulted(selected);
+      if (user.role === 'ADMIN' || selected === user.branchExternalId) setSnapshot(await client.visibility(selected));
     } catch (reason) { onError(reason); }
     finally { setBusy(false); }
   }
   const branch = branches.find(item => item.externalId === selected);
-  return <section aria-labelledby="visibility-title" aria-busy={busy}>
+  const data = consulted === '' ? undefined : inventory.data;
+  const state = freshness(data?.readAt, inventory.errorUpdatedAt || undefined, inventory.isError && connectionFailure(inventory.error));
+  const stopped = inventory.isError && !connectionFailure(inventory.error);
+  const foreign = data && user.branchExternalId !== null && data.branch.externalId !== user.branchExternalId;
+  return <section aria-labelledby="visibility-title" aria-busy={busy || inventory.isFetching}>
     <h2 id="visibility-title" tabIndex={-1}>{user.role === 'ADMIN' ? 'Visibilidad de la red' : 'Consulta de sucursal'}</h2>
-    <p>Consultar otra sucursal no cambia su ámbito de escritura. Esta vista es de solo lectura.</p>
+    <p>Consulte las existencias de cualquier sucursal. Consultar otra sucursal no cambia su ámbito de operación.</p>
     <label htmlFor="visibility-branch">Sucursal</label>
     <select id="visibility-branch" value={selected} disabled={busy} onChange={e => {
-      setSelected(e.target.value); setSnapshot(null); setInventory(null); setReadAt('');
+      setSelected(e.target.value); setConsulted(''); setSnapshot(null);
     }}>
       <option value="">Seleccione una sucursal</option>
       {branches.map(item => <option key={item.externalId} value={item.externalId}>
         {item.code} · {item.name}{item.active ? '' : ' (inactiva: solo consultas)'}
       </option>)}
     </select>
-    <Button disabled={busy || !selected} onClick={() => void load()}>{busy ? 'Consultando…' : 'Consultar datos actuales'}</Button>
-    {readAt && <p role="status">Consulta recibida: {readAt}. Actualice para recuperar cambios posteriores.</p>}
+    <Button disabled={busy || !selected} onClick={() => void load()}><Search aria-hidden="true" />{busy ? 'Consultando…' : 'Consultar sucursal'}</Button>
     {branch && !branch.active && <p className="notice-warning">Sucursal inactiva. Se conserva el historial; no admite nuevas operaciones.</p>}
-    {inventory && <><h3>Existencias físicas</h3>{inventory.length === 0 ? <p>Sin saldos registrados.</p> :
-      <div className="table-scroll" role="region" aria-label="Existencias por producto" tabIndex={0}>
-        <Table><TableCaption>Existencias por producto; las cantidades de productos diferentes no se suman.</TableCaption>
-          <TableHeader><TableRow><TableHead scope="col">SKU</TableHead><TableHead scope="col">Producto</TableHead><TableHead className="text-right" scope="col">Cantidad base</TableHead></TableRow></TableHeader>
-          <TableBody>{inventory.map(item => <TableRow key={item.productExternalId}><TableCell>{item.sku}</TableCell><TableCell>{item.name}</TableCell><TableCell className="text-right whitespace-nowrap">{item.physicalQuantity}</TableCell></TableRow>)}</TableBody>
-        </Table>
-      </div>}</>}
+
+    {consulted && <div className="inventory-live">
+      <div className="inventory-live-header">
+        <h3>Inventario de {data ? `${data.branch.name} (${data.branch.code})` : 'la sucursal seleccionada'}</h3>
+        {data && <StatusBadge active={data.branch.active} activeLabel="Sucursal activa" inactiveLabel="Sucursal inactiva" />}
+        <Button variant="outline" disabled={inventory.isFetching} onClick={() => void inventory.refetch()}>
+          <RefreshCw aria-hidden="true" />Actualizar ahora
+        </Button>
+      </div>
+      {foreign && <p>Consulta de solo lectura: estas existencias pertenecen a otra sucursal y no se modifican desde aquí.</p>}
+      {state.kind === 'loading' && <p role="status">Consultando inventario…</p>}
+      {stopped && <p className="notice-warning">
+        La actualización automática se detuvo porque el servidor rechazó la consulta. Los datos mostrados pueden estar desactualizados.
+      </p>}
+      {state.kind === 'live' && !stopped && <p role="status" aria-live="off">
+        Se actualiza automáticamente cada {INVENTORY_POLL_MS / 1000} segundos mientras esta vista está abierta. Última lectura del servidor: {time(state.readAt)}.
+      </p>}
+      {state.kind === 'stale' && <p role="alert" className="notice-warning">
+        Sin comunicación con el servidor o servicio no disponible (último intento: {time(state.failedAt)}). Se muestran los datos leídos a las {time(state.readAt)} y pueden
+        estar desactualizados. Esta consulta no confirma ninguna operación; se reintentará automáticamente.
+      </p>}
+      {state.kind === 'unavailable' && <p role="alert">
+        No se pudo leer el inventario: sin comunicación con el servidor (último intento: {time(state.failedAt)}). Se reintentará automáticamente; también puede actualizar ahora.
+      </p>}
+      {data && (data.items.length === 0
+        ? <p>Esta sucursal no tiene productos habilitados, saldos ni tránsito registrados.</p>
+        : <div className="table-scroll" role="region" aria-label={`Existencias de ${data.branch.name}`} tabIndex={0}>
+          <Table>
+            <TableCaption>Cantidades en unidad base de cada producto. El tránsito ya salió del origen y no forma parte del físico ni del disponible.</TableCaption>
+            <TableHeader><TableRow>
+              <TableHead scope="col">SKU</TableHead><TableHead scope="col">Producto</TableHead>
+              <TableHead className="quantity" scope="col">Físico</TableHead>
+              <TableHead className="quantity" scope="col">Disponible</TableHead>
+              <TableHead className="quantity" scope="col">En tránsito hacia la sucursal</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>{data.items.map(item => <TableRow key={item.productExternalId}>
+              <TableCell className="font-semibold">{item.sku}</TableCell><TableCell>{item.name}</TableCell>
+              <TableCell className="quantity">{item.physicalQuantity} {item.baseUnitName}</TableCell>
+              <TableCell className="quantity">{item.availableQuantity} {item.baseUnitName}</TableCell>
+              <TableCell className="quantity">{item.inTransitQuantity} {item.baseUnitName}</TableCell>
+            </TableRow>)}</TableBody>
+          </Table>
+        </div>)}
+    </div>}
+
     {snapshot && <>
+      <p>El historial operativo no se actualiza automáticamente; vuelva a consultar la sucursal para recuperar cambios posteriores.</p>
       <Documents title="Compras" items={snapshot.purchases} />
       <Documents title="Ventas" items={snapshot.sales} />
       <Documents title="Transferencias de origen o destino" items={snapshot.transfers} />

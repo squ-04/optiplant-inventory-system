@@ -63,6 +63,12 @@ export interface LocalCatalog {
 }
 
 export interface InventoryItem { productExternalId: string; sku: string; name: string; physicalQuantity: string }
+/** RF-0014: stock of one branch in exact base-unit quantities; transit is never physical or available stock. */
+export interface StockItem {
+  productExternalId: string; sku: string; name: string; baseUnitName: string;
+  physicalQuantity: string; availableQuantity: string; inTransitQuantity: string;
+}
+export interface BranchInventory { branch: Branch; readAt: string; items: StockItem[] }
 export interface OperationalDocument { externalId: string; code: string; status: string; occurredAt: string }
 export interface Movement { externalId: string; occurredAt: string; kind: string; direction: string;
   sku: string; productName: string; quantity: string; unit: string; actorCode: string }
@@ -167,6 +173,11 @@ function inventoryDto(value: unknown): InventoryItem {
       typeof value.physicalQuantity !== 'string' || !/^\d+(\.\d+)?$/.test(value.physicalQuantity)) throw invalid();
   return value as unknown as InventoryItem;
 }
+function stockDto(value: unknown): StockItem {
+  if (!record(value) || !uuid(value.productExternalId) || !text(value.sku) || !text(value.name) || !text(value.baseUnitName) ||
+      !['physicalQuantity', 'availableQuantity', 'inTransitQuantity'].every(k => decimal(value[k]))) throw invalid();
+  return value as unknown as StockItem;
+}
 function documentDto(value: unknown): OperationalDocument {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !text(value.status) ||
       !text(value.occurredAt) || !Number.isFinite(Date.parse(value.occurredAt))) throw invalid();
@@ -192,14 +203,14 @@ export class ApiClient {
     this.onSessionExpired = onSessionExpired;
   }
 
-  private async request(path: string, method = 'GET', body?: unknown): Promise<unknown> {
+  private async request(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<unknown> {
     if (method !== 'GET' && !this.csrf) await this.refreshCsrf();
     const headers = new Headers({ Accept: 'application/json' });
     if (body !== undefined) headers.set('Content-Type', 'application/json');
     if (method !== 'GET' && this.csrf) headers.set(this.csrf.headerName, this.csrf.token);
     const transport = this.transport;
     const response = await transport(`${this.baseUrl}/api/v1${path}`, {
-      method, credentials: 'include', headers,
+      method, credentials: 'include', headers, signal,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (response.status === 401) {
@@ -340,6 +351,12 @@ export class ApiClient {
   }
   async inventory(id: string): Promise<InventoryItem[]> {
     return listDto(await this.request(`/visibility/inventory/${encodeURIComponent(id)}`), inventoryDto);
+  }
+  /** RF-0014/RF-0015: read-only stock of any branch; polled by the view, a GET never counts as session activity. */
+  async branchInventory(id: string, signal?: AbortSignal): Promise<BranchInventory> {
+    const value = await this.request(`/visibility/branches/${encodeURIComponent(id)}/inventory`, 'GET', undefined, signal);
+    if (!record(value) || !text(value.readAt) || !Number.isFinite(Date.parse(value.readAt))) throw invalid();
+    return { branch: branchDto(value.branch), readAt: value.readAt, items: listDto(value.items, stockDto) };
   }
   async visibility(id: string): Promise<Visibility> {
     const value = await this.request(`/visibility/branches/${encodeURIComponent(id)}`);
