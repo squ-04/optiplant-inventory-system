@@ -20,7 +20,21 @@ RF-0011, INC-006/D01–D03 (H v1.3/01) y el modelo de datos §6.2/§7.4 establec
 6. Con datos de demostración, intentar **Desactivar producto** sobre `DEMO-PLANT`: se rechaza porque tiene existencias. Compras en borrador o pendientes, transferencias abiertas, tránsito pendiente y faltantes abiertos también impiden la baja, indicando el motivo.
 7. Desactivar el producto creado: queda **Inactivo**, sigue listado y todas sus sucursales pasan a «No habilitado / Sin mínimo». No admite nuevas habilitaciones. Editar sus datos no lo reactiva.
 8. **Reactivar producto**: vuelve al catálogo general sin habilitarse en ninguna sucursal; cada sucursal debe habilitarlo de nuevo con un mínimo nuevo.
-9. Iniciar sesión como gerente u operador: **Catálogo** muestra la consulta sin botones de mantenimiento ni configuración local; la API responde `403 ROLE_FORBIDDEN` a cualquier escritura.
+9. Iniciar sesión como gerente u operador: **Catálogo** muestra las pestañas **Mi sucursal** y **Catálogo general**, sin botones de mantenimiento ni configuración de mínimos o unidades; la API responde `403 ROLE_FORBIDDEN` a cualquier escritura.
+
+### Recorrido manual de mínimo, catálogo local y unidades (RF-0001, RF-0012, RF-0013)
+
+Requiere los datos de demostración: `DEMO-PLANT` tiene unidad base `unidad` indivisible y está habilitado en `DEMO-BOG` y `DEMO-MED`.
+
+10. **Cambiar mínimo (RF-0001).** Como administrador, **Catálogo → Editar** `DEMO-PLANT` → **Habilitación por sucursal**. En `DEMO-BOG`, pulsar **Cambiar mínimo**, escribir `0` y **Guardar mínimo**: se acepta y la tabla muestra el nuevo mínimo. En **Consultas**, las existencias de `DEMO-PLANT` no cambian.
+11. Repetir con `1.5` (fracción en unidad indivisible), `-1` o `1.0001`: se rechaza con el motivo y el mínimo anterior se conserva. En una sucursal sin habilitar no aparece **Cambiar mínimo** sino «Habilite para configurar»; la API responde `409 PRODUCT_NOT_ENABLED`.
+12. **Agregar unidad (RF-0013).** En **Unidades de medida → Nueva unidad**, crear `caja` con equivalencia `12` y **Agregar unidad**: aparece en la tabla como **Activa** y «Solo enteras», con su equivalencia «1 caja = 12 unidad». La casilla «La unidad admite fracciones» queda deshabilitada porque la base no las admite.
+13. Intentar `Caja` (mismo nombre con otra capitalización), un factor `0`, `12.5` o con más de tres decimales: se rechaza sin crear la unidad.
+14. **Calcular equivalencia.** Elegir `caja`, cantidad `2` y **Calcular equivalencia**: muestra «2 caja = 24.000 unidad» con el factor aplicado. Con `1.5` se rechaza porque `caja` no admite fracciones; no se redondea ni se registra movimiento.
+15. **Cambiar factor.** Pulsar **Editar** en `caja`, cambiar la equivalencia a `10` y **Guardar unidad**. El aviso indica que rige desde ahora; recalcular `2` da `20.000 unidad`. Desmarcar «Unidad disponible para nuevas operaciones»: la unidad queda inactiva y deja de ofrecerse en la calculadora.
+16. **Catálogo local (RF-0012).** Iniciar sesión como gerente u operador de `DEMO-BOG`. La pestaña **Mi sucursal** lista `DEMO-PLANT` con mínimo, **Físico**, **Disponible** (igual al físico) y **En tránsito hacia la sucursal** por separado; también lista productos habilitados sin existencias. La calculadora de equivalencias está disponible.
+17. En **Catálogo general**, la columna **En mi sucursal** marca «Habilitado» o «No habilitado». Un producto creado sin habilitar en `DEMO-BOG` aparece como «No habilitado» y no figura en **Mi sucursal**.
+18. Comprobaciones de API: como administrador, `GET /api/v1/products/local` responde `403 ROLE_FORBIDDEN`; como gerente u operador, los POST de mínimo y unidades responden `403 ROLE_FORBIDDEN`.
 
 ## Contrato REST
 
@@ -60,4 +74,4 @@ El catálogo local responde `branchExternalId`, `branchCode`, `branchName`, `bra
 
 ## Verificaciones
 
-Backend: `ProductHttpTest` (8 pruebas HTTP con PostgreSQL efímero), `ProductConfigurationHttpTest` (RF-0001, RF-0012 y RF-0013) y `UnitConversionTest` dentro del runner Maven Docker de `backend/README.md`. Frontend: `frontend/test/catalog.test.ts` con `pnpm test` y `pnpm build`. Los resultados observados se registran en `odd/tasks/rf-0008-0011.md`.
+Backend: `ProductHttpTest` (8 pruebas HTTP con PostgreSQL efímero), `ProductConfigurationHttpTest` (RF-0001, RF-0012 y RF-0013) y `UnitConversionTest` dentro del runner Maven Docker de `backend/README.md`. Frontend: `frontend/test/catalog.test.ts` con `pnpm test` y `pnpm build`. Los resultados observados se registran en `odd/tasks/rf-0008-0011.md` y `odd/tasks/rf-0001-0012-0013.md`.
