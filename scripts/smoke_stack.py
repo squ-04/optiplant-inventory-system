@@ -173,8 +173,8 @@ def main():
         compose("logs", "--tail", "70", "backend", capture=False, check=False, timeout=30)
         return 1
     finally:
-        # Only the new, uniquely named test project's disposable volume is removed.
-        result = compose("down", "--volumes", "--remove-orphans", check=False, timeout=120)
+        # Only the new, uniquely named test project's disposable volume and built images are removed.
+        result = compose("down", "--volumes", "--rmi", "local", "--remove-orphans", check=False, timeout=120)
         print(f"Scratch retenido para limpieza del padre: {directory}")
         if result.returncode:
             print(f"Limpieza pendiente del proyecto aislado {project}", file=sys.stderr)
