@@ -86,6 +86,9 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
   const [editor, setEditor] = useState<EditorMode | null>(null);
   const editorOpen = editor !== null;
   const [draft, setDraft] = useState<OrderDraft>(emptyOrder);
+  // Which editor the typed draft and its key belong to: reopening the same editor keeps both, so a request whose outcome
+  // is unknown is retried with the same key instead of creating a duplicate (ARQ-007).
+  const [draftFor, setDraftFor] = useState('create');
   // One key per submission attempt; it survives a retry whose outcome is unknown (ARQ-007).
   const [createKey, setCreateKey] = useState(newIdempotencyKey);
   const [actionKeys, setActionKeys] = useState<Record<string, string>>({});
@@ -136,8 +139,12 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
 
   function openEditor(mode: EditorMode = { mode: 'create' }) {
     setEditor(mode); setFormError(''); setConfirmed(''); setActionError('');
-    setDraft(mode.mode === 'create' ? emptyOrder() : draftFrom(mode.order));
-    setCreateKey(newIdempotencyKey());
+    const owner = mode.mode === 'create' ? 'create' : `${mode.mode}:${mode.order.externalId}`;
+    if (owner !== draftFor) {
+      setDraft(mode.mode === 'create' ? emptyOrder() : draftFrom(mode.order));
+      setCreateKey(newIdempotencyKey());
+      setDraftFor(owner);
+    }
     if (mode.mode === 'edit') setSelected(null);
     revealEditor('purchase-editor');
   }
@@ -168,6 +175,7 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
           : `Borrador ${order.code} creado con ${products}. Las existencias no cambian hasta confirmar la recepción.`);
       setCreateKey(newIdempotencyKey());
       setDraft(emptyOrder());
+      setDraftFor('create');
       setEditor(null);
       setSelected(order);
       void loadHistory();

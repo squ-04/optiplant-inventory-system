@@ -506,6 +506,18 @@ class PurchaseHttpTest {
         assertThat(lines(id)).containsExactly("1 5 10", "2 12 100");
         assertThat(balance(a, product)).containsExactly("0", "0", "0");
 
+        // Repeating the edit with the same key returns the stored result; the key cannot carry another body.
+        String key = UUID.randomUUID().toString();
+        Map<String, Object> retyped = order(renamed, 20, List.of(line(other, "unidad", "5", "10", "0"), line(product, "caja", "1", "100", "0")));
+        HttpResponse<String> once = operator.post("/purchases/orders/" + id + "/update", retyped, key);
+        HttpResponse<String> replayed = operator.post("/purchases/orders/" + id + "/update", retyped, key);
+        assertThat(replayed.statusCode()).isEqualTo(200);
+        assertThat(read(replayed)).isEqualTo(read(once));
+        HttpResponse<String> reused = operator.post("/purchases/orders/" + id + "/update",
+            order(renamed, 99, List.of(line(product, "caja", "9", "1", "0"))), key);
+        assertThat(reused.statusCode()).isEqualTo(409);
+        assertThat(lines(id)).containsExactly("1 5 10", "2 12 100");
+
         // An invalid edit is rejected as a whole and the draft keeps its previous conditions.
         HttpResponse<String> invalid = operator.post("/purchases/orders/" + id + "/update",
             order(renamed, 15, List.of(line(product, "caja", "1", "100", "101"))));
@@ -573,6 +585,10 @@ class PurchaseHttpTest {
         assertThat(replacing.get("status").asText()).isEqualTo("DRAFT");
         assertThat(replacing.get("replacesOrder").get("externalId").asText()).isEqualTo(wrong);
         assertThat(replacing.get("replacesOrder").get("code").asText()).isEqualTo(cancelledOrder.get("code").asText());
+        // Editing the replacement keeps its link to the cancelled order.
+        HttpResponse<String> editedReplacement = operator.post("/purchases/orders/" + replacing.get("externalId").asText() + "/update",
+            order(supplier, 0, List.of(line(product, "caja", "1", "144", "0"))));
+        assertThat(read(editedReplacement).get("replacesOrder").get("externalId").asText()).isEqualTo(wrong);
         JsonNode original = read(admin.get("/purchases/orders/" + wrong));
         assertThat(original.get("status").asText()).isEqualTo("CANCELLED");
         assertThat(original.get("replacedBy").get("externalId").asText()).isEqualTo(replacing.get("externalId").asText());
