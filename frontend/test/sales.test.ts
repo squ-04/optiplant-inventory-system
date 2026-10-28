@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError } from '../src/lib/api/client.ts';
-import { baseQuantity, compareDecimal, confirmationFailure, netUnitPrice, shortages, shownDiscount, subtract } from '../src/lib/sales/sales.ts';
+import {
+  baseQuantity, compareDecimal, confirmationFailure, listUnavailable, netUnitPrice, priceChanges, shortages, shownDiscount, subtract,
+} from '../src/lib/sales/sales.ts';
 
 test('net unit price applies the line discount exactly', () => {
   // RF-0029-CA-02: price 100 with 10% nets 90; 0% keeps 100 and 100% produces zero.
@@ -107,4 +109,25 @@ test('sales and sale read the records and reject malformed ones', async () => {
   assert.equal(history.items[0].lines[0].netUnitPrice, '90');
   assert.equal((await h.client.sale(sale.externalId)).code, 'VT-000001');
   await assert.rejects(h.client.sale(sale.externalId), /Respuesta JSON inválida/);
+});
+
+test('price changes name the lines whose list price differs from the one shown', () => {
+  // H1 (exploration 2026-10-28): the form showed 1500 while the list already said 1600.
+  const fresh = [
+    { productExternalId: 'p1', sku: 'A', productName: 'A', productActive: true, unitName: 'unidad', unitActive: true, price: '1600.000000' },
+    { productExternalId: 'p1', sku: 'A', productName: 'A', productActive: true, unitName: 'Caja', unitActive: true, price: '11000.5' },
+  ];
+  assert.deepEqual(priceChanges([{ product: 'p1', unit: 'unidad', price: '1500' }, { product: 'p1', unit: 'Caja', price: '11000.500' }], fresh), [1]);
+  assert.deepEqual(priceChanges([{ product: 'p1', unit: 'unidad', price: '1600' }], fresh), []);
+  // A price removed or no longer usable also counts as changed.
+  assert.deepEqual(priceChanges([{ product: 'p1', unit: 'saco', price: '10' }], fresh), [1]);
+  assert.deepEqual(priceChanges([{ product: 'p1', unit: 'Caja', price: '11000.5' }], [{ ...fresh[1], unitActive: false }]), [1]);
+});
+
+test('a deactivated or missing price list is reported as unavailable', () => {
+  // H2: local profiles receive 404 for an inactive list; confirming with it answers 409 PRICE_LIST_INACTIVE.
+  assert.ok(listUnavailable(new ApiError(404, { code: 'PRICE_LIST_NOT_FOUND', detail: 'No se encontró la lista de precios.' })));
+  assert.ok(listUnavailable(new ApiError(409, { code: 'PRICE_LIST_INACTIVE', detail: 'La lista de precios está inactiva.' })));
+  assert.ok(!listUnavailable(new ApiError(409, { code: 'PRICE_NOT_DEFINED', detail: 'x' })));
+  assert.ok(!listUnavailable(new TypeError('Failed to fetch')));
 });

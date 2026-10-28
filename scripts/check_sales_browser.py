@@ -62,7 +62,7 @@ STAGES = {
       await line.locator('select').first().selectOption({ label: config.sku + ' Helecho de prueba' });
       await line.getByLabel('Cantidad').fill('3');
       await line.getByLabel('Descuento %').fill('10');
-      await line.getByText('Neto 900').waitFor();
+      await line.getByText('Neto 900,00').waitFor();
       await line.getByText('2.700,00').waitFor();
       await line.getByText('Disponible: 10,000 unidad.').waitFor();
       // A second line of the same product in boxes exceeds the available stock: the form warns before confirming.

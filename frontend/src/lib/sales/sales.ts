@@ -1,5 +1,7 @@
 import { ApiError } from '../api/client.ts';
+import type { ListPrice } from '../api/client.ts';
 import { keepsIdempotencyKey } from '../inventory/movements.ts';
+import { listPriceOf } from '../prices/prices.ts';
 import { lineNet, money, sum } from '../purchases/purchases.ts';
 
 /** Lines per sale; mirrors the server limit `SaleRequest.MAX_LINES`. */
@@ -76,6 +78,26 @@ export function confirmationFailure(reason: unknown): { message: string; keepKey
       : reason instanceof Error ? reason.message : 'No se pudo confirmar la venta.';
   return { message, keepKey: keepsIdempotencyKey(reason), alreadyConfirmed: false };
 }
+
+export interface ShownPrice { product: string; unit: string; price: string | null }
+
+/**
+ * Line numbers (1-based) whose price shown in the form no longer matches the re-read list: changed, removed or no
+ * longer usable. The server always applies the current list price (RF-0030), so the operator must not accept a total
+ * built from an older one.
+ */
+export function priceChanges(lines: ShownPrice[], prices: ListPrice[]): number[] {
+  return lines.flatMap((line, index) => {
+    const current = listPriceOf(prices, line.product, line.unit);
+    const usable = current && current.productActive && current.unitActive ? current.price : null;
+    const same = usable !== null && line.price !== null && compareDecimal(usable, line.price) === 0;
+    return same ? [] : [index + 1];
+  });
+}
+
+/** The chosen price list was deactivated: local profiles no longer read it (404) and a sale with it is rejected (409). */
+export const listUnavailable = (reason: unknown) => reason instanceof ApiError
+  && (reason.problem.code === 'PRICE_LIST_NOT_FOUND' || reason.problem.code === 'PRICE_LIST_INACTIVE');
 
 /** Shown discount of a sale: shown list subtotal minus shown net total, so the displayed amounts always add up. */
 export const shownDiscount = (gross: string, net: string) => subtract(money(gross), money(net));
