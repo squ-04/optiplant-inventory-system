@@ -176,6 +176,28 @@ export interface ValuationItem {
 export interface InventoryValuation { branch: Branch; readAt: string; totalValue: string; exactTotalValue: string; items: ValuationItem[] }
 export interface PurchaseHistoryFilter { branch?: string; supplier?: string; product?: string; status?: PurchaseStatus; limit?: number }
 
+/** RF-0027/RF-0029: a sale line; the gross price comes from the chosen list, only the line discount is captured. */
+export interface SaleLineInput { product: string; unit: string; quantity: string; discountPercent: string }
+export interface SaleInput { priceList: string; lines: SaleLineInput[] }
+/**
+ * RF-0031: a line of a confirmed sale record with the snapshots kept at confirmation. `unitPrice` is the gross list
+ * price per commercial unit and `netUnitPrice` the exact price after the line discount; `movementExternalId` is the
+ * inventory exit a return references.
+ */
+export interface SaleLine {
+  lineNo: number; productExternalId: string; sku: string; productName: string; unit: string; factor: string;
+  commercialQuantity: string; baseQuantity: string; baseUnitName: string; priceListExternalId: string; priceListName: string;
+  unitPrice: string; discountPercent: string; netUnitPrice: string; netAmount: string; exactNetAmount: string;
+  movementExternalId: string;
+}
+/** RF-0031: the immutable record of a confirmed sale. Amounts at 2 decimals; `exactTotalNet` keeps every decimal. */
+export interface Sale {
+  externalId: string; code: string; branch: Branch; confirmedAt: string; confirmedBy: PurchasePerson;
+  operationExternalId: string; grossTotal: string; discountTotal: string; totalNet: string; exactTotalNet: string;
+  lines: SaleLine[];
+}
+export interface SaleHistory { readAt: string; branch: Branch | null; total: number; items: Sale[] }
+
 export interface BootstrapDto {
   externalId: string;
   occurredAt: string;
@@ -394,6 +416,25 @@ function purchaseDto(value: unknown): PurchaseOrder {
   if (received) personDto(value.receivedBy);
   return { ...(value as unknown as PurchaseOrder), lines: listDto(value.lines, purchaseLineDto),
     events: value.events === null ? null : listDto(value.events, purchaseEventDto) };
+}
+
+function saleLineDto(value: unknown): SaleLine {
+  if (!record(value) || !count(value.lineNo) || !uuid(value.productExternalId) || !uuid(value.priceListExternalId) ||
+      !uuid(value.movementExternalId) ||
+      !['sku', 'productName', 'unit', 'baseUnitName', 'priceListName'].every(k => text(value[k])) ||
+      !['factor', 'commercialQuantity', 'baseQuantity', 'unitPrice', 'discountPercent', 'netUnitPrice', 'netAmount',
+        'exactNetAmount'].every(k => decimal(value[k]))) throw invalid();
+  return value as unknown as SaleLine;
+}
+function saleDto(value: unknown): Sale {
+  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !instant(value.confirmedAt) ||
+      !uuid(value.operationExternalId) ||
+      !['grossTotal', 'discountTotal', 'totalNet', 'exactTotalNet'].every(k => decimal(value[k]))) throw invalid();
+  branchDto(value.branch);
+  personDto(value.confirmedBy);
+  const lines = listDto(value.lines, saleLineDto);
+  if (lines.length === 0) throw invalid();
+  return { ...(value as unknown as Sale), lines };
 }
 
 export class ApiClient {
@@ -682,5 +723,26 @@ export class ApiClient {
     }
     return { readAt: value.readAt as string, branch: value.branch === null ? null : branchDto(value.branch),
       summary: value.summary as unknown as PurchaseSummary, items: listDto(value.items, purchaseDto) };
+  }
+  /**
+   * RF-0027–RF-0029: validates stock and confirms a sale of the operator's branch with the chosen price list. Reuse the
+   * same key to retry a request whose outcome is unknown: the server returns the original record without selling twice.
+   */
+  async confirmSale(input: SaleInput, idempotencyKey: string): Promise<Sale> {
+    return saleDto(await this.request('/sales', 'POST', input, undefined, { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0031: confirmed sale records of a branch or, for administrators without a branch, of the network. */
+  async sales(filter: { branch?: string; limit?: number } = {}): Promise<SaleHistory> {
+    const query = new URLSearchParams();
+    if (filter.branch) query.set('branch', filter.branch);
+    if (filter.limit !== undefined) query.set('limit', String(filter.limit));
+    const suffix = query.size > 0 ? `?${query}` : '';
+    const value = await this.request(`/sales${suffix}`);
+    if (!record(value) || !instant(value.readAt) || !count(value.total)) throw invalid();
+    return { readAt: value.readAt as string, branch: value.branch === null ? null : branchDto(value.branch),
+      total: value.total as number, items: listDto(value.items, saleDto) };
+  }
+  async sale(id: string): Promise<Sale> {
+    return saleDto(await this.request(`/sales/${encodeURIComponent(id)}`));
   }
 }
