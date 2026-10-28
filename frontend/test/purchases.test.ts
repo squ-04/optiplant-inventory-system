@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError } from '../src/lib/api/client.ts';
-import { actionFor, dueDate, lineNet, money, paymentTerm, purchaseStatusLabel, sum } from '../src/lib/purchases/purchases.ts';
+import { actionFor, cancellable, dueDate, editable, lineNet, money, paymentTerm, purchaseStatusLabel, replaceable, sum } from '../src/lib/purchases/purchases.ts';
 
 test('line net follows the stored formula exactly, without rounding', () => {
   // RF-0023-CA-02: a box at 120 with 10% discount nets 108.
@@ -38,6 +38,23 @@ test('only the operator executes transitions, and only from draft or pending', (
   assert.equal(actionFor('ADMIN', { status: 'DRAFT' }), null);
 });
 
+test('only drafts are edited, cancellation happens before receipt and a cancelled order is replaced once', () => {
+  assert.equal(editable('OPERATOR', { status: 'DRAFT' }), true);
+  for (const status of ['PENDING', 'RECEIVED', 'CANCELLED'] as const) assert.equal(editable('OPERATOR', { status }), false);
+  assert.equal(cancellable('OPERATOR', { status: 'DRAFT' }), true);
+  assert.equal(cancellable('OPERATOR', { status: 'PENDING' }), true);
+  assert.equal(cancellable('OPERATOR', { status: 'RECEIVED' }), false);
+  assert.equal(cancellable('OPERATOR', { status: 'CANCELLED' }), false);
+  assert.equal(replaceable('OPERATOR', { status: 'CANCELLED', replacedBy: null }), true);
+  assert.equal(replaceable('OPERATOR', { status: 'CANCELLED', replacedBy: { externalId: 'x', code: 'OC-000002' } }), false);
+  assert.equal(replaceable('OPERATOR', { status: 'PENDING', replacedBy: null }), false);
+  for (const role of ['MANAGER', 'ADMIN']) {
+    assert.equal(editable(role, { status: 'DRAFT' }), false);
+    assert.equal(cancellable(role, { status: 'PENDING' }), false);
+    assert.equal(replaceable(role, { status: 'CANCELLED', replacedBy: null }), false);
+  }
+});
+
 test('payment term is a whole number of days, zero allowed', () => {
   assert.equal(paymentTerm('0'), 0);
   assert.equal(paymentTerm(' 30 '), 30);
@@ -63,8 +80,8 @@ const draftOrder = {
   externalId: '8c7b6a5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d', code: 'OC-000001', status: 'DRAFT', branch,
   supplier: { externalId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', code: 'PRV-1', name: 'Viveros' },
   paymentTermDays: 30, createdAt: '2026-10-27T15:00:00Z', createdBy: person, receivedAt: null, receivedBy: null,
-  dueDate: null, receiptOperationExternalId: null, totalNet: '216.00', exactTotalNet: '216', lines: [line],
-  events: [{ fromStatus: null, toStatus: 'DRAFT', occurredAt: '2026-10-27T15:00:00Z', actor: person }],
+  dueDate: null, receiptOperationExternalId: null, replacesOrder: null, replacedBy: null, totalNet: '216.00', exactTotalNet: '216',
+  lines: [line], events: [{ fromStatus: null, toStatus: 'DRAFT', occurredAt: '2026-10-27T15:00:00Z', actor: person, reason: null }],
 };
 const receivedOrder = {
   ...draftOrder, status: 'RECEIVED', receivedAt: '2026-10-28T15:00:00Z', receivedBy: person, dueDate: '2026-11-27',
@@ -127,4 +144,58 @@ test('purchaseHistory sends only the chosen filters and keeps the server summary
   assert.equal(h.calls[0].url, 'http://localhost:8080/api/v1/purchases/orders');
   assert.equal(h.calls[1].url, 'http://localhost:8080/api/v1/purchases/orders'
     + `?supplier=${draftOrder.supplier.externalId}&product=${line.productExternalId}&status=RECEIVED`);
+});
+
+test('updatePurchase posts the new conditions and a pending order surfaces the identifiable conflict', async () => {
+  const h = harness([
+    Response.json({ token: 't', headerName: 'X-CSRF-TOKEN' }),
+    Response.json({ ...draftOrder, paymentTermDays: 15 }),
+    Response.json({ code: 'PURCHASE_NOT_EDITABLE', detail: 'Solo se editan órdenes en borrador.' }, { status: 409 }),
+  ]);
+  const input = { supplier: draftOrder.supplier.externalId, paymentTermDays: 15,
+    lines: [{ product: line.productExternalId, unit: 'caja', quantity: '1', unitPrice: '100', discountPercent: '0' }] };
+  assert.equal((await h.client.updatePurchase(draftOrder.externalId, input, 'k1')).paymentTermDays, 15);
+  assert.equal(h.calls[1].url, `http://localhost:8080/api/v1/purchases/orders/${draftOrder.externalId}/update`);
+  assert.deepEqual(JSON.parse(String(h.calls[1].options.body)), input);
+  assert.equal(new Headers(h.calls[1].options.headers).get('Idempotency-Key'), 'k1');
+  await assert.rejects(h.client.updatePurchase(draftOrder.externalId, input, 'k2'), (error: unknown) =>
+    error instanceof ApiError && error.status === 409 && error.problem.code === 'PURCHASE_NOT_EDITABLE');
+});
+
+test('cancelPurchase sends the reason only when given and keeps the replacement links', async () => {
+  const cancelled = { ...draftOrder, status: 'CANCELLED', replacedBy: { externalId: receivedOrder.receiptOperationExternalId, code: 'OC-000002' },
+    events: [...draftOrder.events, { fromStatus: 'DRAFT', toStatus: 'CANCELLED', occurredAt: '2026-10-27T16:00:00Z', actor: person,
+      reason: 'Precio equivocado' }] };
+  const h = harness([Response.json({ token: 't', headerName: 'X-CSRF-TOKEN' }), Response.json(cancelled), Response.json(cancelled),
+    Response.json({ ...cancelled, replacedBy: { code: 'OC-000002' } })]);
+  const result = await h.client.cancelPurchase(draftOrder.externalId, 'Precio equivocado', 'k1');
+  assert.equal(result.events?.at(-1)?.reason, 'Precio equivocado');
+  assert.equal(result.replacedBy?.code, 'OC-000002');
+  assert.equal(h.calls[1].url, `http://localhost:8080/api/v1/purchases/orders/${draftOrder.externalId}/cancel`);
+  assert.deepEqual(JSON.parse(String(h.calls[1].options.body)), { reason: 'Precio equivocado' });
+  await h.client.cancelPurchase(draftOrder.externalId, null, 'k2');
+  assert.equal(String(h.calls[2].options.body), '{}');
+  await assert.rejects(h.client.cancelPurchase(draftOrder.externalId, null, 'k3'), /Respuesta JSON inválida/);
+});
+
+test('createPurchase sends the replaced order of a replacement', async () => {
+  const h = harness([Response.json({ token: 't', headerName: 'X-CSRF-TOKEN' }),
+    Response.json({ ...draftOrder, replacesOrder: { externalId: receivedOrder.receiptOperationExternalId, code: 'OC-000001' } }, { status: 201 })]);
+  const input = { supplier: draftOrder.supplier.externalId, paymentTermDays: 0, replacesOrder: receivedOrder.receiptOperationExternalId,
+    lines: [{ product: line.productExternalId, unit: 'caja', quantity: '1', unitPrice: '144', discountPercent: '0' }] };
+  assert.equal((await h.client.createPurchase(input, 'k')).replacesOrder?.code, 'OC-000001');
+  assert.equal(JSON.parse(String(h.calls[1].options.body)).replacesOrder, receivedOrder.receiptOperationExternalId);
+});
+
+test('inventoryValuation reads the recorded balances of a branch and rejects malformed amounts', async () => {
+  const body = { branch, readAt: '2026-10-28T15:00:00Z', totalValue: '123.33', exactTotalValue: '123.333334', items: [
+    { productExternalId: line.productExternalId, sku: 'MAC-1', productName: 'Maceta', baseUnitName: 'unidad',
+      physicalQuantity: '8.000', averageCost: '15.000000', value: '120.00', exactValue: '120' }] };
+  const h = harness([Response.json(body), Response.json({ ...body, totalValue: '-1' }),
+    Response.json({ code: 'VALUATION_FORBIDDEN', detail: 'No autorizado.' }, { status: 403 })]);
+  assert.deepEqual(await h.client.inventoryValuation(branch.externalId), body);
+  assert.equal(h.calls[0].url, `http://localhost:8080/api/v1/inventory/branches/${branch.externalId}/valuation`);
+  await assert.rejects(h.client.inventoryValuation(branch.externalId), /Respuesta JSON inválida/);
+  await assert.rejects(h.client.inventoryValuation(branch.externalId), (error: unknown) =>
+    error instanceof ApiError && error.status === 403 && error.problem.code === 'VALUATION_FORBIDDEN');
 });

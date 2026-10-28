@@ -62,6 +62,16 @@ export function actionFor(role: string, order: Pick<PurchaseOrder, 'status'>): P
   return order.status === 'DRAFT' ? 'submit' : order.status === 'PENDING' ? 'receive' : null;
 }
 
+/**
+ * RF-0022 (INC-011/D03): the operator edits drafts only, cancels drafts and pending orders before their receipt, and
+ * replaces a cancelled order once. A received order is never edited, cancelled or deleted.
+ */
+export const editable = (role: string, order: Pick<PurchaseOrder, 'status'>) => role === 'OPERATOR' && order.status === 'DRAFT';
+export const cancellable = (role: string, order: Pick<PurchaseOrder, 'status'>) =>
+  role === 'OPERATOR' && (order.status === 'DRAFT' || order.status === 'PENDING');
+export const replaceable = (role: string, order: Pick<PurchaseOrder, 'status' | 'replacedBy'>) =>
+  role === 'OPERATOR' && order.status === 'CANCELLED' && order.replacedBy === null;
+
 /** Payment term as typed: a whole number of days, 0 allowed (INC-012/D04). */
 export const MAX_PAYMENT_TERM_DAYS = 36500;
 export function paymentTerm(value: string): number | null {
