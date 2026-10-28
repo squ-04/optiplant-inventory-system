@@ -1,5 +1,5 @@
 import { ApiError } from '../api/client.ts';
-import { decimal } from '../format.ts';
+import { dateTime, decimal } from '../format.ts';
 import type { MovementDirection, MovementHistoryEntry, MovementKind } from '../api/client.ts';
 
 /** Presentation rules for manual movements; the server validates and decides every effect (RF-0016–RF-0018). */
@@ -47,6 +47,17 @@ export function referenceCandidates(history: MovementHistoryEntry[], kind: Movem
   if (kind === 'ENTRY_CORRECTION') return history.filter(item => CORRECTABLE.includes(item.kind) && item.direction === 'IN'
     && positive(item.pendingQuantity));
   return [];
+}
+
+/**
+ * How a reference candidate reads in its selector. A sale is named by its code (the reason the server gives its exit,
+ * «Venta VT-000001»), so lines confirmed at the same time can be told apart; other entries keep their kind.
+ */
+export function referenceLabel(item: MovementHistoryEntry): string {
+  const detail = `${decimal(item.commercialQuantity)} ${item.unit} de ${item.sku}`
+    + (item.pendingQuantity !== null ? ` (pendiente: ${decimal(item.pendingQuantity)} ${item.baseUnitName})` : '');
+  return item.kind === 'SALE' ? `${item.reason}, ${dateTime(item.occurredAt)}: ${detail}`
+    : `${dateTime(item.occurredAt)}: ${kindLabel(item.kind)} de ${detail}`;
 }
 
 /**

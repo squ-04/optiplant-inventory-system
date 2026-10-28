@@ -73,11 +73,11 @@ STAGES = {
         await page.getByRole('button', { name: 'Guardar precio', exact: true }).click();
       };
       await define('caja', '99999,5');
-      await page.getByText('Precio definido: Helecho de prueba, caja, 99.999,5 COP.').waitFor();
+      await page.getByText('Precio definido: Helecho de prueba, caja, 99.999,50 COP.').waitFor();
       await page.getByRole('button', { name: 'Ver precios de DETAL' }).click();
       await page.getByRole('heading', { name: 'Precios de Detal' }).waitFor();
       await define('caja', '120000');
-      await page.getByText('Precio definido: Helecho de prueba, caja, 120.000 COP.').waitFor();
+      await page.getByText('Precio definido: Helecho de prueba, caja, 120.000,00 COP.').waitFor();
       // A dot reads as a thousands separator in the interface: the browser rejects it before sending.
       const sent = [];
       page.on('request', request => { if (request.url().endsWith('/prices')) sent.push(request.url()); });
@@ -86,13 +86,13 @@ STAGES = {
       check(sent.length === 0, 'Se envió un precio con punto decimal');
       await page.getByLabel('Precio por unidad (COP)').fill('11000');
       await page.getByRole('button', { name: 'Guardar precio', exact: true }).click();
-      await page.getByText('Precio definido: Helecho de prueba, unidad, 11.000 COP.').waitFor();
+      await page.getByText('Precio definido: Helecho de prueba, unidad, 11.000,00 COP.').waitFor();
       // Replacing keeps a single row per unit and prefills the current price.
       await page.getByRole('button', { name: 'Cambiar precio de ' + config.sku + ' en caja' }).click();
       check(await page.getByLabel('Precio por unidad (COP)').inputValue() === '120000', 'El precio actual no se precargó');
       await page.getByLabel('Precio por unidad (COP)').fill('125000');
       await page.getByRole('button', { name: 'Guardar precio', exact: true }).click();
-      await page.getByText('Precio actualizado: Helecho de prueba, caja, 125.000 COP.').waitFor();
+      await page.getByText('Precio actualizado: Helecho de prueba, caja, 125.000,00 COP.').waitFor();
       const rows = await page.getByRole('region', { name: 'Tabla de precios de Detal' }).getByRole('row').allInnerTexts();
       check(rows.length === 3 && rows[1].includes('unidad') && rows[1].includes('11.000') && rows[2].includes('125.000'),
         'Filas inesperadas: ' + rows.join(' / '));

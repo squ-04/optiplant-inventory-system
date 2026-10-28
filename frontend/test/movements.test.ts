@@ -1,9 +1,10 @@
+process.env.TZ = 'America/Bogota';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError } from '../src/lib/api/client.ts';
 import type { MovementHistoryEntry } from '../src/lib/api/client.ts';
 import {
-  asksUnitCost, keepsIdempotencyKey, kindLabel, kindsFor, referenceCandidates, signedQuantity,
+  asksUnitCost, keepsIdempotencyKey, kindLabel, kindsFor, referenceCandidates, referenceLabel, signedQuantity,
 } from '../src/lib/inventory/movements.ts';
 
 const branch = { externalId: '0e0f6ad5-6c55-4c55-9c52-3f2b8a4e1a10', code: 'NORTE', name: 'Sucursal Norte', active: true };
@@ -117,4 +118,14 @@ test('the idempotency key survives only a retry whose outcome is unknown', () =>
   assert.equal(keepsIdempotencyKey(new ApiError(502, {})), true);
   assert.equal(keepsIdempotencyKey(new ApiError(409, { code: 'INSUFFICIENT_STOCK' })), false);
   assert.equal(keepsIdempotencyKey(new ApiError(400, {})), false);
+});
+
+test('a return reference names the sale by its code; other references keep their kind', () => {
+  // H7 (exploration 2026-10-28): two lines of one sale had the same time and no code to tell the sales apart.
+  const sale = entry({ kind: 'SALE', direction: 'OUT', reason: 'Venta VT-000001', occurredAt: '2026-10-28T19:25:28Z',
+    commercialQuantity: '3.000', unit: 'unidad', sku: 'E2E-ROSA', pendingQuantity: '3.000', baseUnitName: 'unidad' });
+  assert.match(referenceLabel(sale), /^Venta VT-000001, 28\/10\/2026, 2:25:28\sp\.\sm\.: 3,000 unidad de E2E-ROSA \(pendiente: 3,000 unidad\)$/u);
+  const receipt = entry({ kind: 'PURCHASE_RECEIPT', direction: 'IN', occurredAt: '2026-10-28T19:25:28Z', commercialQuantity: '2.000',
+    unit: 'Caja', sku: 'E2E-ROSA', pendingQuantity: '24.000', baseUnitName: 'unidad' });
+  assert.match(referenceLabel(receipt), /^28\/10\/2026, 2:25:28\sp\.\sm\.: Recepción de compra de 2,000 Caja de E2E-ROSA \(pendiente: 24,000 unidad\)$/u);
 });

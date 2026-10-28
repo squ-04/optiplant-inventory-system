@@ -110,7 +110,7 @@ STAGES = {
       check(sent.length === 0, 'Escape envió la recepción');
       await detail.getByRole('button', { name: 'Confirmar recepción', exact: true }).click();
       await page.getByRole('alertdialog').getByRole('button', { name: 'Confirmar recepción', exact: true }).click();
-      await page.getByText(/Recepción de OC-\\d+ confirmada: el inventario de Sucursal Sur aumentó por las 1 líneas\\./).waitFor();
+      await page.getByText(/Recepción de OC-\\d+ confirmada: el inventario de Sucursal Sur aumentó con la línea recibida\\./).waitFor();
       check(sent.length === 1, 'Se esperaba una sola recepción; enviadas: ' + sent.length);
       const cost = await detail.getByRole('row').filter({ hasText: config.sku }).getByRole('cell').allInnerTexts();
       // INC-003/D04: the operator keeps the conditions it registered, but not the valuation cost.

@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { Eye, Pencil, Plus, RefreshCw, Save, Tag, X } from 'lucide-react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { PriceList, Product, User } from '../lib/api/client.ts';
-import { apiDecimal, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
+import { apiDecimal, decimalInputPattern, inputDecimal, price as unitPrice } from '../lib/format.ts';
 import { listPriceOf, unavailableReason } from '../lib/prices/prices.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
@@ -188,7 +188,7 @@ function ListPrices({ client, list, admin, onSaved, onError, revision }: {
     setBusy(true); setFormError(''); setConfirmed('');
     const replaced = listPriceOf(prices, draft.product, draft.unit) !== undefined;
     client.setListPrice(list.externalId, { product: draft.product, unit: draft.unit, price: apiDecimal(draft.price) }).then(saved => {
-      setConfirmed(`${replaced ? 'Precio actualizado' : 'Precio definido'}: ${product?.name ?? 'producto'}, ${draft.unit}, ${decimal(apiDecimal(draft.price))} COP.`);
+      setConfirmed(`${replaced ? 'Precio actualizado' : 'Precio definido'}: ${product?.name ?? 'producto'}, ${draft.unit}, ${unitPrice(apiDecimal(draft.price))} COP.`);
       setDraft({ product: draft.product, unit: '', price: '' });
       onSaved(saved);
     }).catch(reason => {
@@ -252,7 +252,7 @@ function ListPrices({ client, list, admin, onSaved, onError, revision }: {
               <TableCell>{item.productName}
                 {reason && <span className="block text-muted-foreground">{reason}: no se usa en nuevas ventas</span>}</TableCell>
               <TableCell>{item.unitName}</TableCell>
-              <TableCell className="text-right tabular-nums">{decimal(item.price)}</TableCell>
+              <TableCell className="text-right tabular-nums">{unitPrice(item.price)}</TableCell>
               {admin && <TableCell>{!reason && <Button variant="outline" size="sm"
                 onClick={() => editPrice(item.productExternalId, item.unitName, item.price)}>
                 <Pencil aria-hidden="true" />Cambiar precio<span className="sr-only"> de {item.sku} en {item.unitName}</span>
