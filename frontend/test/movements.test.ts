@@ -129,3 +129,12 @@ test('a return reference names the sale by its code; other references keep their
     unit: 'Caja', sku: 'E2E-ROSA', pendingQuantity: '24.000', baseUnitName: 'unidad' });
   assert.match(referenceLabel(receipt), /^28\/10\/2026, 2:25:28\sp\.\sm\.: Recepción de compra de 2,000 Caja de E2E-ROSA \(pendiente: 24,000 unidad\)$/u);
 });
+
+test('a sale reference without its server reason still reads as a sale', () => {
+  // Review R3-reference-label-reason-dependency: never an empty name or a literal «null» in the selector.
+  for (const reason of ['', '   ', null as unknown as string]) {
+    const sale = entry({ kind: 'SALE', direction: 'OUT', reason, occurredAt: '2026-10-28T19:25:28Z',
+      commercialQuantity: '1.000', unit: 'unidad', sku: 'E2E-ROSA', pendingQuantity: '1.000', baseUnitName: 'unidad' });
+    assert.match(referenceLabel(sale), /^Venta, 28\/10\/2026, 2:25:28\sp\.\sm\.: 1,000 unidad de E2E-ROSA \(pendiente: 1,000 unidad\)$/u);
+  }
+});

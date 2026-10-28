@@ -59,3 +59,24 @@ test('a hint never blocks a value fixed without typing, such as a prefilled form
   dispatch('keydown', price, 'Enter');
   assert.equal(price.custom, 'Decimal no negativo.');
 });
+
+test('typing or choosing another option clears the hint; leaving the field does not', async () => {
+  // Review R3-formathints-input-clear-untested: the path that first regressed in the browser (task log L5).
+  const quantity = new Field('1,5', 'Número entero.', integer);
+  const unit = { tagName: 'SELECT' };
+  const { root, dispatch } = documentWith([quantity]);
+  explainFormatErrors(root);
+  const settled = () => new Promise(resolve => setTimeout(resolve, 0));
+  dispatch('invalid', quantity);
+  // The `change` a text field fires on blur, when the submit button is pressed, keeps the hint just shown.
+  dispatch('change', quantity);
+  await settled();
+  assert.equal(quantity.custom, 'Número entero.');
+  dispatch('input', quantity);
+  await settled();
+  assert.equal(quantity.custom, '');
+  dispatch('invalid', quantity);
+  dispatch('change', unit);
+  await settled();
+  assert.equal(quantity.custom, '');
+});

@@ -56,7 +56,9 @@ export function referenceCandidates(history: MovementHistoryEntry[], kind: Movem
 export function referenceLabel(item: MovementHistoryEntry): string {
   const detail = `${decimal(item.commercialQuantity)} ${item.unit} de ${item.sku}`
     + (item.pendingQuantity !== null ? ` (pendiente: ${decimal(item.pendingQuantity)} ${item.baseUnitName})` : '');
-  return item.kind === 'SALE' ? `${item.reason}, ${dateTime(item.occurredAt)}: ${detail}`
+  // Without that reason the entry still reads as a sale, never as an empty name.
+  const sale = item.reason?.trim() || kindLabel(item.kind);
+  return item.kind === 'SALE' ? `${sale}, ${dateTime(item.occurredAt)}: ${detail}`
     : `${dateTime(item.occurredAt)}: ${kindLabel(item.kind)} de ${detail}`;
 }
 
