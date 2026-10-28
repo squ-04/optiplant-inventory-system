@@ -35,8 +35,9 @@ export function explainFormatErrors(root: Document) {
   root.addEventListener('input', clear, true);
   root.addEventListener('change', event => { if (isSelect(event.target)) clear(); }, true);
   // A value can also become valid without any typing, such as a form prefilled by the view. Hints are re-checked right
-  // before the browser validates a submission (pressing a button or Enter), so a stale hint never blocks a valid form.
+  // before the browser validates a submission (a pointer press, Enter, or Space on a focused button), so a stale hint
+  // never blocks a valid form.
   const recheck = () => fields().forEach(field => { if (hinted.has(field)) check(field); });
   root.addEventListener('pointerdown', recheck, true);
-  root.addEventListener('keydown', event => { if ((event as KeyboardEvent).key === 'Enter') recheck(); }, true);
+  root.addEventListener('keydown', event => { if (['Enter', ' '].includes((event as KeyboardEvent).key)) recheck(); }, true);
 }

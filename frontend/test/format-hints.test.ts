@@ -80,3 +80,14 @@ test('typing or choosing another option clears the hint; leaving the field does 
   await settled();
   assert.equal(quantity.custom, '');
 });
+
+test('pressing Space on the submit button re-checks the hints too', () => {
+  // Review R3-formathints-space-submit: a keyboard user activates the focused button with Space.
+  const price = new Field('-5', 'Decimal no negativo.', integer);
+  const { root, dispatch } = documentWith([price]);
+  explainFormatErrors(root);
+  dispatch('invalid', price);
+  price.value = '125000';
+  dispatch('keydown', { tagName: 'BUTTON' }, ' ');
+  assert.equal(price.custom, '');
+});
