@@ -227,8 +227,9 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
       if (!failure.keepKey) setSaleKey(newIdempotencyKey());
       setOutcomeUnknown(failure.keepKey);
       if (failure.alreadyConfirmed) { onChanged(); void loadHistory(); }
-      if (listUnavailable(reason)) refreshLists();
-      if (reason instanceof ApiError && reason.status === 401) onError(reason);
+      // Deactivated between the re-read and the confirmation: same treatment as when the re-read finds it (H2).
+      if (listUnavailable(reason)) listGone();
+      else if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setFormError(failure.message);
     } finally { setBusy(false); }
   }
