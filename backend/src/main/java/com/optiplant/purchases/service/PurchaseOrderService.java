@@ -63,14 +63,26 @@ public class PurchaseOrderService {
         this.reader = reader;
     }
 
-    private record Context(long branchId, long actorId) {}
+    /**
+     * The operator's branch and identity. The role is authorization and is checked before any idempotent replay; the
+     * active branch is a rule of new effects, checked by {@link #active} inside the action, so a retry of a request
+     * committed before a deactivation still returns its original result (ARQ-007).
+     */
+    private record Context(long branchId, long actorId, boolean branchActive) {}
+
+    private static Context active(Context context) {
+        if (!context.branchActive()) {
+            throw new ApiException(409, "BRANCH_INACTIVE", "La sucursal está inactiva: conserva su historial pero no admite nuevas operaciones.");
+        }
+        return context;
+    }
 
     @Transactional
     public PurchaseOrderResponse create(SessionPrincipal principal, String key, PurchaseOrderRequest request) {
         IdempotencyService.requireKey(key);
         Context context = context(principal);
         return idempotency.execute(context.actorId(), CREATE, principal.branchExternalId().toString(), key, request, 201,
-            PurchaseOrderResponse.class, () -> reader.detail(insert(context, request), false));
+            PurchaseOrderResponse.class, () -> reader.detail(insert(active(context), request), false));
     }
 
     @Transactional
@@ -78,7 +90,7 @@ public class PurchaseOrderService {
         IdempotencyService.requireKey(key);
         Context context = context(principal);
         return idempotency.execute(context.actorId(), SUBMIT, order.toString(), key, Map.of("order", order), 200,
-            PurchaseOrderResponse.class, () -> reader.detail(submit(context, order), false));
+            PurchaseOrderResponse.class, () -> reader.detail(submit(active(context), order), false));
     }
 
     @Transactional
@@ -86,7 +98,7 @@ public class PurchaseOrderService {
         IdempotencyService.requireKey(key);
         Context context = context(principal);
         return idempotency.execute(context.actorId(), RECEIVE, order.toString(), key, Map.of("order", order), 200,
-            PurchaseOrderResponse.class, () -> reader.detail(receive(context, order), false));
+            PurchaseOrderResponse.class, () -> reader.detail(receive(active(context), order), false));
     }
 
     /** RF-0022: rewrites the supplier, conditions and lines of a draft; any other state is rejected unchanged. */
@@ -95,7 +107,7 @@ public class PurchaseOrderService {
         IdempotencyService.requireKey(key);
         Context context = context(principal);
         return idempotency.execute(context.actorId(), UPDATE, order.toString(), key, request, 200,
-            PurchaseOrderResponse.class, () -> reader.detail(update(context, order, request), false));
+            PurchaseOrderResponse.class, () -> reader.detail(update(active(context), order, request), false));
     }
 
     /** RF-0022: cancels a draft or pending order before its receipt, with an optional reason; stock never changes. */
@@ -105,7 +117,7 @@ public class PurchaseOrderService {
         Context context = context(principal);
         return idempotency.execute(context.actorId(), CANCEL, order.toString(), key,
             Map.of("order", order, "reason", reason == null ? "" : reason), 200,
-            PurchaseOrderResponse.class, () -> reader.detail(cancel(context, order, reason), false));
+            PurchaseOrderResponse.class, () -> reader.detail(cancel(active(context), order, reason), false));
     }
 
     private record Resolved(OperableUnits.Unit unit, PurchaseOrderRequest.Line line, BigDecimal base, BigDecimal net) {}
@@ -338,12 +350,9 @@ public class PurchaseOrderService {
         Map<String, Object> branch = jdbc.queryForList("SELECT id,active FROM identity_branch WHERE external_id=?",
             principal.branchExternalId()).stream().findFirst()
             .orElseThrow(() -> new ApiException(404, "BRANCH_NOT_FOUND", "No se encontró la sucursal."));
-        if (!(Boolean) branch.get("active")) {
-            throw new ApiException(409, "BRANCH_INACTIVE", "La sucursal está inactiva: conserva su historial pero no admite nuevas operaciones.");
-        }
         long actorId = jdbc.queryForObject("SELECT id FROM identity_user_account WHERE external_id=?", Long.class,
             principal.externalId());
-        return new Context(((Number) branch.get("id")).longValue(), actorId);
+        return new Context(((Number) branch.get("id")).longValue(), actorId, (Boolean) branch.get("active"));
     }
 
     private static String label(String status) {

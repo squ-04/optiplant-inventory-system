@@ -428,11 +428,18 @@ class PurchaseHttpTest {
         assertThat(status(id)).isEqualTo("PENDING");
         assertThat(receipts()).isZero();
 
-        // An inactive branch admits no new purchase.
+        // An inactive branch admits no new purchase, but a retry of a request committed before the deactivation still
+        // returns its original result instead of a rejection (ARQ-007).
+        String key = UUID.randomUUID().toString();
+        HttpResponse<String> committed = operator.post("/purchases/orders", body, key);
+        assertThat(committed.statusCode()).isEqualTo(201);
         jdbc.update("UPDATE identity_branch SET active=false WHERE external_id=?", a);
         HttpResponse<String> inactive = operator.post("/purchases/orders", body);
         assertThat(inactive.statusCode()).isEqualTo(409);
         assertThat(read(inactive).get("code").asText()).isEqualTo("BRANCH_INACTIVE");
+        HttpResponse<String> retried = operator.post("/purchases/orders", body, key);
+        assertThat(retried.statusCode()).as(retried.body()).isEqualTo(201);
+        assertThat(read(retried)).isEqualTo(read(committed));
         jdbc.update("UPDATE identity_branch SET active=true WHERE external_id=?", a);
 
         // A missing idempotency key is rejected before any effect.
