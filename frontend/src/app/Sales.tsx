@@ -4,7 +4,7 @@ import { Plus, ReceiptText, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { Branch, LocalCatalog, PriceList, Sale, SaleHistory, User } from '../lib/api/client.ts';
 import { lineNet, money, sum } from '../lib/purchases/purchases.ts';
-import { confirmationFailure, netUnitPrice, shortages, subtract } from '../lib/sales/sales.ts';
+import { MAX_SALE_LINES, confirmationFailure, netUnitPrice, shortages, shownDiscount } from '../lib/sales/sales.ts';
 import { listPriceOf } from '../lib/prices/prices.ts';
 import { newIdempotencyKey } from '../lib/inventory/movements.ts';
 import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
@@ -265,7 +265,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
             {catalog && catalog.items.length === 0 && <p className="text-muted-foreground">
               La sucursal no tiene productos habilitados. El administrador los habilita desde el catálogo.
             </p>}
-            <Button type="button" variant="outline" disabled={draft.lines.length >= 100}
+            <Button type="button" variant="outline" disabled={draft.lines.length >= MAX_SALE_LINES}
               onClick={() => setDraft(previous => ({ ...previous, lines: [...previous.lines, emptyLine()] }))}>
               <Plus aria-hidden="true" />Agregar producto
             </Button>
@@ -273,7 +273,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
 
           <dl className="sale-totals">
             <div><dt>Subtotal de lista</dt><dd>{totalGross === null ? '—' : decimal(money(totalGross))}</dd></div>
-            <div><dt>Descuentos</dt><dd>{totalGross === null || totalNet === null ? '—' : decimal(money(subtract(totalGross, totalNet)))}</dd></div>
+            <div><dt>Descuentos</dt><dd>{totalGross === null || totalNet === null ? '—' : decimal(shownDiscount(totalGross, totalNet))}</dd></div>
             <div className="sale-totals-net"><dt>Total neto estimado</dt><dd>{totalNet === null ? '—' : `${decimal(money(totalNet))} COP`}</dd></div>
           </dl>
           <p className="text-muted-foreground">El servidor valida las existencias de todas las líneas al confirmar y fija el total exacto.</p>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError } from '../src/lib/api/client.ts';
-import { baseQuantity, compareDecimal, confirmationFailure, netUnitPrice, shortages, subtract } from '../src/lib/sales/sales.ts';
+import { baseQuantity, compareDecimal, confirmationFailure, netUnitPrice, shortages, shownDiscount, subtract } from '../src/lib/sales/sales.ts';
 
 test('net unit price applies the line discount exactly', () => {
   // RF-0029-CA-02: price 100 with 10% nets 90; 0% keeps 100 and 100% produces zero.
@@ -21,6 +21,12 @@ test('decimal helpers compare, multiply and subtract exact strings', () => {
   assert.equal(subtract('1300', '1280'), '20');
   assert.equal(subtract('100.5', '0.25'), '100.25');
   assert.equal(subtract('1', '0.001'), '0.999');
+});
+
+test('the shown discount is the shown subtotal minus the shown net', () => {
+  // Exact gross 1.005 and net 0.5025 show as 1.01 and 0.50: the discount shows 0.51, not the rounded exact 0.50.
+  assert.equal(shownDiscount('1.005', '0.5025'), '0.51');
+  assert.equal(shownDiscount('3000', '2700'), '300.00');
 });
 
 test('shortages add every line of a product against its available base quantity', () => {

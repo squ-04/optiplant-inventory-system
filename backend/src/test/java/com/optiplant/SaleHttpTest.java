@@ -239,6 +239,17 @@ class SaleHttpTest {
         assertThat(effects()).isEqualTo(effects);
     }
 
+    @Test void displayedTotalsStayConsistentWhenExactAmountsHaveMoreThanTwoDecimals() throws Exception {
+        stock(operator, product, "5");
+        price(list, product, "unidad", "1.005");
+        JsonNode sale = read(operator.post("/sales", sale(List.of(line(product, "unidad", "1", "50")))));
+        // Exact gross 1.005 and net 0.5025: the shown discount is the shown subtotal minus the shown net total.
+        assertThat(sale.get("exactTotalNet").asText()).isEqualTo("0.5025");
+        assertThat(sale.get("grossTotal").asText()).isEqualTo("1.01");
+        assertThat(sale.get("totalNet").asText()).isEqualTo("0.50");
+        assertThat(sale.get("discountTotal").asText()).isEqualTo("0.51");
+    }
+
     @Test void insufficientStockRejectsTheWholeSaleWithoutRecordOrWithdrawal() throws Exception {
         stock(operator, product, "3");
         List<Integer> effects = effects();

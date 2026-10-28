@@ -131,8 +131,11 @@ public class SaleQueryService {
             }, rows.stream().map(Row::id).toArray());
         return rows.stream().map(row -> {
             Amounts amounts = totals.get(row.id());
+            BigDecimal gross = rounded(amounts.gross());
+            BigDecimal net = rounded(amounts.net());
+            // The shown discount is derived from the shown amounts, so subtotal − discount = net always holds on the record.
             return new SaleResponse(row.externalId(), row.code(), row.branch(), row.confirmedAt().toInstant(), row.actor(),
-                row.operation(), money(amounts.gross()), money(amounts.gross().subtract(amounts.net())), money(amounts.net()),
+                row.operation(), gross.toPlainString(), gross.subtract(net).toPlainString(), net.toPlainString(),
                 plain(amounts.net()), List.copyOf(lines.get(row.id())));
         }).toList();
     }
@@ -143,8 +146,12 @@ public class SaleQueryService {
     }
 
     /** Monetary display precision: 2 decimals, half up (INC-013/D03). */
+    private static BigDecimal rounded(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
     private static String money(BigDecimal amount) {
-        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+        return rounded(amount).toPlainString();
     }
 
     private static String plain(BigDecimal value) {

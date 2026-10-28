@@ -1,6 +1,9 @@
 import { ApiError } from '../api/client.ts';
 import { keepsIdempotencyKey } from '../inventory/movements.ts';
-import { lineNet, sum } from '../purchases/purchases.ts';
+import { lineNet, money, sum } from '../purchases/purchases.ts';
+
+/** Lines per sale; mirrors the server limit `SaleRequest.MAX_LINES`. */
+export const MAX_SALE_LINES = 100;
 
 /**
  * Presentation rules for sales (RF-0027–RF-0029). The server takes the price from the chosen list, validates stock when
@@ -70,3 +73,6 @@ export function confirmationFailure(reason: unknown): { message: string; keepKey
       : reason instanceof Error ? reason.message : 'No se pudo confirmar la venta.';
   return { message, keepKey: keepsIdempotencyKey(reason), alreadyConfirmed: false };
 }
+
+/** Shown discount of a sale: shown list subtotal minus shown net total, so the displayed amounts always add up. */
+export const shownDiscount = (gross: string, net: string) => subtract(money(gross), money(net));
