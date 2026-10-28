@@ -135,7 +135,7 @@ export interface PurchaseLine {
   commercialQuantity: string; baseQuantity: string; baseUnitName: string; unitPrice: string; discountPercent: string;
   /** Line net at 2 decimals for display; `exactNetAmount` keeps every decimal. */
   netAmount: string; exactNetAmount: string;
-  /** Net cost per base unit fixed by the receipt; null before it. */
+  /** Net cost per base unit fixed by the receipt (inventory valuation); null before it and always for operators. */
   unitBaseCost: string | null;
 }
 export interface PurchaseEvent { fromStatus: PurchaseStatus | null; toStatus: PurchaseStatus; occurredAt: string; actor: PurchasePerson }

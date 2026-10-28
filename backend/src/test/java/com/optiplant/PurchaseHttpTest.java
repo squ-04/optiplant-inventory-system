@@ -294,7 +294,10 @@ class PurchaseHttpTest {
 
         // RF-0023-CA-02: box of 12 at 120 with 10% discount → net 108 per box and cost 9 per base unit.
         assertThat(body.get("status").asText()).isEqualTo("RECEIVED");
-        assertThat(body.get("lines").get(0).get("unitBaseCost").asText()).isEqualTo("9.000000");
+        // The operator does not receive the valuation cost (INC-003/D04); supervisors read it from the detail.
+        assertThat(body.get("lines").get(0).get("unitBaseCost").isNull()).isTrue();
+        Browser manager = account("MANAGER", a);
+        assertThat(read(manager.get("/purchases/orders/" + id)).get("lines").get(0).get("unitBaseCost").asText()).isEqualTo("9.000000");
         assertThat(body.get("lines").get(0).get("exactNetAmount").asText()).isEqualTo("216");
         assertThat(balance(a, product)).containsExactly("24", "216", "9");
 
@@ -345,6 +348,21 @@ class PurchaseHttpTest {
     }
 
     String externalId(String body) { return json.readTree(body).get("externalId").asText(); }
+
+    @Test void onlySupervisorsReadTheValuationCostOfReceivedLines() throws Exception {
+        String id = pending(supplier("Viveros"), 0).get("externalId").asText();
+        assertThat(operator.post("/purchases/orders/" + id + "/receive", Map.of()).statusCode()).isEqualTo(200);
+        // INC-003/D04: the operator keeps the conditions it registered, but not the cost at which stock was valued.
+        JsonNode own = read(operator.get("/purchases/orders/" + id)).get("lines").get(0);
+        assertThat(own.get("unitBaseCost").isNull()).isTrue();
+        assertThat(List.of(own.get("unitPrice").asText(), own.get("discountPercent").asText(), own.get("netAmount").asText()))
+            .containsExactly("120", "10", "216.00");
+        assertThat(read(operator.get("/purchases/orders")).get("items").get(0).get("lines").get(0).get("unitBaseCost").isNull()).isTrue();
+        Browser manager = account("MANAGER", a);
+        assertThat(read(manager.get("/purchases/orders/" + id)).get("lines").get(0).get("unitBaseCost").asText()).isEqualTo("9.000000");
+        assertThat(read(admin.get("/purchases/orders?branch=" + a)).get("items").get(0).get("lines").get(0).get("unitBaseCost").asText())
+            .isEqualTo("9.000000");
+    }
 
     @Test void partialOrInvalidReceiptsChangeNothing() throws Exception {
         String supplier = supplier("Viveros");

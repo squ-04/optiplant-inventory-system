@@ -77,7 +77,8 @@ public class PurchaseHistoryService {
             """ + where, arguments.toArray());
         if (status != null) { where.append(" AND o.status=?"); arguments.add(status); }
         arguments.add(rows);
-        List<PurchaseOrderResponse> items = reader.list(where + " ORDER BY o.created_at DESC,o.id DESC LIMIT ?", arguments);
+        List<PurchaseOrderResponse> items = reader.list(where + " ORDER BY o.created_at DESC,o.id DESC LIMIT ?", arguments,
+            valuation(principal));
         OffsetDateTime readAt = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP", OffsetDateTime.class);
         return new PurchaseHistoryResponse(readAt.toInstant(), consulted, new Summary(count(counts, "orders"),
             count(counts, "drafts"), count(counts, "pending"), count(counts, "received"), count(counts, "cancelled")), items);
@@ -90,7 +91,12 @@ public class PurchaseHistoryService {
                 + "JOIN identity_branch b ON b.id=o.branch_id WHERE o.external_id=?", order).stream().findFirst()
             .orElseThrow(() -> new ApiException(404, "PURCHASE_NOT_FOUND", "No se encontró la orden de compra."));
         policy.requireHistoryRead(principal, (UUID) found.get("branch"));
-        return reader.detail(((Number) found.get("id")).longValue());
+        return reader.detail(((Number) found.get("id")).longValue(), valuation(principal));
+    }
+
+    /** Operators read the conditions of their purchases, not the valuation cost (INC-003/D04). */
+    private static boolean valuation(SessionPrincipal principal) {
+        return !"OPERATOR".equals(principal.role());
     }
 
     private static int count(Map<String, Object> counts, String key) {

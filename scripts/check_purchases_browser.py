@@ -113,8 +113,10 @@ STAGES = {
       await page.getByText(/Recepción de OC-\\d+ confirmada: el inventario de Sucursal Sur aumentó por las 1 líneas\\./).waitFor();
       check(sent.length === 1, 'Se esperaba una sola recepción; enviadas: ' + sent.length);
       const cost = await detail.getByRole('row').filter({ hasText: config.sku }).getByRole('cell').allInnerTexts();
-      check(cost.some(c => c.startsWith('108,00') || c.startsWith('216,00')) && cost.some(c => c.startsWith('9,000000')),
+      // INC-003/D04: the operator keeps the conditions it registered, but not the valuation cost.
+      check(cost.some(c => c.startsWith('216,00')) && !cost.some(c => c.startsWith('9,000000')),
         'Línea recibida inesperada: ' + cost.join(' | '));
+      check(await detail.getByRole('columnheader', { name: 'Costo por unidad base' }).count() === 0, 'El operador ve el costo de valoración');
       check(await detail.getByRole('button', { name: 'Confirmar recepción' }).count() === 0, 'La recepción sigue disponible');
       // RF-0024-CA-01: the entry exists in the movement history, without a manual movement.
       await page.getByRole('link', { name: 'Movimientos', exact: true }).click();
@@ -123,7 +125,7 @@ STAGES = {
       const entry = await receipt.getByRole('cell').allInnerTexts();
       check(entry.some(c => c.startsWith('+2,000 caja')) && entry.some(c => c.includes('Operador Sur')), 'Ingreso inesperado: ' + entry.join(' | '));
       await logout();
-      return 'borrador con neto 216,00, enviado y recibido con confirmación; costo 9 por unidad base e ingreso +2,000 caja en el historial';""",
+      return 'borrador con neto 216,00, enviado y recibido con confirmación; sin costo de valoración para el operador e ingreso +2,000 caja en el historial';""",
     "gerente-historico": """
       await login(config.manager);
       await page.getByRole('link', { name: 'Compras', exact: true }).click();
@@ -135,8 +137,12 @@ STAGES = {
       check(row.some(c => c === 'Recibida'), 'Estado inesperado: ' + row.join(' | '));
       await page.getByRole('button', { name: /^Ver detalle de OC-/ }).first().click();
       check(await page.locator('#purchase-detail').getByRole('button', { name: 'Confirmar recepción' }).count() === 0, 'El gerente puede recibir');
+      const costRow = page.locator('#purchase-detail').getByRole('row').filter({ hasText: config.sku }).first();
+      await costRow.waitFor({ timeout: 10000 });
+      const line = await costRow.getByRole('cell').allInnerTexts();
+      check(line.some(c => c.startsWith('9,000000')), 'El gerente no ve el costo por unidad base: ' + line.join(' | '));
       await logout();
-      return 'histórico por producto con la compra recibida; sin acciones de registro ni recepción';""",
+      return 'histórico por producto con la compra recibida y su costo de 9 por unidad base; sin acciones de registro ni recepción';""",
     "administrador-red-movil": """
       await login(config.admin);
       await page.getByRole('link', { name: 'Compras', exact: true }).click();

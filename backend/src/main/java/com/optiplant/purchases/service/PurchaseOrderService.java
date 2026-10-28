@@ -31,7 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
  * transition to pending receipt that fixes the supplier name and line snapshots (RF-0021-CA-03) and the complete receipt
  * (RF-0024). The receipt changes stock only through {@link InventoryLedger} (ARQ PEN-005): one {@code PURCHASE_RECEIPT}
  * operation linked to the order, with one valued entry per line at its net cost per base unit. Only operators execute
- * purchases (§5.2); managers and administrators consult them through {@link PurchaseHistoryService}.
+ * purchases (§5.2); managers and administrators consult them through {@link PurchaseHistoryService}. Since only
+ * operators call these operations, their responses never carry the valuation cost (INC-003/D04).
  */
 @Service
 public class PurchaseOrderService {
@@ -65,7 +66,7 @@ public class PurchaseOrderService {
         IdempotencyService.requireKey(key);
         Context context = context(principal);
         return idempotency.execute(context.actorId(), CREATE, principal.branchExternalId().toString(), key, request, 201,
-            PurchaseOrderResponse.class, () -> reader.detail(insert(context, request)));
+            PurchaseOrderResponse.class, () -> reader.detail(insert(context, request), false));
     }
 
     @Transactional
@@ -73,7 +74,7 @@ public class PurchaseOrderService {
         IdempotencyService.requireKey(key);
         Context context = context(principal);
         return idempotency.execute(context.actorId(), SUBMIT, order.toString(), key, Map.of("order", order), 200,
-            PurchaseOrderResponse.class, () -> reader.detail(submit(context, order)));
+            PurchaseOrderResponse.class, () -> reader.detail(submit(context, order), false));
     }
 
     @Transactional
@@ -81,7 +82,7 @@ public class PurchaseOrderService {
         IdempotencyService.requireKey(key);
         Context context = context(principal);
         return idempotency.execute(context.actorId(), RECEIVE, order.toString(), key, Map.of("order", order), 200,
-            PurchaseOrderResponse.class, () -> reader.detail(receive(context, order)));
+            PurchaseOrderResponse.class, () -> reader.detail(receive(context, order), false));
     }
 
     private long insert(Context context, PurchaseOrderRequest request) {

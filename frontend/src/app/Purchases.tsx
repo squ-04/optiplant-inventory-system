@@ -347,7 +347,7 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
     </>}
 
     {detailError && <p role="alert">{detailError}</p>}
-    {selected && <PurchaseDetail order={selected} action={actionFor(user.role, selected)} busy={busy} error={actionError}
+    {selected && <PurchaseDetail order={selected} action={actionFor(user.role, selected)} valued={!operator} busy={busy} error={actionError}
       onAction={action => void transition(selected, action)} onClose={() => setSelected(null)} />}
   </div>;
 }
@@ -380,8 +380,9 @@ function HistoryTable({ history, selected, onOpen }: { history: PurchaseHistory;
   </div>;
 }
 
-function PurchaseDetail({ order, action, busy, error, onAction, onClose }: {
-  order: PurchaseOrder; action: PurchaseAction | null; busy: boolean; error: string;
+// INC-003/D04: the server sends the valuation cost to supervisors only; operators see the conditions they registered.
+function PurchaseDetail({ order, action, valued, busy, error, onAction, onClose }: {
+  order: PurchaseOrder; action: PurchaseAction | null; valued: boolean; busy: boolean; error: string;
   onAction: (action: PurchaseAction) => void; onClose: () => void;
 }) {
   const received = order.status === 'RECEIVED';
@@ -402,13 +403,14 @@ function PurchaseDetail({ order, action, busy, error, onAction, onClose }: {
     <div className="table-scroll" role="region" aria-label={`Productos de ${order.code}`} tabIndex={0}>
       <Table className="purchase-lines-table">
         <TableCaption>Total neto: {decimal(order.totalNet)} COP{(order.exactTotalNet.split('.')[1] ?? '').length > 2
-          ? ` (exacto: ${decimal(order.exactTotalNet)})` : ''}. {received
-          ? 'El costo por unidad base es el neto de la línea dividido por su equivalente, fijado al recibir.'
-          : 'El costo por unidad base se fija al confirmar la recepción.'}</TableCaption>
+          ? ` (exacto: ${decimal(order.exactTotalNet)})` : ''}.{valued ? (received
+          ? ' El costo por unidad base es el neto de la línea dividido por su equivalente, fijado al recibir.'
+          : ' El costo por unidad base se fija al confirmar la recepción.') : ''}</TableCaption>
         <TableHeader><TableRow>
           <TableHead scope="col">Producto</TableHead><TableHead className="quantity" scope="col">Cantidad</TableHead>
           <TableHead className="quantity" scope="col">Precio unitario</TableHead><TableHead className="quantity" scope="col">Descuento</TableHead>
-          <TableHead className="quantity" scope="col">Neto</TableHead><TableHead className="quantity" scope="col">Costo por unidad base</TableHead>
+          <TableHead className="quantity" scope="col">Neto</TableHead>
+          {valued && <TableHead className="quantity" scope="col">Costo por unidad base</TableHead>}
         </TableRow></TableHeader>
         <TableBody>{order.lines.map(line => <TableRow key={line.lineNo}>
           <TableCell><span className="font-semibold">{line.sku}</span> {line.productName}</TableCell>
@@ -417,8 +419,8 @@ function PurchaseDetail({ order, action, busy, error, onAction, onClose }: {
           <TableCell className="quantity">{decimal(line.unitPrice)}<span className="cell-note">por {line.unit}</span></TableCell>
           <TableCell className="quantity">{decimal(line.discountPercent)} %</TableCell>
           <TableCell className="quantity">{decimal(line.netAmount)}</TableCell>
-          <TableCell className="quantity">{line.unitBaseCost === null ? '—' : <>{decimal(line.unitBaseCost)}
-            <span className="cell-note">por {line.baseUnitName}</span></>}</TableCell>
+          {valued && <TableCell className="quantity">{line.unitBaseCost === null ? '—' : <>{decimal(line.unitBaseCost)}
+            <span className="cell-note">por {line.baseUnitName}</span></>}</TableCell>}
         </TableRow>)}</TableBody>
       </Table>
     </div>

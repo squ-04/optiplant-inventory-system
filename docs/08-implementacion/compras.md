@@ -13,6 +13,7 @@ Guía de la implementación de RF-0021 (crear órdenes de compra), RF-0023 (regi
 - **Sin recepción parcial (INC-011/D02).** La recepción no admite datos en el cuerpo: enviar líneas o cantidades responde `400 PARTIAL_RECEIPT_NOT_SUPPORTED` y no modifica ni la orden ni el inventario.
 - **Histórico (RF-0025, INC-011/D06).** Se consulta por proveedor y por producto, y opcionalmente por estado. Incluye borradores, pendientes, recibidas y canceladas, con un resumen de conteos por estado calculado en el servidor. El resumen distingue las órdenes de las compras recibidas. El gerente y el operador consultan su sucursal; el administrador, una sucursal o toda la red.
 - **Permisos (§5.2).** Solo el operador de la sucursal registra, envía y recibe órdenes. El gerente y el administrador reciben `403 PURCHASE_FORBIDDEN`. Una orden de otra sucursal responde `404` a las escrituras y `403` a la consulta, sin revelar datos.
+- **Costo de valoración solo para supervisión (INC-003/D04).** El operador ve las condiciones que registra: precio, descuento, neto y total. No recibe el costo por unidad base fijado al recibir (`unitBaseCost` llega `null`), porque es valoración de inventario. Es el mismo criterio que ya aplica el historial de movimientos. El gerente y el administrador sí lo reciben. La restricción se aplica en el servidor; la interfaz solo omite la columna.
 - **Regla compartida.** `OperableUnits` (catálogo) resuelve el producto operable y su unidad activa para los movimientos manuales y las compras; no hay dos implementaciones de la misma regla.
 - **Sin migración.** Las tablas V2/V4/V6 ya contenían proveedores, órdenes, líneas, eventos de estado y los vínculos con inventario.
 
@@ -37,9 +38,9 @@ Los importes se devuelven a 2 decimales (`netAmount`, `totalNet`) y exactos (`ex
 2. En el catálogo, dé de alta un producto con unidad base `unidad` indivisible, habilítelo en una sucursal y agréguele la unidad `caja` con factor 12.
 3. Con el operador de esa sucursal, abra **Compras › Nueva orden de compra**: proveedor `PRV-VALLE`, plazo 0, 2 `caja` a 120 con descuento 10. El neto estimado muestra 216,00 COP. Pulse **Crear borrador** y compruebe que las existencias del catálogo no cambian.
 4. Como administrador, renombre el proveedor a «Viveros B». Con el operador, abra el detalle de la orden y pulse **Enviar a recepción**: el proveedor aparece como «Viveros B». Renómbrelo de nuevo: la orden conserva «Viveros B».
-5. Pulse **Confirmar recepción**. El diálogo explica que entran todas las líneas; Escape o Cancelar no envían nada. Al confirmar: la orden queda «Recibida», con costo 9,000000 por unidad y vencimiento en la fecha de hoy. **Movimientos** muestra «Recepción de compra» +2,000 caja (24 unidades) con el operador como responsable; en el catálogo, el físico sube en 24.
+5. Pulse **Confirmar recepción**. El diálogo explica que entran todas las líneas; Escape o Cancelar no envían nada. Al confirmar: la orden queda «Recibida» con vencimiento en la fecha de hoy; el operador no ve la columna de costo. **Movimientos** muestra «Recepción de compra» +2,000 caja (24 unidades) con el operador como responsable; en el catálogo, el físico sube en 24.
 6. Repita la recepción desde la API con otra clave: responde `409 PURCHASE_ALREADY_RECEIVED` y las existencias no cambian.
-7. Con el gerente, abra **Compras**: no puede crear ni recibir órdenes; filtre por producto y por proveedor y compruebe los estados y el resumen. Con el administrador, consulte toda la red o una sucursal.
+7. Con el gerente, abra **Compras**: no puede crear ni recibir órdenes. Filtre por producto y por proveedor y compruebe los estados y el resumen; en el detalle de la orden recibida ve el costo de 9,000000 por unidad. Con el administrador, consulte toda la red o una sucursal.
 
 ## Alcance y límites
 
@@ -50,6 +51,6 @@ Los importes se devuelven a 2 decimales (`netAmount`, `totalNet`) y exactos (`ex
 
 ## Verificaciones
 
-- Backend: `PurchaseHttpTest` (9 escenarios: proveedores, creación y condiciones, validaciones sin efectos, nombre histórico, recepción por el servicio de inventario con valoración y vencimiento, repetición, recepción parcial o bloqueada, permisos e histórico) y suite completa con el runner Docker de `backend/README.md`.
+- Backend: `PurchaseHttpTest` (10 escenarios: proveedores, visibilidad del costo de valoración por perfil, creación y condiciones, validaciones sin efectos, nombre histórico, recepción por el servicio de inventario con valoración y vencimiento, repetición, recepción parcial o bloqueada, permisos e histórico) y suite completa con el runner Docker de `backend/README.md`.
 - Frontend: `pnpm test` (`test/purchases.test.ts`: neto exacto, redondeo de presentación, acciones por perfil, plazo y contrato del cliente) y `pnpm build`.
 - Navegador: `python3 scripts/check_purchases_browser.py` levanta una pila Compose desechable y recorre con Playwright el alta de proveedores, la orden con recepción, el histórico del gerente y la vista de red en móvil (390 px).

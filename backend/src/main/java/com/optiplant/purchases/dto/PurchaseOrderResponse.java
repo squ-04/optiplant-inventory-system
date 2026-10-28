@@ -19,7 +19,10 @@ public record PurchaseOrderResponse(UUID externalId, String code, String status,
 
     public record Person(String code, String fullName) {}
 
-    /** {@code unitBaseCost} is the net cost per base unit fixed by the receipt; null before it. */
+    /**
+     * {@code unitBaseCost} is the net cost per base unit fixed by the receipt: inventory valuation, null before the
+     * receipt and always null for operators (INC-003/D04).
+     */
     public record Line(int lineNo, UUID productExternalId, String sku, String productName, String unit, String factor,
                        String commercialQuantity, String baseQuantity, String baseUnitName, String unitPrice,
                        String discountPercent, String netAmount, String exactNetAmount, String unitBaseCost) {}

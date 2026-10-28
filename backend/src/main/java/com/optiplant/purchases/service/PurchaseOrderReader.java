@@ -18,7 +18,11 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/** Builds purchase order responses from their stored snapshots; authorization is checked by the callers. */
+/**
+ * Builds purchase order responses from their stored snapshots; authorization is checked by the callers. The cost per
+ * base unit fixed by a receipt is inventory valuation: it is returned only when {@code valuation} is true, never to
+ * operators (INC-003/D04), like the movement history. Prices, discounts and nets are the document's own conditions.
+ */
 @Component
 public class PurchaseOrderReader {
     private static final String ORDER = """
@@ -38,8 +42,8 @@ public class PurchaseOrderReader {
     }
 
     /** The full order with its lines and state history. */
-    public PurchaseOrderResponse detail(long orderId) {
-        PurchaseOrderResponse order = orders(ORDER + "WHERE o.id=?", List.of(orderId), false).getFirst();
+    public PurchaseOrderResponse detail(long orderId, boolean valuation) {
+        PurchaseOrderResponse order = orders(ORDER + "WHERE o.id=?", List.of(orderId), false, valuation).getFirst();
         List<Event> events = jdbc.query("""
             SELECT e.from_status,e.to_status,e.occurred_at,u.code,u.full_name FROM purchases_event e
             JOIN identity_user_account u ON u.id=e.actor_id WHERE e.order_id=? ORDER BY e.sequence_no""",
@@ -51,15 +55,15 @@ public class PurchaseOrderReader {
     }
 
     /** Orders selected by {@code where} (appended to the base query), each with its lines and without events. */
-    public List<PurchaseOrderResponse> list(String where, List<Object> arguments) {
-        return orders(ORDER + where, arguments, true);
+    public List<PurchaseOrderResponse> list(String where, List<Object> arguments, boolean valuation) {
+        return orders(ORDER + where, arguments, true, valuation);
     }
 
     private record Row(long id, UUID externalId, String code, String status, int term, OffsetDateTime createdAt,
                        OffsetDateTime receivedAt, String dueDate, Supplier supplier, Branch branch, Person creator,
                        Person receiver, UUID receipt) {}
 
-    private List<PurchaseOrderResponse> orders(String sql, List<Object> arguments, boolean listing) {
+    private List<PurchaseOrderResponse> orders(String sql, List<Object> arguments, boolean listing, boolean valuation) {
         List<Row> rows = jdbc.query(sql, (r, i) -> new Row(r.getLong("id"), r.getObject("external_id", UUID.class),
             r.getString("code"), r.getString("status"), r.getInt("payment_term_days"),
             r.getObject("created_at", OffsetDateTime.class), r.getObject("received_at", OffsetDateTime.class),
@@ -90,7 +94,7 @@ public class PurchaseOrderReader {
                     plain(r.getBigDecimal("factor_snapshot")), r.getBigDecimal("commercial_qty").setScale(3).toPlainString(),
                     r.getBigDecimal("base_qty").setScale(3).toPlainString(), r.getString("base_unit_name"),
                     plain(r.getBigDecimal("gross_unit_price")), plain(r.getBigDecimal("discount_pct")), money(net), plain(net),
-                    cost == null ? null : cost.setScale(6).toPlainString()));
+                    cost == null || !valuation ? null : cost.setScale(6).toPlainString()));
             }, rows.stream().map(Row::id).toArray());
         return rows.stream().map(row -> new PurchaseOrderResponse(row.externalId(), row.code(), row.status(), row.branch(),
             row.supplier(), row.term(), row.createdAt().toInstant(), row.creator(),
