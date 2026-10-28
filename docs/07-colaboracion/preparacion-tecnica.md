@@ -52,7 +52,7 @@ El hook sigue validando los bytes de los commits enviados, no los cambios sin co
 
 ## Aislamiento y límites de la evidencia
 
-La prueba de humo genera credenciales y un nombre Compose exclusivos, publica puertos locales libres y utiliza un volumen nuevo. Al terminar elimina **solo el volumen desechable de esa prueba**, nunca el `pgdata` del entorno personal. El directorio temporal externo se informa para limpieza posterior; puede contener secretos efímeros y no debe publicarse.
+La prueba de humo genera credenciales y un nombre Compose exclusivos, publica puertos locales libres y utiliza un volumen nuevo. Al terminar elimina **solo el volumen desechable y las imágenes construidas de esa prueba** (`down --volumes --rmi local`), nunca el `pgdata` del entorno personal ni las imágenes base compartidas. Cada nombre exclusivo genera imágenes `<proyecto>-backend` y `<proyecto>-frontend` que `down` conserva por defecto; todo script que levante un proyecto Compose propio debe retirarlas igual, y `odd/probes/test_compose_teardown.py` lo comprueba. El directorio temporal externo se informa para limpieza posterior; puede contener secretos efímeros y no debe publicarse.
 
 La demostración HTTP local no acredita HTTPS productivo. El navegador no guarda contraseñas ni identificadores de sesión en almacenamiento web. La API conserva CSRF, cookies `HttpOnly` y CORS explícito con credenciales. Las reglas de negocio pendientes no deben inferirse del endpoint técnico `/api/v1/bootstrap`.
 

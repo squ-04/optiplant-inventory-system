@@ -224,8 +224,8 @@ def main():
             subprocess.run(browser + ["close"], cwd=directory, capture_output=True, timeout=30, check=False)
         except (OSError, subprocess.SubprocessError):
             pass
-        # Only the new, uniquely named test project's disposable volume is removed.
-        result = compose("down", "--volumes", "--remove-orphans", check=False, timeout=180)
+        # Only the new, uniquely named test project's disposable volume and locally built images are removed.
+        result = compose("down", "--volumes", "--rmi", "local", "--remove-orphans", check=False, timeout=180)
         print("Directorio temporal de prueba (retirar tras inspección):", directory)
         if result.returncode:
             print(f"Limpieza pendiente del proyecto aislado {project}", file=sys.stderr)
