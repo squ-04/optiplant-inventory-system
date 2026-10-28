@@ -56,8 +56,22 @@ public class InventoryLedger {
         record Historical(BigDecimal unitCost) implements Cost {}
     }
 
+    /**
+     * Names fixed by a source document line (copy from reference). A movement posted for a document keeps the names
+     * of that document even if the catalog changed after it was committed.
+     */
+    public record Snapshot(String sku, String productName, String unitName) {}
+
+    /** {@code snapshot} is null for movements without a source document: they take the current catalog names. */
     public record Line(long productId, long productUnitId, BigDecimal factor, BigDecimal commercialQty, BigDecimal baseQty,
-                       Direction direction, Cost cost, Long purchaseLineId, Long saleLineId, Long originalMovementId) {}
+                       Direction direction, Cost cost, Long purchaseLineId, Long saleLineId, Long originalMovementId,
+                       Snapshot snapshot) {
+        public Line(long productId, long productUnitId, BigDecimal factor, BigDecimal commercialQty, BigDecimal baseQty,
+                    Direction direction, Cost cost, Long purchaseLineId, Long saleLineId, Long originalMovementId) {
+            this(productId, productUnitId, factor, commercialQty, baseQty, direction, cost, purchaseLineId, saleLineId,
+                originalMovementId, null);
+        }
+    }
 
     public record Operation(Kind kind, long branchId, long actorId, String reason, Long purchaseOrderId, Long saleId,
                             Long originalOperationId, List<Line> lines) {}
@@ -122,11 +136,14 @@ public class InventoryLedger {
                 INSERT INTO inventory_movement(external_id,operation_id,branch_id,product_id,product_unit_id,direction,
                     commercial_qty,base_qty,factor_snapshot,sku_snapshot,product_name_snapshot,unit_name_snapshot,
                     historical_base_cost,purchase_line_id,sale_line_id,original_movement_id)
-                SELECT ?,?,?,p.id,u.id,?,?,?,?,p.sku,p.name,u.name,?,?,?,? FROM catalog_product p
+                SELECT ?,?,?,p.id,u.id,?,?,?,?,coalesce(?,p.sku),coalesce(?,p.name),coalesce(?,u.name),?,?,?,?
+                FROM catalog_product p
                 JOIN catalog_product_unit u ON u.product_id=p.id WHERE p.id=? AND u.id=?
                 RETURNING id""", Long.class,
                 movementExternalId, operationId, operation.branchId(), line.direction().name(), line.commercialQty(),
-                line.baseQty(), line.factor(), value.appliedCost(), line.purchaseLineId(), line.saleLineId(),
+                line.baseQty(), line.factor(), line.snapshot() == null ? null : line.snapshot().sku(),
+                line.snapshot() == null ? null : line.snapshot().productName(),
+                line.snapshot() == null ? null : line.snapshot().unitName(), value.appliedCost(), line.purchaseLineId(), line.saleLineId(),
                 line.originalMovementId(), line.productId(), line.productUnitId());
             jdbc.update("INSERT INTO inventory_valuation_component(movement_id,component_kind,amount) VALUES (?,'BASE',?)",
                 movementId, value.baseAmount());

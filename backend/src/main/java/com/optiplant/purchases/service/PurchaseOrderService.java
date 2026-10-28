@@ -177,7 +177,8 @@ public class PurchaseOrderService {
                 + "la orden " + order.code() + " está " + label(order.status()) + ". No se modificó el inventario.");
         }
         List<Map<String, Object>> rows = jdbc.queryForList("""
-            SELECT id,line_no,product_id,product_unit_id,factor_snapshot,commercial_qty,base_qty,gross_unit_price,discount_pct
+            SELECT id,line_no,product_id,product_unit_id,factor_snapshot,commercial_qty,base_qty,gross_unit_price,discount_pct,
+                sku_snapshot,product_name_snapshot,unit_name_snapshot
             FROM purchases_line WHERE order_id=? ORDER BY line_no""", order.id());
         List<InventoryLedger.Line> lines = new ArrayList<>();
         for (Map<String, Object> row : rows) {
@@ -194,7 +195,8 @@ public class PurchaseOrderService {
             jdbc.update("UPDATE purchases_line SET historical_base_cost=? WHERE id=?", cost, lineId);
             lines.add(new InventoryLedger.Line(productId, ((Number) row.get("product_unit_id")).longValue(), factor,
                 (BigDecimal) row.get("commercial_qty"), (BigDecimal) row.get("base_qty"), Direction.IN, new Cost.Explicit(cost),
-                lineId, null, null));
+                lineId, null, null, new InventoryLedger.Snapshot((String) row.get("sku_snapshot"),
+                    (String) row.get("product_name_snapshot"), (String) row.get("unit_name_snapshot"))));
         }
         InventoryLedger.Posted posted = ledger.post(new InventoryLedger.Operation(Kind.PURCHASE_RECEIPT, context.branchId(),
             context.actorId(), "Recepción de la compra " + order.code() + " del proveedor " + order.supplierName(), order.id(),

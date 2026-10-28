@@ -364,6 +364,21 @@ class PurchaseHttpTest {
             .isEqualTo("9.000000");
     }
 
+    @Test void receiptMovementsCopyTheSnapshotsFixedByTheOrder() throws Exception {
+        String id = pending(supplier("Viveros"), 0).get("externalId").asText();
+        // The product is renamed after the order was committed: the receipt must still match the order (copy from reference).
+        jdbc.update("UPDATE catalog_product SET name='Maceta renombrada' WHERE external_id=?", product);
+        assertThat(operator.post("/purchases/orders/" + id + "/receive", Map.of()).statusCode()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("""
+            SELECT m.sku_snapshot=l.sku_snapshot AND m.product_name_snapshot=l.product_name_snapshot
+                AND m.unit_name_snapshot=l.unit_name_snapshot AND m.factor_snapshot=l.factor_snapshot
+            FROM inventory_movement m JOIN purchases_line l ON l.id=m.purchase_line_id JOIN purchases_order o ON o.id=l.order_id
+            WHERE o.external_id=?::uuid""", Boolean.class, id)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT m.product_name_snapshot FROM inventory_movement m JOIN purchases_line l "
+            + "ON l.id=m.purchase_line_id JOIN purchases_order o ON o.id=l.order_id WHERE o.external_id=?::uuid", String.class, id))
+            .isEqualTo("Maceta");
+    }
+
     @Test void partialOrInvalidReceiptsChangeNothing() throws Exception {
         String supplier = supplier("Viveros");
         String draft = draft(supplier, 0).get("externalId").asText();
