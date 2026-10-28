@@ -96,7 +96,8 @@ STAGES = {
       check((await page.getByRole('region', { name: 'Comprobantes de venta' }).getByRole('row').count()) === 2,
         'El rechazo generó un comprobante');
       await page.getByRole('button', { name: 'Descartar borrador', exact: true }).click();
-      await page.getByRole('button', { name: 'Cerrar y conservar borrador', exact: true }).click();
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).waitFor();
+      check(await page.locator('#sale-editor').count() === 0, 'Descartar el borrador no cerró el formulario');
       await logout();
       return 'una venta de 8 con 7 disponibles se rechaza sin comprobante y conserva el borrador';""",
     "operador-abre-venta": """
@@ -137,7 +138,8 @@ STAGES = {
       const line = page.locator('#sale-editor fieldset.purchase-line').first();
       check(await line.getByLabel('Cantidad').inputValue() === '1', 'El borrador no se conservó');
       await page.getByRole('button', { name: 'Descartar borrador', exact: true }).click();
-      await page.getByRole('button', { name: 'Cerrar y conservar borrador', exact: true }).click();
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).waitFor();
+      check(await page.locator('#sale-editor').count() === 0, 'Descartar el borrador no cerró el formulario');
       await logout();
       return 'lista desactivada antes de confirmar: aviso de lista no disponible, retirada del selector y borrador conservado';""",
     "gerente-consulta-comprobante": """
