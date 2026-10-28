@@ -125,6 +125,14 @@ export interface MovementHistory { branch: Branch; readAt: string; items: Moveme
 
 /** RF-0021: minimum supplier reference; no fiscal or contact data. */
 export interface Supplier { externalId: string; code: string; name: string; active: boolean }
+/** RF-0030: a gross price in COP per commercial unit, as an exact decimal string. */
+export interface ListPrice {
+  productExternalId: string; sku: string; productName: string; productActive: boolean;
+  unitName: string; unitActive: boolean; price: string;
+}
+/** RF-0030: a global price list; `prices` is returned by the detail query only. */
+export interface PriceList { externalId: string; code: string; name: string; active: boolean; prices: ListPrice[] | null }
+export interface PriceListInput { code: string; name: string }
 export type PurchaseStatus = 'DRAFT' | 'PENDING' | 'RECEIVED' | 'CANCELLED';
 /** Commercial conditions of one line (RF-0023), as exact decimal strings in API format. */
 export interface PurchaseLineInput { product: string; unit: string; quantity: string; unitPrice: string; discountPercent: string }
@@ -334,6 +342,16 @@ function supplierDto(value: unknown): Supplier {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !text(value.name) ||
       typeof value.active !== 'boolean') throw invalid();
   return value as unknown as Supplier;
+}
+function listPriceDto(value: unknown): ListPrice {
+  if (!record(value) || !uuid(value.productExternalId) || !['sku', 'productName', 'unitName'].every(k => text(value[k])) ||
+      typeof value.productActive !== 'boolean' || typeof value.unitActive !== 'boolean' || !decimal(value.price)) throw invalid();
+  return value as unknown as ListPrice;
+}
+function priceListDto(value: unknown): PriceList {
+  supplierDto(value);
+  if (!record(value) || !(value.prices === null || Array.isArray(value.prices))) throw invalid();
+  return { ...(value as unknown as PriceList), prices: value.prices === null ? null : listDto(value.prices, listPriceDto) };
 }
 function personDto(value: unknown): PurchasePerson {
   if (!record(value) || !text(value.code) || !text(value.fullName)) throw invalid();
@@ -596,6 +614,23 @@ export class ApiClient {
   }
   async updateSupplier(id: string, data: { code: string; name: string }): Promise<Supplier> {
     return supplierDto(await this.request(`/purchases/suppliers/${encodeURIComponent(id)}/update`, 'POST', data));
+  }
+  /** RF-0030: administrators see every list; local profiles only the active ones they may use in sales. */
+  async priceLists(): Promise<PriceList[]> {
+    return listDto(await this.request('/catalog/price-lists'), priceListDto);
+  }
+  async priceList(id: string): Promise<PriceList> {
+    return priceListDto(await this.request(`/catalog/price-lists/${encodeURIComponent(id)}`));
+  }
+  async createPriceList(data: PriceListInput): Promise<PriceList> {
+    return priceListDto(await this.request('/catalog/price-lists', 'POST', data));
+  }
+  async updatePriceList(id: string, data: PriceListInput & { active: boolean }): Promise<PriceList> {
+    return priceListDto(await this.request(`/catalog/price-lists/${encodeURIComponent(id)}/update`, 'POST', data));
+  }
+  /** Defines or replaces the price of one product unit; `price` is an exact decimal string with a dot. */
+  async setListPrice(id: string, data: { product: string; unit: string; price: string }): Promise<PriceList> {
+    return priceListDto(await this.request(`/catalog/price-lists/${encodeURIComponent(id)}/prices`, 'POST', data));
   }
   /**
    * RF-0021/RF-0023: creates a draft order in the operator's branch. Reuse the same key to retry a request whose outcome
