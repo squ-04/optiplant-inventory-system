@@ -42,6 +42,6 @@ Errores: `400 VALIDATION_FAILED` (campos ajenos, `unitPrice`, descuento fuera de
 
 ## Verificaciones
 
-- Backend: `SaleHttpTest` (8 pruebas) cubre RF-0027-CA-01/02, RF-0028-CA-01/02/03 (confirmaciones simultáneas), RF-0029-CA-02, RF-0031-CA-01/02, permisos, lista inactiva o sin precio, producto no habilitado, sucursal inactiva, inmutabilidad en base de datos y ausencia de `DELETE`.
-- Frontend: `test/sales.test.ts` cubre el neto unitario, la suma de líneas por producto frente al disponible, las rutas con `Idempotency-Key` y el rechazo de respuestas mal formadas.
+- Backend: `SaleHttpTest` (9 pruebas) cubre RF-0027-CA-01/02, RF-0028-CA-01/02/03 (confirmaciones simultáneas), RF-0029-CA-02, RF-0031-CA-01/02, totales mostrados coherentes (subtotal − descuentos = neto aunque los importes exactos tengan más de 2 decimales), permisos, lista inactiva o sin precio, producto no habilitado, sucursal inactiva, inmutabilidad en base de datos y ausencia de `DELETE`.
+- Frontend: `test/sales.test.ts` cubre el neto unitario, el descuento mostrado, la conservación de la clave ante resultados desconocidos, la suma de líneas por producto frente al disponible, las rutas con `Idempotency-Key` y el rechazo de respuestas mal formadas.
 - Navegador: `python3 scripts/check_sales_browser.py` levanta una pila Compose desechable, que retira al terminar con su volumen y sus imágenes construidas, y recorre los pasos 1–7 con comprobación en móvil (390 px).
