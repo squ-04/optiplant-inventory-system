@@ -7,6 +7,7 @@ import type { User } from '../lib/api/client.ts';
 import { Administration } from './Administration.tsx';
 import { Catalog } from './Catalog.tsx';
 import { Movements } from './Movements.tsx';
+import { Purchases } from './Purchases.tsx';
 import { ReorderAlerts, reorderAlertsQuery } from './ReorderAlerts.tsx';
 import { Visibility } from './Visibility.tsx';
 import { AppShell } from '../components/shared/AppShell.tsx';
@@ -14,7 +15,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { PasswordField } from '../components/shared/PasswordField.tsx';
 import { alertsNavigationLabel, restockNotice } from '../lib/inventory/alerts.ts';
-import { ArrowLeftRight, BellRing, Building2, KeyRound, LogIn, LogOut, Package, Search, TriangleAlert, UserRound } from 'lucide-react';
+import { ArrowLeftRight, BellRing, Building2, KeyRound, LogIn, LogOut, Package, Search, ShoppingCart, TriangleAlert, UserRound } from 'lucide-react';
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -97,6 +98,7 @@ export function App() {
       { id: 'visibility-title', label: 'Consultas', icon: Search },
       { id: 'catalog-title', label: 'Catálogo', icon: Package },
       { id: 'movements-title', label: 'Movimientos', icon: ArrowLeftRight },
+      { id: 'purchases-title', label: 'Compras', icon: ShoppingCart },
       ...(alertsAllowed ? [{ id: 'alerts-title', label: 'Alertas', icon: BellRing, count: activeAlerts,
         accessibleLabel: alertsNavigationLabel(activeAlerts) }] : []),
     ] : []),
@@ -142,6 +144,8 @@ export function App() {
       <div hidden={current !== 'catalog-title'}><Catalog client={client} user={user} onError={showError} revision={revision}
         visible={current === 'catalog-title'} /></div>
       <div hidden={current !== 'movements-title'}><Movements client={client} user={user} onError={showError} revision={revision} visible={current === 'movements-title'} /></div>
+      <div hidden={current !== 'purchases-title'}><Purchases client={client} user={user} onError={showError}
+        onChanged={() => setRevision(value => value + 1)} revision={revision} visible={current === 'purchases-title'} /></div>
       {alertsAllowed && <div hidden={current !== 'alerts-title'}><ReorderAlerts client={client} user={user} onError={showError}
         revision={revision} visible={current === 'alerts-title'} /></div>}
       <div hidden={current !== 'visibility-title'}><Visibility client={client} user={user} onError={showError} revision={revision} visible={current === 'visibility-title'} /></div>
