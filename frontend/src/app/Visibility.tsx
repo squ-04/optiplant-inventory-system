@@ -3,12 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Search } from 'lucide-react';
 import { ApiClient } from '../lib/api/client.ts';
 import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { SectionTabs } from '../components/shared/SectionTabs.tsx';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import {
   INVENTORY_NETWORK_MODE, INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure, freshness,
 } from '../lib/inventory/freshness.ts';
-import type { Branch, BranchInventory, OperationalDocument, User, Visibility as Snapshot } from '../lib/api/client.ts';
+import type { Branch, BranchInventory, Movement, OperationalDocument, User, Visibility as Snapshot } from '../lib/api/client.ts';
 import { kindLabel } from '../lib/inventory/movements.ts';
 import { clockTime as time, dateTime, decimal, directionLabel, documentStatusLabel } from '../lib/format.ts';
 
@@ -121,20 +123,62 @@ export function Visibility({ client, user, onError, revision, visible }: {
         </div>)}
     </div>}
 
-    {snapshot && <>
+    {snapshot && <div className="mt-8">
+      <h3>Historial operativo de {snapshot.branch.name} ({snapshot.branch.code})</h3>
       <p>El historial operativo no se actualiza automáticamente; vuelva a consultar la sucursal para recuperar cambios posteriores.</p>
-      <Documents title="Compras" items={snapshot.purchases} />
-      <Documents title="Ventas" items={snapshot.sales} />
-      <Documents title="Transferencias de origen o destino" items={snapshot.transfers} />
-      <h3>Movimientos registrados</h3>
-      {snapshot.movements.length === 0 ? <p>Sin movimientos registrados.</p> : <ul>{snapshot.movements.map(item =>
-        <li key={item.externalId}>{dateTime(item.occurredAt)} · {kindLabel(item.kind)} · {directionLabel(item.direction)} · {item.sku} · {decimal(item.quantity)} {item.unit} · Responsable: {item.actorCode} · Ref.: {item.externalId}</li>)}</ul>}
-    </>}
+      <SectionTabs label={`Historial operativo de ${snapshot.branch.name}`} items={[
+        { label: `Compras (${snapshot.purchases.length})`, content: <Documents title="Compras" branch={snapshot.branch.name} items={snapshot.purchases} /> },
+        { label: `Ventas (${snapshot.sales.length})`, content: <Documents title="Ventas" branch={snapshot.branch.name} items={snapshot.sales} /> },
+        { label: `Transferencias (${snapshot.transfers.length})`, content:
+          <Documents title="Transferencias de origen o destino" branch={snapshot.branch.name} items={snapshot.transfers} /> },
+        { label: `Movimientos (${snapshot.movements.length})`, content: <Movements branch={snapshot.branch.name} items={snapshot.movements} /> },
+      ]} />
+    </div>}
     <p>Los ingresos y retiros se registran en «Movimientos». Compras, ventas y transferencias se incorporan en sus entregas funcionales; no se simulan desde esta pantalla.</p>
   </section>;
 }
 
-function Documents({ title, items }: { title: string; items: OperationalDocument[] }) {
-  return <><h3>{title}</h3>{items.length === 0 ? <p>Sin registros.</p> : <ul>{items.map(item =>
-    <li key={item.externalId}>{item.code} · {documentStatusLabel(item.status)} · {dateTime(item.occurredAt)} · Ref.: {item.externalId}</li>)}</ul>}</>;
+function Documents({ title, branch, items }: { title: string; branch: string; items: OperationalDocument[] }) {
+  if (items.length === 0) return <p className="text-muted-foreground">Sin registros de {title.toLowerCase()}.</p>;
+  return <div className="table-scroll" role="region" aria-label={`${title} de ${branch}`} tabIndex={0}>
+    <Table>
+      <TableCaption>{title} persistidas en la sucursal, más recientes primero.</TableCaption>
+      <TableHeader><TableRow>
+        <TableHead scope="col">Código</TableHead><TableHead scope="col">Estado</TableHead>
+        <TableHead scope="col">Fecha y hora</TableHead><TableHead scope="col">Referencia</TableHead>
+      </TableRow></TableHeader>
+      <TableBody>{items.map(item => <TableRow key={item.externalId}>
+        <TableCell className="font-semibold">{item.code}</TableCell>
+        <TableCell><Badge variant="secondary">{documentStatusLabel(item.status)}</Badge></TableCell>
+        <TableCell className="whitespace-nowrap">{dateTime(item.occurredAt)}</TableCell>
+        <TableCell><span className="cell-note">{item.externalId}</span></TableCell>
+      </TableRow>)}</TableBody>
+    </Table>
+  </div>;
+}
+
+function Movements({ branch, items }: { branch: string; items: Movement[] }) {
+  if (items.length === 0) return <p className="text-muted-foreground">Sin movimientos registrados.</p>;
+  return <div className="table-scroll" role="region" aria-label={`Movimientos de ${branch}`} tabIndex={0}>
+    <Table>
+      <TableCaption>Movimientos persistidos en la sucursal, más recientes primero. El detalle con motivo y valoración está en «Movimientos».</TableCaption>
+      <TableHeader><TableRow>
+        <TableHead scope="col">Fecha y hora</TableHead><TableHead scope="col">Tipo</TableHead>
+        <TableHead scope="col">Dirección</TableHead><TableHead scope="col">Producto</TableHead>
+        <TableHead className="quantity" scope="col">Cantidad</TableHead>
+        <TableHead scope="col">Responsable</TableHead><TableHead scope="col">Referencia</TableHead>
+      </TableRow></TableHeader>
+      <TableBody>{items.map(item => <TableRow key={item.externalId}>
+        <TableCell className="whitespace-nowrap">{dateTime(item.occurredAt)}</TableCell>
+        <TableCell>{kindLabel(item.kind)}</TableCell>
+        <TableCell><Badge variant="secondary" className={item.direction === 'IN' ? 'bg-success-muted text-success' : undefined}>
+          {directionLabel(item.direction)}
+        </Badge></TableCell>
+        <TableCell><span className="font-semibold">{item.sku}</span> {item.productName}</TableCell>
+        <TableCell className="quantity">{decimal(item.quantity)} {item.unit}</TableCell>
+        <TableCell>{item.actorCode}</TableCell>
+        <TableCell><span className="cell-note">{item.externalId}</span></TableCell>
+      </TableRow>)}</TableBody>
+    </Table>
+  </div>;
 }
