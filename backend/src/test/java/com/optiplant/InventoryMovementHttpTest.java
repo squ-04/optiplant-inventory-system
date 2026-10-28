@@ -538,6 +538,71 @@ class InventoryMovementHttpTest {
             .get("items").get(0).get("valuation").isNull()).isFalse();
     }
 
+    @Test void branchValuationIsReadByItsManagerAndAdministratorsButNeverByOperators() throws Exception {
+        Browser operator = account("OPERATOR", a);
+        // RF-0026-CA-04 before the correction: 8 units, value 120, average 15.
+        assertThat(operator.post("/inventory/movements", entry(product, "unidad", "10", "10", "Entrada registrada")).statusCode()).isEqualTo(201);
+        assertThat(operator.post("/inventory/movements", exit(product, "6")).statusCode()).isEqualTo(201);
+        valuedEntry(a, product, "4", "20");
+        // RF-0026-CA-03 after two exits: 1 unit with the recorded value 3,333334, not 1 × the rounded average.
+        UUID rounded = product(a);
+        valuedEntry(a, rounded, "1", "4");
+        valuedEntry(a, rounded, "2", "3");
+        assertThat(operator.post("/inventory/movements", exit(rounded, "2")).statusCode()).isEqualTo(201);
+        // A product of another branch is not part of this branch's valuation.
+        valuedEntry(b, product(b), "5", "7");
+
+        Browser manager = account("MANAGER", a);
+        Browser admin = account("ADMIN", null);
+        for (Browser reader : List.of(manager, admin)) {
+            HttpResponse<String> response = reader.get("/inventory/branches/" + a + "/valuation");
+            assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+            JsonNode valuation = json.readTree(response.body());
+            assertThat(valuation.get("branch").get("externalId").asText()).isEqualTo(a.toString());
+            assertThat(valuation.get("readAt").asText()).isNotBlank();
+            assertThat(valuation.get("items")).hasSize(2);
+            JsonNode first = item(valuation, product);
+            assertThat(first.get("physicalQuantity").asText()).isEqualTo("8.000");
+            assertThat(first.get("baseUnitName").asText()).isEqualTo("unidad");
+            assertThat(first.get("averageCost").asText()).isEqualTo("15.000000");
+            assertThat(first.get("value").asText()).isEqualTo("120.00");
+            assertThat(first.get("exactValue").asText()).isEqualTo("120");
+            JsonNode second = item(valuation, rounded);
+            assertThat(second.get("physicalQuantity").asText()).isEqualTo("1.000");
+            assertThat(second.get("averageCost").asText()).isEqualTo("3.333333");
+            assertThat(second.get("value").asText()).isEqualTo("3.33");
+            assertThat(second.get("exactValue").asText()).isEqualTo("3.333334");
+            // The total is added exactly and rounded once for display (§5.4).
+            assertThat(valuation.get("totalValue").asText()).isEqualTo("123.33");
+            assertThat(valuation.get("exactTotalValue").asText()).isEqualTo("123.333334");
+        }
+
+        // Operators never read valuation (INC-003/D04); managers read only their own branch.
+        HttpResponse<String> forbidden = operator.get("/inventory/branches/" + a + "/valuation");
+        assertThat(forbidden.statusCode()).isEqualTo(403);
+        assertThat(code(forbidden)).isEqualTo("VALUATION_FORBIDDEN");
+        assertThat(forbidden.body()).doesNotContain("120");
+        HttpResponse<String> foreign = manager.get("/inventory/branches/" + b + "/valuation");
+        assertThat(foreign.statusCode()).isEqualTo(403);
+        assertThat(code(foreign)).isEqualTo("BRANCH_FORBIDDEN");
+        assertThat(admin.get("/inventory/branches/" + b + "/valuation").statusCode()).isEqualTo(200);
+        assertThat(admin.get("/inventory/branches/" + UUID.randomUUID() + "/valuation").statusCode()).isEqualTo(404);
+        assertThat(admin.get("/inventory/branches/00000000-0000-0000-0000-000000000000/valuation").statusCode()).isEqualTo(400);
+
+        // A branch without valued stock answers an empty list with zero total.
+        UUID empty = branch("c");
+        JsonNode none = json.readTree(admin.get("/inventory/branches/" + empty + "/valuation").body());
+        assertThat(none.get("items")).isEmpty();
+        assertThat(none.get("totalValue").asText()).isEqualTo("0.00");
+    }
+
+    JsonNode item(JsonNode valuation, UUID product) {
+        for (JsonNode item : valuation.get("items")) {
+            if (item.get("productExternalId").asText().equals(product.toString())) return item;
+        }
+        throw new AssertionError("Product not valued: " + product);
+    }
+
     @Test void runtimeRoleCannotEditOrDeleteConfirmedHistory() {
         for (String table : List.of("inventory_operation", "inventory_movement", "inventory_valuation_component")) {
             assertThat(jdbc.queryForObject("SELECT has_table_privilege(current_user,?,'UPDATE')", Boolean.class, table)).isFalse();

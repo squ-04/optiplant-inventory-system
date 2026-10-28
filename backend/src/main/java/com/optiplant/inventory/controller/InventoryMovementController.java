@@ -1,9 +1,11 @@
 package com.optiplant.inventory.controller;
 
 import com.optiplant.identity.service.SessionPrincipal;
+import com.optiplant.inventory.dto.InventoryValuationResponse;
 import com.optiplant.inventory.dto.ManualMovementRequest;
 import com.optiplant.inventory.dto.ManualMovementResponse;
 import com.optiplant.inventory.dto.MovementHistoryResponse;
+import com.optiplant.inventory.service.InventoryValuationService;
 import com.optiplant.inventory.service.ManualMovementService;
 import com.optiplant.inventory.service.MovementHistoryService;
 import java.util.UUID;
@@ -25,10 +27,13 @@ import tools.jackson.databind.JsonNode;
 public class InventoryMovementController {
     private final ManualMovementService movements;
     private final MovementHistoryService history;
+    private final InventoryValuationService valuation;
 
-    public InventoryMovementController(ManualMovementService movements, MovementHistoryService history) {
+    public InventoryMovementController(ManualMovementService movements, MovementHistoryService history,
+                                       InventoryValuationService valuation) {
         this.movements = movements;
         this.history = history;
+        this.valuation = valuation;
     }
 
     /**
@@ -49,5 +54,11 @@ public class InventoryMovementController {
                                            @RequestParam(required = false) UUID product,
                                            @RequestParam(required = false) Integer limit) {
         return history.history(principal, branch, product, limit);
+    }
+
+    /** RF-0026: current weighted-average valuation of a branch, for its manager and administrators. */
+    @GetMapping("/branches/{branch}/valuation")
+    public InventoryValuationResponse valuation(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID branch) {
+        return valuation.valuation(principal, branch);
     }
 }
