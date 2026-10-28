@@ -42,6 +42,7 @@ public class SaleController {
     public SaleResponse confirm(@AuthenticationPrincipal SessionPrincipal principal,
                                 @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                 @RequestBody(required = false) JsonNode body) {
+        sales.requireSeller(principal);
         return sales.confirm(principal, key, SaleRequest.from(body));
     }
 

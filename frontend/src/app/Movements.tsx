@@ -6,7 +6,7 @@ import type {
   Branch, LocalCatalog, ManualMovement, MovementDirection, MovementHistory, MovementHistoryEntry, MovementKind, User,
 } from '../lib/api/client.ts';
 import {
-  DIFFERENCE_LABELS, asksUnitCost, keepsIdempotencyKey, kindLabel, kindsFor, newIdempotencyKey, referenceCandidates,
+  DIFFERENCE_LABELS, asksUnitCost, keepsIdempotencyKey, kindLabel, kindsFor, newIdempotencyKey, referenceCandidates, referenceLabel,
   signedQuantity,
 } from '../lib/inventory/movements.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
@@ -46,6 +46,9 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmed, setConfirmed] = useState<ManualMovement | null>(null);
+
+  // A success notice belongs to the moment it happened: it is not shown again when the user comes back.
+  useEffect(() => { if (!visible) setConfirmed(null); }, [visible]);
 
   useEffect(() => {
     if (admin) client.visibleBranches().then(setBranches).catch(onError);
@@ -178,10 +181,7 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
           <select id="movement-reference" value={draft.reference} required={draft.kind === 'ENTRY_CORRECTION'}
             onChange={event => change({ reference: event.target.value, unitCost: '' })}>
             <option value="">{draft.kind === 'ENTRY_CORRECTION' ? 'Seleccione la entrada' : 'Sin venta de referencia'}</option>
-            {candidates.map(item => <option key={item.externalId} value={item.externalId}>
-              {when(item.occurredAt)}: {kindLabel(item.kind)} de {decimal(item.commercialQuantity)} {item.unit} de {item.sku}
-              {item.pendingQuantity !== null ? ` (pendiente: ${decimal(item.pendingQuantity)} ${item.baseUnitName})` : ''}
-            </option>)}
+            {candidates.map(item => <option key={item.externalId} value={item.externalId}>{referenceLabel(item)}</option>)}
           </select>
           {candidates.length === 0 && <p className="text-muted-foreground">
             {draft.kind === 'ENTRY_CORRECTION'

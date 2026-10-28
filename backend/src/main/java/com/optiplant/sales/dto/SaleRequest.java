@@ -24,7 +24,7 @@ public record SaleRequest(UUID priceList, List<Line> lines) {
     private static final Pattern PERCENT = Pattern.compile("^\\d{1,3}(\\.\\d{1,6})?$");
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final String DISCOUNT_RANGE = "el descuento debe ser un porcentaje entre 0 y 100, con hasta 6 decimales "
-        + "(indique 0 si no aplica). No se confirmó la venta.";
+        + "(indique 0 si no aplica).";
 
     public record Line(UUID product, String unit, BigDecimal quantity, BigDecimal discountPercent) {}
 
@@ -41,7 +41,14 @@ public record SaleRequest(UUID priceList, List<Line> lines) {
         if (!lines.isArray() || lines.isEmpty()) throw invalid("La venta debe incluir al menos un producto.");
         if (lines.size() > MAX_LINES) throw invalid("La venta admite hasta " + MAX_LINES + " líneas.");
         List<Line> parsed = new ArrayList<>();
-        for (int index = 0; index < lines.size(); index++) parsed.add(line(lines.get(index), index + 1));
+        for (int index = 0; index < lines.size(); index++) {
+            try {
+                parsed.add(line(lines.get(index), index + 1));
+            } catch (ApiException error) {
+                // Every line rejection states, like the ones found when confirming, that nothing was sold.
+                throw new ApiException(error.status(), error.code(), error.getMessage() + " No se confirmó la venta.");
+            }
+        }
         return new SaleRequest(priceList, List.copyOf(parsed));
     }
 

@@ -5,6 +5,7 @@ import com.optiplant.catalog.service.PriceListService;
 import com.optiplant.catalog.service.UnitConversion;
 import com.optiplant.common.exception.ApiException;
 import com.optiplant.common.idempotency.IdempotencyService;
+import com.optiplant.common.text.LineDetail;
 import com.optiplant.common.text.SpanishDecimal;
 import com.optiplant.identity.service.SessionPrincipal;
 import com.optiplant.inventory.service.InventoryLedger;
@@ -152,18 +153,26 @@ public class SaleService {
         try {
             return resolution.get();
         } catch (ApiException error) {
-            throw new ApiException(error.status(), error.code(), "Línea " + number + ": " + error.getMessage()
+            throw new ApiException(error.status(), error.code(), LineDetail.of(number, error.getMessage())
                 + " No se confirmó la venta.");
         }
     }
 
-    /** Only the operator of an active branch confirms sales (§5.2); managers and administrators consult them. */
-    private Context context(SessionPrincipal principal) {
+    /**
+     * Only an operator with a branch confirms sales (§5.2); managers and administrators consult them. The controller calls
+     * it before reading the body, so a supervisor is told the sale is not theirs instead of how to fix it.
+     */
+    public void requireSeller(SessionPrincipal principal) {
         if (!"OPERATOR".equals(principal.role()) || principal.branchExternalId() == null) {
             throw new ApiException(403, "SALE_FORBIDDEN", "MANAGER".equals(principal.role())
                 ? "El gerente supervisa las ventas de su sucursal; las confirma el operador."
                 : "El administrador consulta las ventas de la red; las confirma el operador de cada sucursal.");
         }
+    }
+
+    /** Only the operator of an active branch confirms sales (§5.2); managers and administrators consult them. */
+    private Context context(SessionPrincipal principal) {
+        requireSeller(principal);
         Map<String, Object> branch = jdbc.queryForList("SELECT id,active FROM identity_branch WHERE external_id=?",
             principal.branchExternalId()).stream().findFirst()
             .orElseThrow(() -> new ApiException(404, "BRANCH_NOT_FOUND", "No se encontró la sucursal."));

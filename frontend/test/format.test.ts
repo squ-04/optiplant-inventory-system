@@ -3,11 +3,14 @@ import test from 'node:test';
 
 process.env.TZ = 'America/Bogota';
 const {
-  apiDecimal, clockTime, dateTime, decimal, decimalInputPattern, directionLabel, documentStatusLabel, inputDecimal, roleLabel,
+  apiDecimal, clockTime, dateTime, decimal, decimalInputPattern, directionLabel, documentStatusLabel, inputDecimal, percentInputPattern,
+  price, roleLabel,
 } = await import('../src/lib/format.ts');
 
 test('dates and times use one es-CO format in every view', () => {
-  assert.match(dateTime('2026-10-27T15:09:45.221196Z'), /^27\/10\/26, 10:09:45\sa\.\sm\.$/u);
+  // Four-digit year, as in Colombian business documents; 12-hour clock with «a. m.» / «p. m.».
+  assert.match(dateTime('2026-10-27T15:09:45.221196Z'), /^27\/10\/2026, 10:09:45\sa\.\sm\.$/u);
+  assert.match(dateTime('2026-10-27T19:22:06Z'), /^27\/10\/2026, 2:22:06\sp\.\sm\.$/u);
   assert.match(clockTime('2026-10-27T15:09:45Z'), /^10:09:45\sa\.\sm\.$/u);
 });
 
@@ -43,4 +46,18 @@ test('decimal inputs are typed with a comma and sent to the API with a dot', () 
   assert.equal(inputDecimal('12.000'), '12');
   assert.equal(inputDecimal('2.500'), '2,5');
   assert.equal(inputDecimal('0.000'), '0');
+});
+
+test('unit prices show at least 2 decimals and keep up to 6 significant ones', () => {
+  assert.equal(price('1000'), '1.000,00');
+  assert.equal(price('11000.5'), '11.000,50');
+  assert.equal(price('120.000000'), '120,00');
+  assert.equal(price('0.123456'), '0,123456');
+  assert.equal(price('9.250000'), '9,25');
+});
+
+test('percent inputs accept 0 to 100 with up to 6 decimals and a comma', () => {
+  const pattern = new RegExp(`^(?:${percentInputPattern})$`);
+  for (const value of ['0', '10', '99,999999', '100', '100,0', '5,5']) assert.ok(pattern.test(value), value);
+  for (const value of ['101', '100,5', '150', '-1', '10,1234567', '10.5', 'abc', '']) assert.ok(!pattern.test(value), value);
 });

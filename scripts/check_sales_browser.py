@@ -62,7 +62,7 @@ STAGES = {
       await line.locator('select').first().selectOption({ label: config.sku + ' Helecho de prueba' });
       await line.getByLabel('Cantidad').fill('3');
       await line.getByLabel('Descuento %').fill('10');
-      await line.getByText('Neto 900').waitFor();
+      await line.getByText('Neto 900,00').waitFor();
       await line.getByText('2.700,00').waitFor();
       await line.getByText('Disponible: 10,000 unidad.').waitFor();
       // A second line of the same product in boxes exceeds the available stock: the form warns before confirming.
@@ -99,12 +99,53 @@ STAGES = {
       await page.getByRole('button', { name: 'Cerrar y conservar borrador', exact: true }).click();
       await logout();
       return 'una venta de 8 con 7 disponibles se rechaza sin comprobante y conserva el borrador';""",
+    "operador-abre-venta": """
+      await login(config.operator);
+      await page.getByRole('link', { name: 'Ventas', exact: true }).click();
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).click();
+      await page.locator('#sale-price-list').selectOption({ label: 'DETAL · Detal' });
+      const line = page.locator('#sale-editor fieldset.purchase-line').first();
+      await line.locator('select').first().selectOption({ label: config.sku + ' Helecho de prueba' });
+      await line.getByLabel('Cantidad').fill('1');
+      await page.getByText('1.000,00 COP').waitFor();
+      return 'formulario abierto con 1 unidad a 1.000,00 COP';""",
+    "precio-cambiado-antes-de-confirmar": """
+      // H1: the administrator changed the price to 1.200 while the form was open; the dialog never shows the old total.
+      await page.getByRole('button', { name: 'Confirmar venta', exact: true }).click();
+      await page.locator('#sale-error').getByText(/cambiaron desde que se consultaron \\(línea 1\\)/).waitFor();
+      check(await page.getByRole('alertdialog').count() === 0, 'Se abrió el diálogo con un precio desactualizado');
+      await page.getByText('1.200,00 COP').waitFor();
+      await page.getByRole('button', { name: 'Confirmar venta', exact: true }).click();
+      await page.getByRole('alertdialog').getByText(/total neto estimado de 1\\.200,00 COP/).waitFor();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Confirmar venta', exact: true }).click();
+      const done = page.getByText(/^Venta VT-\\d+ confirmada por 1\\.200,00 COP/);
+      await done.waitFor();
+      check(!(await done.innerText()).includes('difiere'), 'Aviso de total distinto sin cambio de precio');
+      // H2 setup: a second list chosen in a new sale, deactivated by the administrator before confirming.
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).click();
+      await page.locator('#sale-price-list').selectOption({ label: 'MAYOR · Mayorista' });
+      const line = page.locator('#sale-editor fieldset.purchase-line').first();
+      await line.locator('select').first().selectOption({ label: config.sku + ' Helecho de prueba' });
+      await line.getByLabel('Cantidad').fill('1');
+      await page.getByText('900,00 COP').waitFor();
+      return 'precio cambiado con el formulario abierto: confirmación detenida y venta por el total vigente de 1.200,00 COP';""",
+    "lista-desactivada-antes-de-confirmar": """
+      await page.getByRole('button', { name: 'Confirmar venta', exact: true }).click();
+      await page.locator('#sale-error').getByText(/ya no está disponible: fue desactivada/).waitFor();
+      check(await page.getByRole('alertdialog').count() === 0, 'Se abrió el diálogo con una lista desactivada');
+      await page.waitForFunction(() => ![...document.querySelectorAll('#sale-price-list option')].some(option => option.textContent.includes('MAYOR')));
+      const line = page.locator('#sale-editor fieldset.purchase-line').first();
+      check(await line.getByLabel('Cantidad').inputValue() === '1', 'El borrador no se conservó');
+      await page.getByRole('button', { name: 'Descartar borrador', exact: true }).click();
+      await page.getByRole('button', { name: 'Cerrar y conservar borrador', exact: true }).click();
+      await logout();
+      return 'lista desactivada antes de confirmar: aviso de lista no disponible, retirada del selector y borrador conservado';""",
     "gerente-consulta-comprobante": """
       await login(config.manager);
       await page.getByRole('link', { name: 'Ventas', exact: true }).click();
       await page.getByRole('heading', { name: /Comprobantes de venta de Sucursal Sur/ }).waitFor();
       check(await page.getByRole('button', { name: 'Nueva venta' }).count() === 0, 'El gerente ve la acción de vender');
-      await page.getByRole('button', { name: /Ver comprobante de VT-/ }).click();
+      await page.getByRole('button', { name: 'Ver comprobante de VT-000001', exact: true }).click();
       await page.getByText('Operador Sur (OP-SUR)').waitFor();
       await page.getByText('2.700,00 COP').waitFor();
       await page.setViewportSize({ width: 390, height: 844 });
@@ -222,6 +263,17 @@ def main():
         for unit, price in (("unidad", "1000"), ("caja", "11000")):
             expect(admin.request(f"/catalog/price-lists/{price_list['externalId']}/prices", "POST",
                                  {"product": product, "unit": unit, "price": price}), 200, "precio " + unit)
+        wholesale = expect(admin.request("/catalog/price-lists", "POST", {"code": "MAYOR", "name": "Mayorista"}), 201, "alta de lista mayorista")
+        expect(admin.request(f"/catalog/price-lists/{wholesale['externalId']}/prices", "POST",
+                             {"product": product, "unit": "unidad", "price": "900"}), 200, "precio mayorista")
+        # What the administrator does between two browser stages, while the operator keeps the sale form open.
+        between = {
+            "operador-abre-venta": lambda: expect(admin.request(f"/catalog/price-lists/{price_list['externalId']}/prices", "POST",
+                                                                {"product": product, "unit": "unidad", "price": "1200"}), 200, "cambio de precio"),
+            "precio-cambiado-antes-de-confirmar": lambda: expect(admin.request(
+                f"/catalog/price-lists/{wholesale['externalId']}/update", "POST",
+                {"code": "MAYOR", "name": "Mayorista", "active": False}), 200, "desactivación de lista"),
+        }
         operator = Client(base)
         expect(operator.request("/auth/login", "POST", {"code": "OP-SUR", "password": operator_password}), 200, "acceso operador")
         expect(operator.request("/inventory/movements", "POST", {"kind": "MANUAL_ENTRY", "product": product, "unit": "unidad",
@@ -232,6 +284,8 @@ def main():
                        text=True, check=True, timeout=60)
         for name in STAGES:
             stage(name)
+            if name in between:
+                between[name]()
         print(f"Navegador OK: {len(STAGES)} escenarios de ventas (RF-0027–RF-0029, RF-0031).")
         return 0
     except (AssertionError, OSError, RuntimeError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:

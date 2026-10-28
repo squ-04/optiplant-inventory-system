@@ -11,7 +11,9 @@ import {
 } from '../lib/purchases/purchases.ts';
 import type { PurchaseAction } from '../lib/purchases/purchases.ts';
 import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
-import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
+import {
+  apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal, percentInputPattern, price as unitPrice,
+} from '../lib/format.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
 import { useConfirmation } from '../components/shared/ConfirmDialog.tsx';
 import { PurchaseStatusBadge } from '../components/shared/PurchaseStatusBadge.tsx';
@@ -24,7 +26,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 
 // Prices keep up to 6 decimals and discounts are percentages between 0 and 100 (RF-0023); typed with a comma.
 const pricePattern = decimalInputPattern(6, 18);
-const percentPattern = decimalInputPattern(6, 3);
+const percentPattern = percentInputPattern;
 const quantityPattern = (divisible: boolean) => decimalInputPattern(divisible ? 3 : 0);
 
 interface LineDraft { key: string; product: string; unit: string; quantity: string; unitPrice: string; discountPercent: string }
@@ -41,6 +43,8 @@ const draftFrom = (order: PurchaseOrder): OrderDraft => ({
 // RF-0022: a new order, the rewrite of a draft, or the order that replaces a cancelled one.
 type EditorMode = { mode: 'create' } | { mode: 'edit'; order: PurchaseOrder } | { mode: 'replace'; order: PurchaseOrder };
 const MAX_CANCEL_REASON = 500;
+/** «la línea» or «las 3 líneas», so receipt texts agree in number. */
+const lineCount = (count: number) => count === 1 ? 'la línea' : `las ${count} líneas`;
 
 const STATUS_FILTERS: { value: PurchaseStatus | ''; label: string }[] = [
   { value: '', label: 'Todos los estados' }, { value: 'DRAFT', label: 'Borradores' },
@@ -97,6 +101,9 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
   const [actionError, setActionError] = useState('');
   const [confirmed, setConfirmed] = useState('');
   const { confirm, dialog } = useConfirmation();
+
+  // A success notice belongs to the moment it happened: it is not shown again when the user comes back.
+  useEffect(() => { if (!visible) setConfirmed(''); }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -190,9 +197,10 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
     const receive = action === 'receive';
     const accepted = await confirm(receive ? {
       title: `Confirmar la recepción de ${order.code}`,
-      description: <>Se registrará el ingreso de las {order.lines.length} líneas completas en el inventario de {order.branch.name},
-        valoradas a su costo neto, y comenzará a contar el plazo de pago de {order.paymentTermDays} días. La recepción no
-        admite cantidades parciales ni puede repetirse.</>,
+      description: <>Se registrará el ingreso de {lineCount(order.lines.length)} {order.lines.length === 1 ? 'completa' : 'completas'} en
+        el inventario de {order.branch.name}, {order.lines.length === 1 ? 'valorada' : 'valoradas'} a su costo neto, y comenzará a contar el
+        plazo de pago de {order.paymentTermDays} {order.paymentTermDays === 1 ? 'día' : 'días'}. La recepción no admite
+        cantidades parciales ni puede repetirse.</>,
       confirmLabel: 'Confirmar recepción',
     } : {
       title: `Enviar ${order.code} a recepción`,
@@ -211,7 +219,8 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
       // The transition answers with the full order, state history included.
       setSelected(updated);
       setConfirmed(receive
-        ? `Recepción de ${updated.code} confirmada: el inventario de ${updated.branch.name} aumentó por las ${updated.lines.length} líneas. `
+        ? `Recepción de ${updated.code} confirmada: el inventario de ${updated.branch.name} aumentó con ${lineCount(updated.lines.length)} `
+          + `${updated.lines.length === 1 ? 'recibida' : 'recibidas'}. `
           + `Vence el ${updated.dueDate ? dueDate(updated.dueDate) : ''}.`
         : `${updated.code} quedó pendiente de recepción.`);
       if (receive) onChanged();
@@ -494,7 +503,7 @@ function PurchaseDetail({ order, action, valued, canEdit, canCancel, canReplace,
           <TableCell><span className="font-semibold">{line.sku}</span> {line.productName}</TableCell>
           <TableCell className="quantity">{decimal(line.commercialQuantity)} {line.unit}
             {line.unit !== line.baseUnitName && <span className="cell-note">{decimal(line.baseQuantity)} {line.baseUnitName}</span>}</TableCell>
-          <TableCell className="quantity">{decimal(line.unitPrice)}<span className="cell-note">por {line.unit}</span></TableCell>
+          <TableCell className="quantity">{unitPrice(line.unitPrice)}<span className="cell-note">por {line.unit}</span></TableCell>
           <TableCell className="quantity">{decimal(line.discountPercent)} %</TableCell>
           <TableCell className="quantity">{decimal(line.netAmount)}</TableCell>
           {valued && <TableCell className="quantity">{line.unitBaseCost === null ? '—' : <>{decimal(line.unitBaseCost)}

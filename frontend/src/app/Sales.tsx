@@ -4,10 +4,16 @@ import { Plus, ReceiptText, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { Branch, LocalCatalog, PriceList, Sale, SaleHistory, User } from '../lib/api/client.ts';
 import { lineNet, money, sum } from '../lib/purchases/purchases.ts';
-import { MAX_SALE_LINES, confirmationFailure, netUnitPrice, shortages, shownDiscount } from '../lib/sales/sales.ts';
+import {
+  MAX_SALE_LINES, confirmationFailure, confirmedTotalDiffers, latestOnly, listUnavailable, netUnitPrice, recheckPrices, shortages,
+  shownDiscount,
+} from '../lib/sales/sales.ts';
+import type { PriceRecheck } from '../lib/sales/sales.ts';
 import { listPriceOf } from '../lib/prices/prices.ts';
 import { newIdempotencyKey } from '../lib/inventory/movements.ts';
-import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
+import {
+  apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal, percentInputPattern, price as unitPrice,
+} from '../lib/format.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
 import { useConfirmation } from '../components/shared/ConfirmDialog.tsx';
 import { Button } from '../components/ui/button';
@@ -15,7 +21,7 @@ import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 // Discounts are percentages between 0 and 100 with up to 6 decimals (RF-0029); typed with a comma.
-const percentPattern = decimalInputPattern(6, 3);
+const percentPattern = percentInputPattern;
 const quantityPattern = (divisible: boolean) => decimalInputPattern(divisible ? 3 : 0);
 
 interface LineDraft { key: string; product: string; unit: string; quantity: string; discountPercent: string }
@@ -50,14 +56,34 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmed, setConfirmed] = useState('');
+  // Re-reads the chosen list each time the form opens, so a reopened draft never keeps prices read earlier (H1).
+  const [listRevision, setListRevision] = useState(0);
   const { confirm, dialog } = useConfirmation();
+
+  // A success notice belongs to the moment it happened: it is not shown again when the operator comes back (H9).
+  useEffect(() => { if (!visible) setConfirmed(''); }, [visible]);
+
+  // Several moments reload the lists (view shown, form opened, list deactivated): only the latest answer is applied, so
+  // an older, slower one never brings back a list deactivated meanwhile.
+  const [latestLists] = useState(latestOnly);
+  function refreshLists() {
+    latestLists(client.priceLists()).then(value => { if (value) setLists(value); }).catch(onError);
+  }
+
+  /** The chosen list was deactivated meanwhile: it leaves the selector and the draft asks for another one (H2). */
+  function listGone() {
+    setDraft(previous => ({ ...previous, priceList: '' }));
+    setList(null);
+    refreshLists();
+    setFormError('La lista de precios elegida ya no está disponible: fue desactivada. Elija otra lista; el borrador se conserva.');
+  }
 
   useEffect(() => {
     if (!visible) return;
     if (admin) client.visibleBranches().then(setBranches).catch(onError);
     if (operator) {
       client.localCatalog().then(setCatalog).catch(onError);
-      client.priceLists().then(setLists).catch(onError);
+      refreshLists();
     }
   }, [client, admin, operator, revision, visible]);
 
@@ -68,10 +94,11 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
       if (!active) return;
       setList(null);
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
+      else if (listUnavailable(reason)) listGone();
       else setFormError(reason instanceof Error ? reason.message : 'No se pudo consultar la lista de precios.');
     });
     return () => { active = false; };
-  }, [client, operator, draft.priceList, revision]);
+  }, [client, operator, draft.priceList, revision, listRevision]);
 
   // Only the latest history request may update the view: a slower earlier response (another branch) is discarded.
   const historyRequest = useRef(0);
@@ -134,6 +161,8 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
 
   function openEditor() {
     setEditorOpen(true); setFormError(''); setConfirmed('');
+    refreshLists();
+    setListRevision(value => value + 1);
     revealEditor('sale-editor');
   }
 
@@ -142,6 +171,31 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
     const missing = lines.findIndex(entry => entry.price === null);
     if (missing >= 0) {
       setFormError(`Línea ${missing + 1}: la lista elegida no tiene precio para esa unidad. Elija otra unidad u otra lista.`);
+      return;
+    }
+    if (totalNet === null) {
+      setFormError('Revise las líneas: cada una necesita una cantidad válida y un descuento entre 0 y 100.');
+      return;
+    }
+    // The server applies the current list price (RF-0030): re-read it so the dialog never shows an older total (H1).
+    setBusy(true); setFormError('');
+    let recheck: PriceRecheck;
+    try {
+      recheck = await recheckPrices(id => client.priceList(id), draft.priceList,
+        lines.map(entry => ({ product: entry.line.product, unit: entry.line.unit, price: entry.price })));
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 401) onError(reason);
+      else setFormError(reason instanceof TypeError
+        ? 'Sin comunicación con el servidor. No se confirmó la venta; inténtelo de nuevo.'
+        : reason instanceof Error ? reason.message : 'No se pudo consultar la lista de precios.');
+      return;
+    } finally { setBusy(false); }
+    if (recheck.kind === 'unavailable') { listGone(); return; }
+    if (recheck.kind === 'changed') {
+      const { list: current, lines: changed } = recheck;
+      setList(current);
+      setFormError(`Los precios de la lista ${current.name} cambiaron desde que se consultaron (${changed.length === 1
+        ? `línea ${changed[0]}` : `líneas ${changed.join(', ')}`}). Revise el total actualizado y confirme de nuevo.`);
       return;
     }
     const accepted = await confirm({
@@ -158,7 +212,8 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
     try {
       const sale = await client.confirmSale(input, saleKey);
       setConfirmed(`Venta ${sale.code} confirmada por ${decimal(sale.totalNet)} COP. Las existencias de ${sale.branch.name} `
-        + 'disminuyeron y el comprobante quedó registrado.');
+        + 'disminuyeron y el comprobante quedó registrado.' + (confirmedTotalDiffers(sale.exactTotalNet, totalNet)
+          ? ` El total difiere del estimado (${decimal(money(totalNet))} COP) porque la lista de precios cambió al confirmar.` : ''));
       setSaleKey(newIdempotencyKey());
       setOutcomeUnknown(false);
       setDraft(previous => ({ ...emptySale(), priceList: previous.priceList }));
@@ -172,7 +227,9 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
       if (!failure.keepKey) setSaleKey(newIdempotencyKey());
       setOutcomeUnknown(failure.keepKey);
       if (failure.alreadyConfirmed) { onChanged(); void loadHistory(); }
-      if (reason instanceof ApiError && reason.status === 401) onError(reason);
+      // Deactivated between the re-read and the confirmation: same treatment as when the re-read finds it (H2).
+      if (listUnavailable(reason)) listGone();
+      else if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setFormError(failure.message);
     } finally { setBusy(false); }
   }
@@ -251,8 +308,8 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
                   title="Porcentaje entre 0 y 100 con hasta 6 decimales; 0 si no aplica."
                   onChange={event => changeLine(line.key, { discountPercent: event.target.value })} /></label>
                 <p className="purchase-line-net" aria-live="off">
-                  <span>Precio de lista</span>{price === null ? '—' : decimal(price)}
-                  {price !== null && netUnit !== null && netUnit !== price && <span className="cell-note">Neto {decimal(netUnit)}</span>}
+                  <span>Precio de lista</span>{price === null ? '—' : unitPrice(price)}
+                  {price !== null && netUnit !== null && netUnit !== price && <span className="cell-note">Neto {unitPrice(netUnit)}</span>}
                 </p>
                 <p className="purchase-line-net" aria-live="off">
                   <span>Neto</span>{net === null ? '—' : decimal(money(net))}
@@ -383,9 +440,9 @@ function SaleReceipt({ sale, onClose }: { sale: Sale; onClose: () => void }) {
           <TableCell><span className="font-semibold">{line.sku}</span> {line.productName}</TableCell>
           <TableCell className="quantity">{decimal(line.commercialQuantity)} {line.unit}
             {line.unit !== line.baseUnitName && <span className="cell-note">{decimal(line.baseQuantity)} {line.baseUnitName}</span>}</TableCell>
-          <TableCell className="quantity">{decimal(line.unitPrice)}<span className="cell-note">por {line.unit}</span></TableCell>
+          <TableCell className="quantity">{unitPrice(line.unitPrice)}<span className="cell-note">por {line.unit}</span></TableCell>
           <TableCell className="quantity">{decimal(line.discountPercent)} %</TableCell>
-          <TableCell className="quantity">{decimal(line.netUnitPrice)}</TableCell>
+          <TableCell className="quantity">{unitPrice(line.netUnitPrice)}</TableCell>
           <TableCell className="quantity">{decimal(line.netAmount)}</TableCell>
         </TableRow>)}</TableBody>
       </Table>
