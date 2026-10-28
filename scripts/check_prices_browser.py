@@ -84,8 +84,15 @@ STAGES = {
       await define('unidad (base)', '1.5');
       await page.waitForTimeout(300);
       check(sent.length === 0, 'Se envió un precio con punto decimal');
-      await page.getByLabel('Precio por unidad (COP)').fill('11000');
+      // The browser explains the field's own format instead of its generic message.
+      const field = page.getByLabel('Precio por unidad (COP)');
+      const hint = await field.getAttribute('title');
+      check(await field.evaluate(element => element.validationMessage) === hint, 'Mensaje de formato genérico en el precio');
+      // A price prefilled by «Cambiar precio», without typing, is saved at the first attempt: no stale hint blocks it.
+      await page.getByRole('button', { name: 'Cambiar precio de ' + config.sku + ' en caja' }).click();
       await page.getByRole('button', { name: 'Guardar precio', exact: true }).click();
+      await page.getByText('Precio actualizado: Helecho de prueba, caja, 120.000,00 COP.').waitFor();
+      await define('unidad (base)', '11000');
       await page.getByText('Precio definido: Helecho de prueba, unidad, 11.000,00 COP.').waitFor();
       // Replacing keeps a single row per unit and prefills the current price.
       await page.getByRole('button', { name: 'Cambiar precio de ' + config.sku + ' en caja' }).click();
@@ -100,8 +107,8 @@ STAGES = {
       await page.getByRole('region', { name: 'Tabla de precios de Mayorista' }).waitFor();
       const other = await page.getByRole('region', { name: 'Tabla de precios de Mayorista' }).getByRole('row').allInnerTexts();
       check(other.length === 2 && other[1].includes('99.999,5'), 'La otra lista cambió: ' + other.join(' / '));
-      return 'dos listas con precios distintos para la misma caja (125.000 y 99.999,5); un punto decimal no se envía; '
-        + 'el reemplazo precarga el precio y no duplica filas';""",
+      return 'dos listas con precios distintos para la misma caja (125.000 y 99.999,5); un punto decimal no se envía '
+        + 'y el campo explica su formato; el precio precargado se guarda al primer intento; el reemplazo no duplica filas';""",
     "administrador-desactiva-y-movil": """
       await page.getByRole('button', { name: 'Editar MAYOR', exact: true }).click();
       await page.getByLabel('Lista activa: disponible para nuevas ventas').uncheck();

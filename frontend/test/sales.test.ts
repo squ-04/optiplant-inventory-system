@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError } from '../src/lib/api/client.ts';
 import {
-  baseQuantity, compareDecimal, confirmationFailure, listUnavailable, netUnitPrice, priceChanges, shortages, shownDiscount, subtract,
+  baseQuantity, compareDecimal, confirmationFailure, confirmedTotalDiffers, latestOnly, listUnavailable, netUnitPrice, priceChanges,
+  recheckPrices, shortages, shownDiscount, subtract,
 } from '../src/lib/sales/sales.ts';
 
 test('net unit price applies the line discount exactly', () => {
@@ -130,4 +131,46 @@ test('a deactivated or missing price list is reported as unavailable', () => {
   assert.ok(listUnavailable(new ApiError(409, { code: 'PRICE_LIST_INACTIVE', detail: 'La lista de precios está inactiva.' })));
   assert.ok(!listUnavailable(new ApiError(409, { code: 'PRICE_NOT_DEFINED', detail: 'x' })));
   assert.ok(!listUnavailable(new TypeError('Failed to fetch')));
+});
+
+const listWith = (price: string) => ({ externalId: 'l1', code: 'DETAL', name: 'Detal', active: true, prices: [
+  { productExternalId: 'p1', sku: 'A', productName: 'A', productActive: true, unitName: 'unidad', unitActive: true, price },
+] });
+
+test('the pre-confirmation re-read stops on a changed price, reports a deactivated list and passes other errors on', async () => {
+  // H1: the form shows 1500 and the list already says 1700; the dialog must not open with the old total.
+  const shown = [{ product: 'p1', unit: 'unidad', price: '1500' }];
+  const changed = await recheckPrices(async () => listWith('1700'), 'l1', shown);
+  assert.equal(changed.kind, 'changed');
+  assert.deepEqual(changed.kind === 'changed' && changed.lines, [1]);
+  assert.equal(changed.kind === 'changed' && changed.list.prices?.[0].price, '1700');
+  const current = await recheckPrices(async () => listWith('1500.000000'), 'l1', shown);
+  assert.equal(current.kind, 'current');
+  // H2: the list was deactivated meanwhile.
+  const gone = await recheckPrices(async () => { throw new ApiError(404, { code: 'PRICE_LIST_NOT_FOUND' }); }, 'l1', shown);
+  assert.equal(gone.kind, 'unavailable');
+  // A lost connection or a session problem is not decided here.
+  await assert.rejects(recheckPrices(async () => { throw new TypeError('Failed to fetch'); }, 'l1', shown), TypeError);
+  await assert.rejects(recheckPrices(async () => { throw new ApiError(401, { code: 'SESSION_EXPIRED' }); }, 'l1', shown),
+    (error: unknown) => error instanceof ApiError && error.status === 401);
+});
+
+test('the confirmed total differs only when the exact amounts differ, never because of rounding', () => {
+  // Reviewer finding R3-total-mismatch-rounding: exact server and client totals are compared, not rounded displays.
+  assert.equal(confirmedTotalDiffers('13700.5', '13700.50000000000000000'), false);
+  assert.equal(confirmedTotalDiffers('0.5025', '0.5025'), false);
+  assert.equal(confirmedTotalDiffers('1700', '1600'), true);
+});
+
+test('only the latest of several overlapping requests may update the view', async () => {
+  // Reviewer finding R3-lists-unordered-refresh: a slower, older list response must not overwrite a newer one.
+  const latest = latestOnly();
+  const applied: string[] = [];
+  let releaseOld!: (value: string) => void;
+  const old = latest(new Promise<string>(resolve => { releaseOld = resolve; })).then(value => { if (value !== undefined) applied.push(value); });
+  const fresh = latest(Promise.resolve('nueva')).then(value => { if (value !== undefined) applied.push(value); });
+  await fresh;
+  releaseOld('antigua');
+  await old;
+  assert.deepEqual(applied, ['nueva']);
 });

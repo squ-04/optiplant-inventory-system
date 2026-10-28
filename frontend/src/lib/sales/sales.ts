@@ -1,5 +1,5 @@
 import { ApiError } from '../api/client.ts';
-import type { ListPrice } from '../api/client.ts';
+import type { ListPrice, PriceList } from '../api/client.ts';
 import { keepsIdempotencyKey } from '../inventory/movements.ts';
 import { listPriceOf } from '../prices/prices.ts';
 import { lineNet, money, sum } from '../purchases/purchases.ts';
@@ -98,6 +98,47 @@ export function priceChanges(lines: ShownPrice[], prices: ListPrice[]): number[]
 /** The chosen price list was deactivated: local profiles no longer read it (404) and a sale with it is rejected (409). */
 export const listUnavailable = (reason: unknown) => reason instanceof ApiError
   && (reason.problem.code === 'PRICE_LIST_NOT_FOUND' || reason.problem.code === 'PRICE_LIST_INACTIVE');
+
+export type PriceRecheck =
+  | { kind: 'current'; list: PriceList }
+  | { kind: 'changed'; list: PriceList; lines: number[] }
+  | { kind: 'unavailable' };
+
+/**
+ * Re-reads the chosen list right before the confirmation dialog (H1): `changed` names the lines whose shown price is no
+ * longer the list price, `unavailable` means the list was deactivated meanwhile (H2). Any other failure, such as a lost
+ * connection or an expired session, is passed on for the form to report.
+ */
+export async function recheckPrices(read: (id: string) => Promise<PriceList>, priceList: string, shown: ShownPrice[]): Promise<PriceRecheck> {
+  let list: PriceList;
+  try {
+    list = await read(priceList);
+  } catch (reason) {
+    if (listUnavailable(reason)) return { kind: 'unavailable' };
+    throw reason;
+  }
+  const lines = priceChanges(shown, list.prices ?? []);
+  return lines.length > 0 ? { kind: 'changed', list, lines } : { kind: 'current', list };
+}
+
+/**
+ * Whether the server confirmed another total than the one estimated: both exact amounts are compared, so a rounding
+ * difference between the two never reads as a price change.
+ */
+export const confirmedTotalDiffers = (serverExact: string, clientExact: string) => compareDecimal(serverExact, clientExact) !== 0;
+
+/**
+ * Wraps overlapping requests of the same kind so only the most recent one delivers its value; an older response that
+ * arrives later resolves to undefined, even when it fails, and must not update the view.
+ */
+export function latestOnly() {
+  let last = 0;
+  return <T>(request: Promise<T>): Promise<T | undefined> => {
+    const id = ++last;
+    // A failure of an outdated request is dropped too: only the latest one may report an error.
+    return request.then(value => id === last ? value : undefined, reason => { if (id === last) throw reason; return undefined; });
+  };
+}
 
 /** Shown discount of a sale: shown list subtotal minus shown net total, so the displayed amounts always add up. */
 export const shownDiscount = (gross: string, net: string) => subtract(money(gross), money(net));

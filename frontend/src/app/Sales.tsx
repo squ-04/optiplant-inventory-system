@@ -5,8 +5,10 @@ import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { Branch, LocalCatalog, PriceList, Sale, SaleHistory, User } from '../lib/api/client.ts';
 import { lineNet, money, sum } from '../lib/purchases/purchases.ts';
 import {
-  MAX_SALE_LINES, compareDecimal, confirmationFailure, listUnavailable, netUnitPrice, priceChanges, shortages, shownDiscount,
+  MAX_SALE_LINES, confirmationFailure, confirmedTotalDiffers, latestOnly, listUnavailable, netUnitPrice, recheckPrices, shortages,
+  shownDiscount,
 } from '../lib/sales/sales.ts';
+import type { PriceRecheck } from '../lib/sales/sales.ts';
 import { listPriceOf } from '../lib/prices/prices.ts';
 import { newIdempotencyKey } from '../lib/inventory/movements.ts';
 import {
@@ -61,11 +63,18 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
   // A success notice belongs to the moment it happened: it is not shown again when the operator comes back (H9).
   useEffect(() => { if (!visible) setConfirmed(''); }, [visible]);
 
+  // Several moments reload the lists (view shown, form opened, list deactivated): only the latest answer is applied, so
+  // an older, slower one never brings back a list deactivated meanwhile.
+  const [latestLists] = useState(latestOnly);
+  function refreshLists() {
+    latestLists(client.priceLists()).then(value => { if (value) setLists(value); }).catch(onError);
+  }
+
   /** The chosen list was deactivated meanwhile: it leaves the selector and the draft asks for another one (H2). */
   function listGone() {
     setDraft(previous => ({ ...previous, priceList: '' }));
     setList(null);
-    client.priceLists().then(setLists).catch(onError);
+    refreshLists();
     setFormError('La lista de precios elegida ya no está disponible: fue desactivada. Elija otra lista; el borrador se conserva.');
   }
 
@@ -74,7 +83,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
     if (admin) client.visibleBranches().then(setBranches).catch(onError);
     if (operator) {
       client.localCatalog().then(setCatalog).catch(onError);
-      client.priceLists().then(setLists).catch(onError);
+      refreshLists();
     }
   }, [client, admin, operator, revision, visible]);
 
@@ -152,7 +161,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
 
   function openEditor() {
     setEditorOpen(true); setFormError(''); setConfirmed('');
-    client.priceLists().then(setLists).catch(onError);
+    refreshLists();
     setListRevision(value => value + 1);
     revealEditor('sale-editor');
   }
@@ -170,20 +179,20 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
     }
     // The server applies the current list price (RF-0030): re-read it so the dialog never shows an older total (H1).
     setBusy(true); setFormError('');
-    let current: PriceList;
+    let recheck: PriceRecheck;
     try {
-      current = await client.priceList(draft.priceList);
+      recheck = await recheckPrices(id => client.priceList(id), draft.priceList,
+        lines.map(entry => ({ product: entry.line.product, unit: entry.line.unit, price: entry.price })));
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
-      else if (listUnavailable(reason)) listGone();
       else setFormError(reason instanceof TypeError
         ? 'Sin comunicación con el servidor. No se confirmó la venta; inténtelo de nuevo.'
         : reason instanceof Error ? reason.message : 'No se pudo consultar la lista de precios.');
       return;
     } finally { setBusy(false); }
-    const changed = priceChanges(lines.map(entry => ({ product: entry.line.product, unit: entry.line.unit, price: entry.price })),
-      current.prices ?? []);
-    if (changed.length > 0) {
+    if (recheck.kind === 'unavailable') { listGone(); return; }
+    if (recheck.kind === 'changed') {
+      const { list: current, lines: changed } = recheck;
       setList(current);
       setFormError(`Los precios de la lista ${current.name} cambiaron desde que se consultaron (${changed.length === 1
         ? `línea ${changed[0]}` : `líneas ${changed.join(', ')}`}). Revise el total actualizado y confirme de nuevo.`);
@@ -202,10 +211,9 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
     setBusy(true); setFormError(''); setConfirmed('');
     try {
       const sale = await client.confirmSale(input, saleKey);
-      const estimated = money(totalNet);
       setConfirmed(`Venta ${sale.code} confirmada por ${decimal(sale.totalNet)} COP. Las existencias de ${sale.branch.name} `
-        + 'disminuyeron y el comprobante quedó registrado.' + (compareDecimal(sale.totalNet, estimated) === 0 ? ''
-          : ` El total difiere del estimado (${decimal(estimated)} COP) porque la lista de precios cambió al confirmar.`));
+        + 'disminuyeron y el comprobante quedó registrado.' + (confirmedTotalDiffers(sale.exactTotalNet, totalNet)
+          ? ` El total difiere del estimado (${decimal(money(totalNet))} COP) porque la lista de precios cambió al confirmar.` : ''));
       setSaleKey(newIdempotencyKey());
       setOutcomeUnknown(false);
       setDraft(previous => ({ ...emptySale(), priceList: previous.priceList }));
@@ -219,7 +227,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
       if (!failure.keepKey) setSaleKey(newIdempotencyKey());
       setOutcomeUnknown(failure.keepKey);
       if (failure.alreadyConfirmed) { onChanged(); void loadHistory(); }
-      if (listUnavailable(reason)) client.priceLists().then(setLists).catch(onError);
+      if (listUnavailable(reason)) refreshLists();
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setFormError(failure.message);
     } finally { setBusy(false); }
