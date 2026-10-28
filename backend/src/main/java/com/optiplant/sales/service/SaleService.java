@@ -62,7 +62,19 @@ public class SaleService {
         this.reader = reader;
     }
 
-    private record Context(long branchId, long actorId) {}
+    /**
+     * The operator's branch and identity. The role is authorization and is checked before any idempotent replay; the
+     * active branch is a rule of new effects, checked by {@link #active} inside the action, so a retry of a request
+     * committed before a deactivation still returns its original result (ARQ-007).
+     */
+    private record Context(long branchId, long actorId, boolean branchActive) {}
+
+    private static Context active(Context context) {
+        if (!context.branchActive()) {
+            throw new ApiException(409, "BRANCH_INACTIVE", "La sucursal está inactiva: conserva su historial pero no admite nuevas operaciones.");
+        }
+        return context;
+    }
 
     private record Resolved(OperableUnits.Unit unit, SaleRequest.Line line, BigDecimal base, PriceListService.ListPrice price,
                             String sku, String productName) {}
@@ -72,7 +84,7 @@ public class SaleService {
         IdempotencyService.requireKey(key);
         Context context = context(principal);
         return idempotency.execute(context.actorId(), CONFIRM, principal.branchExternalId().toString(), key, request, 201,
-            SaleResponse.class, () -> reader.record(insert(context, request)));
+            SaleResponse.class, () -> reader.record(insert(active(context), request)));
     }
 
     private long insert(Context context, SaleRequest request) {
@@ -126,7 +138,7 @@ public class SaleService {
                     net_amount,historical_base_cost,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
                 Long.class, saleId, index + 1, unit.productId(), unit.id(), line.price().priceListId(), line.price().listName(),
                 line.sku(), line.productName(), unit.unitName(), unit.factor(), quantity, line.base(), gross, discount,
-                SaleQueryService.netUnitPrice(gross, discount).multiply(quantity), cost, now);
+                SaleAmounts.lineNet(quantity, gross, discount), cost, now);
             exits.add(new InventoryLedger.Line(unit.productId(), unit.id(), unit.factor(), quantity, line.base(), Direction.OUT,
                 new Cost.Average(), null, lineId, null, new InventoryLedger.Snapshot(line.sku(), line.productName(), unit.unitName())));
         }
@@ -155,11 +167,8 @@ public class SaleService {
         Map<String, Object> branch = jdbc.queryForList("SELECT id,active FROM identity_branch WHERE external_id=?",
             principal.branchExternalId()).stream().findFirst()
             .orElseThrow(() -> new ApiException(404, "BRANCH_NOT_FOUND", "No se encontró la sucursal."));
-        if (!(Boolean) branch.get("active")) {
-            throw new ApiException(409, "BRANCH_INACTIVE", "La sucursal está inactiva: conserva su historial pero no admite nuevas operaciones.");
-        }
         long actorId = jdbc.queryForObject("SELECT id FROM identity_user_account WHERE external_id=?", Long.class,
             principal.externalId());
-        return new Context(((Number) branch.get("id")).longValue(), actorId);
+        return new Context(((Number) branch.get("id")).longValue(), actorId, (Boolean) branch.get("active"));
     }
 }

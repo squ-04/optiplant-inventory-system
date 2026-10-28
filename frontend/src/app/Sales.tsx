@@ -92,12 +92,18 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
   }
   useEffect(() => { if (visible) void loadHistory(); }, [visible, consulted, revision]);
 
+  // Only the receipt requested last is shown: a slower earlier response is discarded.
+  const detailRequest = useRef(0);
   async function openDetail(id: string) {
+    const request = ++detailRequest.current;
     setDetailError('');
     try {
-      setSelected(await client.sale(id));
+      const sale = await client.sale(id);
+      if (request !== detailRequest.current) return;
+      setSelected(sale);
       revealEditor('sale-detail');
     } catch (reason) {
+      if (request !== detailRequest.current) return;
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setDetailError(reason instanceof Error ? reason.message : 'No se pudo consultar la venta.');
     }

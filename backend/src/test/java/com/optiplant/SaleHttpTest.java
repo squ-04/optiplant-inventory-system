@@ -364,9 +364,17 @@ class SaleHttpTest {
         assertThat(operator.post("/sales", sale(List.of(line(product, "unidad", "1.5", "0")))).statusCode()).isEqualTo(400);
         assertThat(effects()).containsExactly(0, 0);
 
-        // An inactive branch keeps its history but admits no new sale.
+        // An inactive branch keeps its history but admits no new sale. A retry of a sale confirmed before the
+        // deactivation, whose response was lost, still returns its original record without a second withdrawal.
+        String key = UUID.randomUUID().toString();
+        HttpResponse<String> confirmed = operator.post("/sales", body, key);
+        assertThat(confirmed.statusCode()).isEqualTo(201);
         jdbc.update("UPDATE identity_branch SET active=false WHERE external_id=?", a);
         assertThat(code(operator.post("/sales", body))).isEqualTo("BRANCH_INACTIVE");
+        HttpResponse<String> retried = operator.post("/sales", body, key);
+        assertThat(retried.statusCode()).as(retried.body()).isEqualTo(201);
+        assertThat(read(retried)).isEqualTo(read(confirmed));
+        assertThat(effects()).containsExactly(1, 1);
     }
 
     @Test void recordsAreReadWithinTheProfileScope() throws Exception {
@@ -391,6 +399,18 @@ class SaleHttpTest {
         assertThat(read(foreign.get("/sales")).get("total").asInt()).isZero();
         assertThat(operator.get("/sales/" + UUID.randomUUID()).statusCode()).isEqualTo(404);
         assertThat(operator.get("/sales?limit=0").statusCode()).isEqualTo(400);
+        assertThat(operator.get("/sales?limit=501").statusCode()).isEqualTo(400);
+        assertThat(operator.get("/sales?limit=500").statusCode()).isEqualTo(200);
+
+        // Newest first; the total counts every sale of the scope even when the limit truncates the items.
+        String newest = read(operator.post("/sales", sale(List.of(line(product, "unidad", "1", "0"))))).get("externalId").asText();
+        JsonNode limited = read(operator.get("/sales?limit=1"));
+        assertThat(limited.get("total").asInt()).isEqualTo(2);
+        assertThat(limited.get("items")).hasSize(1);
+        assertThat(limited.get("items").get(0).get("externalId").asText()).isEqualTo(newest);
+        JsonNode all = read(operator.get("/sales")).get("items");
+        assertThat(all.get(0).get("externalId").asText()).isEqualTo(newest);
+        assertThat(all.get(1).get("externalId").asText()).isEqualTo(id);
     }
 
     class Browser {

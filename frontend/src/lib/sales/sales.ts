@@ -11,10 +11,13 @@ export const MAX_SALE_LINES = 100;
  * JavaScript numbers.
  */
 
-/** Exact unit price after the line discount (RF-0029-CA-02: 100 with 10% → 90), or null while incomplete. */
+/**
+ * Exact unit price after the line discount (RF-0029-CA-02: 100 with 10% → 90), or null while incomplete. It is the
+ * line net of one unit: the same stored formula, `quantity × price × (1 − discount/100)`, with quantity 1.
+ */
 export const netUnitPrice = (price: string, discountPercent: string) => lineNet('1', price, discountPercent);
 
-/** Exact base quantity of a commercial quantity, `quantity × factor`, or null while incomplete. */
+/** Exact base quantity of a commercial quantity, `quantity × factor` (a line net without discount), or null while incomplete. */
 export const baseQuantity = (quantity: string, factor: string) => lineNet(quantity, factor, '0');
 
 /** Compares two non-negative decimal strings: negative, zero or positive like a comparator. */

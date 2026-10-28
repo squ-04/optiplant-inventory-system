@@ -32,11 +32,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class SaleQueryService {
     public static final int DEFAULT_LIMIT = 100;
     public static final int MAX_LIMIT = 500;
-    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final String SALE = """
         SELECT s.id,s.external_id,s.code,s.confirmed_at,b.external_id AS branch,b.code AS branch_code,b.name AS branch_name,
             b.active AS branch_active,u.code AS actor_code,u.full_name AS actor_name,
-            (SELECT external_id FROM inventory_operation WHERE sale_id=s.id) AS operation
+            (SELECT external_id FROM inventory_operation WHERE sale_id=s.id AND kind='SALE') AS operation
         FROM sales_sale s JOIN identity_branch b ON b.id=s.branch_id JOIN identity_user_account u ON u.id=s.confirmed_by
         """;
 
@@ -127,7 +126,7 @@ public class SaleQueryService {
                     plain(r.getBigDecimal("factor_snapshot")), quantity.setScale(3).toPlainString(),
                     r.getBigDecimal("base_qty").setScale(3).toPlainString(), r.getString("base_unit_name"),
                     r.getObject("list", UUID.class), r.getString("list_name_snapshot"), plain(price), plain(discount),
-                    plain(netUnitPrice(price, discount)), money(net), plain(net), r.getObject("movement", UUID.class)));
+                    plain(SaleAmounts.netUnitPrice(price, discount)), money(net), plain(net), r.getObject("movement", UUID.class)));
             }, rows.stream().map(Row::id).toArray());
         return rows.stream().map(row -> {
             Amounts amounts = totals.get(row.id());
@@ -138,11 +137,6 @@ public class SaleQueryService {
                 row.operation(), gross.toPlainString(), gross.subtract(net).toPlainString(), net.toPlainString(),
                 plain(amounts.net()), List.copyOf(lines.get(row.id())));
         }).toList();
-    }
-
-    /** Exact unit price after the line discount: price × (1 − discount/100) (RF-0029-CA-02). */
-    static BigDecimal netUnitPrice(BigDecimal price, BigDecimal discount) {
-        return price.multiply(HUNDRED.subtract(discount)).movePointLeft(2);
     }
 
     /** Monetary display precision: 2 decimals, half up (INC-013/D03). */

@@ -23,7 +23,7 @@ public record SaleRequest(UUID priceList, List<Line> lines) {
     // sales_line.discount_pct is NUMERIC(9,6).
     private static final Pattern PERCENT = Pattern.compile("^\\d{1,3}(\\.\\d{1,6})?$");
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    private static final String DISCOUNT = "el descuento debe ser un porcentaje entre 0 y 100, con hasta 6 decimales "
+    private static final String DISCOUNT_RANGE = "el descuento debe ser un porcentaje entre 0 y 100, con hasta 6 decimales "
         + "(indique 0 si no aplica). No se confirmó la venta.";
 
     public record Line(UUID product, String unit, BigDecimal quantity, BigDecimal discountPercent) {}
@@ -65,9 +65,9 @@ public record SaleRequest(UUID priceList, List<Line> lines) {
         }
         if (quantity.signum() <= 0) throw invalid(prefix + "la cantidad debe ser mayor que cero.");
         JsonNode discount = line.path("discountPercent");
-        if (!discount.isTextual() || !PERCENT.matcher(discount.asText()).matches()) throw invalid(prefix + DISCOUNT);
+        if (!discount.isTextual() || !PERCENT.matcher(discount.asText()).matches()) throw invalid(prefix + DISCOUNT_RANGE);
         BigDecimal percent = new BigDecimal(discount.asText());
-        if (percent.compareTo(HUNDRED) > 0) throw invalid(prefix + DISCOUNT);
+        if (percent.compareTo(HUNDRED) > 0) throw invalid(prefix + DISCOUNT_RANGE);
         return new Line(product, unit.asText(), quantity, percent);
     }
 
