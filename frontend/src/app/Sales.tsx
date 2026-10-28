@@ -44,6 +44,9 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
   const [draft, setDraft] = useState<SaleDraft>(emptySale);
   // One key per confirmation attempt; it survives a retry whose outcome is unknown (ARQ-007, RF-0027-CA-02).
   const [saleKey, setSaleKey] = useState(newIdempotencyKey);
+  // The last confirmation has an unknown outcome: its key must survive even a discarded draft, or re-entering the same
+  // sale would bypass the server replay and sell twice (RF-0027-CA-02).
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmed, setConfirmed] = useState('');
@@ -151,6 +154,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
       setConfirmed(`Venta ${sale.code} confirmada por ${decimal(sale.totalNet)} COP. Las existencias de ${sale.branch.name} `
         + 'disminuyeron y el comprobante quedó registrado.');
       setSaleKey(newIdempotencyKey());
+      setOutcomeUnknown(false);
       setDraft(previous => ({ ...emptySale(), priceList: previous.priceList }));
       setEditorOpen(false);
       setSelected(sale);
@@ -160,6 +164,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
     } catch (reason) {
       const failure = confirmationFailure(reason);
       if (!failure.keepKey) setSaleKey(newIdempotencyKey());
+      setOutcomeUnknown(failure.keepKey);
       if (failure.alreadyConfirmed) { onChanged(); void loadHistory(); }
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setFormError(failure.message);
@@ -278,7 +283,9 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
             <X aria-hidden="true" />Cerrar y conservar borrador
           </Button>
           <Button variant="ghost" type="button" onClick={() => { setDraft(previous => ({ ...emptySale(), priceList: previous.priceList }));
-            setSaleKey(newIdempotencyKey()); setFormError(''); }}>
+            setFormError(outcomeUnknown ? 'Borrador descartado. La confirmación anterior no tiene resultado conocido: revise los '
+              + 'comprobantes antes de registrarla de nuevo; si la confirma con los mismos datos, no se duplicará.' : '');
+            if (!outcomeUnknown) setSaleKey(newIdempotencyKey()); }}>
             <Trash2 aria-hidden="true" />Descartar borrador
           </Button>
         </fieldset>
