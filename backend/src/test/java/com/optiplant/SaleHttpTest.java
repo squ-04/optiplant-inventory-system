@@ -345,6 +345,12 @@ class SaleHttpTest {
         assertThat(manager.statusCode()).isEqualTo(403);
         assertThat(code(manager)).isEqualTo("SALE_FORBIDDEN");
         assertThat(admin.post("/sales", body).statusCode()).isEqualTo(403);
+        // The profile is checked before the body: an incomplete sale from a supervisor is forbidden, not invalid.
+        for (Browser supervisor : List.of(account("MANAGER", a), admin)) {
+            HttpResponse<String> empty = supervisor.post("/sales", Map.of());
+            assertThat(empty.statusCode()).as(empty.body()).isEqualTo(403);
+            assertThat(code(empty)).isEqualTo("SALE_FORBIDDEN");
+        }
 
         // A product without a price in the chosen list, an inactive list or a product not enabled in the branch is rejected.
         String wholesale = priceList("Mayorista");
@@ -360,8 +366,16 @@ class SaleHttpTest {
         UUID foreign = product("Ajeno", b);
         price(list, foreign, "unidad", "10");
         assertThat(code(operator.post("/sales", sale(List.of(line(foreign, "unidad", "1", "0")))))).isEqualTo("PRODUCT_NOT_OPERABLE");
-        // Indivisible units admit whole quantities only.
-        assertThat(operator.post("/sales", sale(List.of(line(product, "unidad", "1.5", "0")))).statusCode()).isEqualTo(400);
+        // Indivisible units admit whole quantities only. Every line rejection reads «Línea N: <lowercase>…» and states
+        // that the sale was not confirmed.
+        HttpResponse<String> fraction = operator.post("/sales", sale(List.of(line(product, "unidad", "1.5", "0"))));
+        assertThat(fraction.statusCode()).isEqualTo(400);
+        assertThat(read(fraction).get("detail").asText()).startsWith("Línea 1: la unidad no admite fracciones")
+            .endsWith("No se confirmó la venta.");
+        HttpResponse<String> zero = operator.post("/sales", sale(List.of(line(product, "unidad", "0", "0"))));
+        assertThat(read(zero).get("detail").asText()).isEqualTo("Línea 1: la cantidad debe ser mayor que cero. No se confirmó la venta.");
+        assertThat(read(operator.post("/sales", sale(List.of(line(foreign, "unidad", "1", "0"))))).get("detail").asText())
+            .startsWith("Línea 1: el producto").endsWith("No se confirmó la venta.");
         assertThat(effects()).containsExactly(0, 0);
 
         // An inactive branch keeps its history but admits no new sale. A retry of a sale confirmed before the

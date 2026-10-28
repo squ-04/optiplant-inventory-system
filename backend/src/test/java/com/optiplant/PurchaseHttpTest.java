@@ -258,6 +258,8 @@ class PurchaseHttpTest {
         HttpResponse<String> disabled = operator.post("/purchases/orders", order(supplier, 0, List.of(line(foreign, "caja", "1", "1", "0"))));
         assertThat(disabled.statusCode()).isEqualTo(409);
         assertThat(read(disabled).get("code").asText()).isEqualTo("PRODUCT_NOT_OPERABLE");
+        // Line rejections read «Línea N: <lowercase>…».
+        assertThat(read(disabled).get("detail").asText()).startsWith("Línea 1: el producto");
         assertThat(orders()).isEqualTo(before);
     }
 
@@ -419,6 +421,19 @@ class PurchaseHttpTest {
 
         String id = pending(supplier, 0).get("externalId").asText();
         assertThat(manager.post("/purchases/orders/" + id + "/receive", Map.of()).statusCode()).isEqualTo(403);
+        // The profile is checked before the body: supervisors are forbidden, not told how to fix a request they cannot make.
+        for (Browser forbidden : List.of(manager, admin)) {
+            for (Map.Entry<String, Map<String, Object>> request : Map.of(
+                    "/purchases/orders", Map.<String, Object>of(),
+                    "/purchases/orders/" + id + "/update", Map.<String, Object>of(),
+                    "/purchases/orders/" + id + "/cancel", Map.<String, Object>of("reason", 5),
+                    "/purchases/orders/" + id + "/submit", Map.<String, Object>of("supplier", supplier),
+                    "/purchases/orders/" + id + "/receive", Map.<String, Object>of("lines", List.of())).entrySet()) {
+                HttpResponse<String> response = forbidden.post(request.getKey(), request.getValue());
+                assertThat(response.statusCode()).as(request.getKey() + " " + response.body()).isEqualTo(403);
+                assertThat(read(response).get("code").asText()).isEqualTo("PURCHASE_FORBIDDEN");
+            }
+        }
         // An operator of another branch cannot receive it, and learns nothing about it.
         Browser foreign = account("OPERATOR", b);
         HttpResponse<String> response = foreign.post("/purchases/orders/" + id + "/receive", Map.of());

@@ -4,6 +4,7 @@ import com.optiplant.catalog.service.OperableUnits;
 import com.optiplant.catalog.service.UnitConversion;
 import com.optiplant.common.exception.ApiException;
 import com.optiplant.common.idempotency.IdempotencyService;
+import com.optiplant.common.text.LineDetail;
 import com.optiplant.identity.service.SessionPrincipal;
 import com.optiplant.inventory.service.InventoryLedger;
 import com.optiplant.inventory.service.InventoryLedger.Cost;
@@ -212,7 +213,7 @@ public class PurchaseOrderService {
                 unit = units.find(context.branchId(), line.product(), line.unit());
                 base = UnitConversion.toBase(line.quantity(), unit.factor(), unit.divisible(), unit.baseDivisible());
             } catch (ApiException error) {
-                throw new ApiException(error.status(), error.code(), "Línea " + (index + 1) + ": " + error.getMessage());
+                throw new ApiException(error.status(), error.code(), LineDetail.of(index + 1, error.getMessage()));
             }
             lines.add(new Resolved(unit, line, base, net(line.quantity(), line.unitPrice(), line.discountPercent())));
         }
@@ -253,7 +254,7 @@ public class PurchaseOrderService {
                 base = UnitConversion.toBase((BigDecimal) line.get("commercial_qty"), unit.factor(), unit.divisible(),
                     unit.baseDivisible());
             } catch (ApiException error) {
-                throw new ApiException(error.status(), error.code(), "Línea " + line.get("line_no") + ": " + error.getMessage());
+                throw new ApiException(error.status(), error.code(), LineDetail.of(line.get("line_no"), error.getMessage()));
             }
             jdbc.update("""
                 UPDATE purchases_line l SET sku_snapshot=p.sku,product_name_snapshot=p.name,unit_name_snapshot=u.name,
@@ -288,7 +289,7 @@ public class PurchaseOrderService {
             try {
                 units.requireOperable(context.branchId(), productId);
             } catch (ApiException error) {
-                throw new ApiException(error.status(), error.code(), "Línea " + row.get("line_no") + ": " + error.getMessage()
+                throw new ApiException(error.status(), error.code(), LineDetail.of(row.get("line_no"), error.getMessage())
                     + " No se recibió ninguna línea de la orden.");
             }
             BigDecimal factor = (BigDecimal) row.get("factor_snapshot");
@@ -340,13 +341,21 @@ public class PurchaseOrderService {
             orderId, from, to, actorId, at, reason, orderId);
     }
 
-    /** Only the operator of an active branch executes purchases (§5.2, RF-0003-CA-08). */
-    private Context context(SessionPrincipal principal) {
+    /**
+     * Only an operator with a branch executes purchases (§5.2, RF-0003-CA-08). Controllers call it before reading the body,
+     * so a supervisor is told the operation is not theirs instead of how to fix a request they cannot make.
+     */
+    public void requireBuyer(SessionPrincipal principal) {
         if (!"OPERATOR".equals(principal.role()) || principal.branchExternalId() == null) {
             throw new ApiException(403, "PURCHASE_FORBIDDEN", "MANAGER".equals(principal.role())
                 ? "El gerente consulta y supervisa las compras de su sucursal; las registra y recibe el operador."
                 : "El administrador consulta las compras de la red; las registra y recibe el operador de cada sucursal.");
         }
+    }
+
+    /** Only the operator of an active branch executes purchases (§5.2, RF-0003-CA-08). */
+    private Context context(SessionPrincipal principal) {
+        requireBuyer(principal);
         Map<String, Object> branch = jdbc.queryForList("SELECT id,active FROM identity_branch WHERE external_id=?",
             principal.branchExternalId()).stream().findFirst()
             .orElseThrow(() -> new ApiException(404, "BRANCH_NOT_FOUND", "No se encontró la sucursal."));

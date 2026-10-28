@@ -46,6 +46,7 @@ public class PurchaseOrderController {
     public PurchaseOrderResponse create(@AuthenticationPrincipal SessionPrincipal principal,
                                         @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                         @RequestBody JsonNode body) {
+        orders.requireBuyer(principal);
         return orders.create(principal, key, PurchaseOrderRequest.from(body));
     }
 
@@ -54,6 +55,7 @@ public class PurchaseOrderController {
     public PurchaseOrderResponse update(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID order,
                                         @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                         @RequestBody(required = false) JsonNode body) {
+        orders.requireBuyer(principal);
         policy.requirePublicReference(order);
         return orders.update(principal, order, key, PurchaseOrderRequest.edit(body));
     }
@@ -63,6 +65,7 @@ public class PurchaseOrderController {
     public PurchaseOrderResponse cancel(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID order,
                                         @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                         @RequestBody(required = false) JsonNode body) {
+        orders.requireBuyer(principal);
         policy.requirePublicReference(order);
         return orders.cancel(principal, order, key, PurchaseCancelRequest.from(body).reason());
     }
@@ -72,6 +75,7 @@ public class PurchaseOrderController {
     public PurchaseOrderResponse submit(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID order,
                                         @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                         @RequestBody(required = false) JsonNode body) {
+        orders.requireBuyer(principal);
         policy.requirePublicReference(order);
         requireEmpty(body, "VALIDATION_FAILED", "El envío a recepción no admite datos: las condiciones se registran al crear la orden.");
         return orders.submit(principal, order, key);
@@ -82,6 +86,7 @@ public class PurchaseOrderController {
     public PurchaseOrderResponse receive(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID order,
                                          @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                          @RequestBody(required = false) JsonNode body) {
+        orders.requireBuyer(principal);
         policy.requirePublicReference(order);
         requireEmpty(body, "PARTIAL_RECEIPT_NOT_SUPPORTED", "La recepción de compra es completa: se reciben todas las líneas de la orden y no admite "
             + "cantidades parciales. No se modificó la compra ni el inventario.");
