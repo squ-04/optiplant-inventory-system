@@ -483,8 +483,218 @@ class PurchaseHttpTest {
         assertThat(read(admin.get("/purchases/orders?branch=" + b)).get("items")).isEmpty();
     }
 
+    /** Base quantity of every line of an order, by line number. */
+    List<String> lines(String order) {
+        return jdbc.queryForList("SELECT l.line_no||' '||trim_scale(l.base_qty)||' '||trim_scale(l.gross_unit_price) FROM purchases_line l "
+            + "JOIN purchases_order o ON o.id=l.order_id WHERE o.external_id=?::uuid ORDER BY l.line_no", String.class, order);
+    }
+
+    @Test void onlyDraftsAreEditedAndAReceivedOrderIsNeverRewrittenOrDeleted() throws Exception {
+        String supplier = supplier("Viveros");
+        String renamed = supplier("Semillas del Norte");
+        String id = draft(supplier, 30).get("externalId").asText();
+
+        // RF-0022: a draft is rewritten with new supplier, conditions and lines; it stays a draft and stock is untouched.
+        HttpResponse<String> edited = operator.post("/purchases/orders/" + id + "/update", order(renamed, 15,
+            List.of(line(other, "unidad", "5", "10", "0"), line(product, "caja", "1", "100", "0"))));
+        assertThat(edited.statusCode()).as(edited.body()).isEqualTo(200);
+        JsonNode draft = read(edited);
+        assertThat(draft.get("status").asText()).isEqualTo("DRAFT");
+        assertThat(draft.get("supplier").get("name").asText()).isEqualTo("Semillas del Norte");
+        assertThat(draft.get("paymentTermDays").asInt()).isEqualTo(15);
+        assertThat(draft.get("totalNet").asText()).isEqualTo("150.00");
+        assertThat(lines(id)).containsExactly("1 5 10", "2 12 100");
+        assertThat(balance(a, product)).containsExactly("0", "0", "0");
+
+        // Repeating the edit with the same key returns the stored result; the key cannot carry another body.
+        String key = UUID.randomUUID().toString();
+        Map<String, Object> retyped = order(renamed, 20, List.of(line(other, "unidad", "5", "10", "0"), line(product, "caja", "1", "100", "0")));
+        HttpResponse<String> once = operator.post("/purchases/orders/" + id + "/update", retyped, key);
+        HttpResponse<String> replayed = operator.post("/purchases/orders/" + id + "/update", retyped, key);
+        assertThat(replayed.statusCode()).isEqualTo(200);
+        assertThat(read(replayed)).isEqualTo(read(once));
+        HttpResponse<String> reused = operator.post("/purchases/orders/" + id + "/update",
+            order(renamed, 99, List.of(line(product, "caja", "9", "1", "0"))), key);
+        assertThat(reused.statusCode()).isEqualTo(409);
+        assertThat(lines(id)).containsExactly("1 5 10", "2 12 100");
+
+        // An invalid edit is rejected as a whole and the draft keeps its previous conditions.
+        HttpResponse<String> invalid = operator.post("/purchases/orders/" + id + "/update",
+            order(renamed, 15, List.of(line(product, "caja", "1", "100", "101"))));
+        assertThat(invalid.statusCode()).isEqualTo(400);
+        assertThat(lines(id)).containsExactly("1 5 10", "2 12 100");
+
+        // A pending order is not rewritten (INC-011/D03): it must be cancelled and replaced.
+        assertThat(operator.post("/purchases/orders/" + id + "/submit", Map.of()).statusCode()).isEqualTo(200);
+        HttpResponse<String> pending = operator.post("/purchases/orders/" + id + "/update",
+            order(supplier, 0, List.of(line(product, "caja", "9", "1", "0"))));
+        assertThat(pending.statusCode()).isEqualTo(409);
+        assertThat(read(pending).get("code").asText()).isEqualTo("PURCHASE_NOT_EDITABLE");
+        assertThat(read(pending).get("detail").asText()).contains("cancélela y cree otra");
+        assertThat(lines(id)).containsExactly("1 5 10", "2 12 100");
+        assertThat(status(id)).isEqualTo("PENDING");
+
+        // A received order is neither rewritten nor deleted, and its stock stays as received.
+        assertThat(operator.post("/purchases/orders/" + id + "/receive", Map.of()).statusCode()).isEqualTo(200);
+        List<String> received = balance(a, product);
+        assertThat(operator.post("/purchases/orders/" + id + "/update", order(supplier, 0, List.of(line(product, "caja", "9", "1", "0"))))
+            .statusCode()).isEqualTo(409);
+        HttpResponse<String> deleted = operator.delete("/purchases/orders/" + id);
+        assertThat(deleted.statusCode()).isEqualTo(405);
+        assertThat(status(id)).isEqualTo("RECEIVED");
+        assertThat(lines(id)).containsExactly("1 5 10", "2 12 100");
+        assertThat(balance(a, product)).isEqualTo(received);
+        assertThat(receipts()).isEqualTo(1);
+    }
+
+    @Test void cancellingBeforeReceiptKeepsStockAndAverageAndTheReplacementKeepsBothOrders() throws Exception {
+        String supplier = supplier("Viveros");
+        // Previous stock: 24 units at 9 (RF-0023-CA-02).
+        String first = pending(supplier, 0).get("externalId").asText();
+        assertThat(operator.post("/purchases/orders/" + first + "/receive", Map.of()).statusCode()).isEqualTo(200);
+        assertThat(balance(a, product)).containsExactly("24", "216", "9");
+
+        // A pending order at another price is cancelled with a reason: stock and average do not change (RF-0026-CA-01).
+        String wrong = operator.post("/purchases/orders", order(supplier, 0, List.of(line(product, "caja", "1", "240", "0"))))
+            .body().transform(this::externalId);
+        operator.post("/purchases/orders/" + wrong + "/submit", Map.of());
+        HttpResponse<String> cancelled = operator.post("/purchases/orders/" + wrong + "/cancel", Map.of("reason", "Precio equivocado"));
+        assertThat(cancelled.statusCode()).as(cancelled.body()).isEqualTo(200);
+        JsonNode cancelledOrder = read(cancelled);
+        assertThat(cancelledOrder.get("status").asText()).isEqualTo("CANCELLED");
+        JsonNode last = cancelledOrder.get("events").get(cancelledOrder.get("events").size() - 1);
+        assertThat(last.get("fromStatus").asText()).isEqualTo("PENDING");
+        assertThat(last.get("toStatus").asText()).isEqualTo("CANCELLED");
+        assertThat(last.get("reason").asText()).isEqualTo("Precio equivocado");
+        assertThat(cancelledOrder.get("receivedAt").isNull()).isTrue();
+        assertThat(balance(a, product)).containsExactly("24", "216", "9");
+        assertThat(receipts()).isEqualTo(1);
+
+        // A cancelled order is never received.
+        HttpResponse<String> receiveCancelled = operator.post("/purchases/orders/" + wrong + "/receive", Map.of());
+        assertThat(receiveCancelled.statusCode()).isEqualTo(409);
+        assertThat(read(receiveCancelled).get("code").asText()).isEqualTo("PURCHASE_STATUS_CONFLICT");
+        assertThat(balance(a, product)).containsExactly("24", "216", "9");
+
+        // RF-0022-CA-02: the replacement references the cancelled order and both stay consultable with their states.
+        Map<String, Object> replacement = new java.util.HashMap<>(order(supplier, 0, List.of(line(product, "caja", "1", "144", "0"))));
+        replacement.put("replacesOrder", wrong);
+        HttpResponse<String> created = operator.post("/purchases/orders", replacement);
+        assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+        JsonNode replacing = read(created);
+        assertThat(replacing.get("status").asText()).isEqualTo("DRAFT");
+        assertThat(replacing.get("replacesOrder").get("externalId").asText()).isEqualTo(wrong);
+        assertThat(replacing.get("replacesOrder").get("code").asText()).isEqualTo(cancelledOrder.get("code").asText());
+        // Editing the replacement keeps its link to the cancelled order.
+        HttpResponse<String> editedReplacement = operator.post("/purchases/orders/" + replacing.get("externalId").asText() + "/update",
+            order(supplier, 0, List.of(line(product, "caja", "1", "144", "0"))));
+        assertThat(read(editedReplacement).get("replacesOrder").get("externalId").asText()).isEqualTo(wrong);
+        JsonNode original = read(admin.get("/purchases/orders/" + wrong));
+        assertThat(original.get("status").asText()).isEqualTo("CANCELLED");
+        assertThat(original.get("replacedBy").get("externalId").asText()).isEqualTo(replacing.get("externalId").asText());
+        JsonNode history = read(admin.get("/purchases/orders?branch=" + a));
+        assertThat(ids(history.get("items"))).contains(wrong, replacing.get("externalId").asText());
+
+        // A cancelled order is replaced once, and only cancelled orders of the branch are replaced.
+        HttpResponse<String> twice = operator.post("/purchases/orders", replacement);
+        assertThat(twice.statusCode()).isEqualTo(409);
+        assertThat(read(twice).get("code").asText()).isEqualTo("PURCHASE_ALREADY_REPLACED");
+        Map<String, Object> notCancelled = new java.util.HashMap<>(replacement);
+        notCancelled.put("replacesOrder", first);
+        HttpResponse<String> received = operator.post("/purchases/orders", notCancelled);
+        assertThat(received.statusCode()).isEqualTo(409);
+        assertThat(read(received).get("code").asText()).isEqualTo("PURCHASE_NOT_REPLACEABLE");
+
+        // Receiving the replacement averages with the previous stock as usual: (216 + 144) / 36 = 10.
+        String replacingId = replacing.get("externalId").asText();
+        operator.post("/purchases/orders/" + replacingId + "/submit", Map.of());
+        assertThat(operator.post("/purchases/orders/" + replacingId + "/receive", Map.of()).statusCode()).isEqualTo(200);
+        assertThat(balance(a, product)).containsExactly("36", "360", "10");
+    }
+
+    @Test void draftsAreCancelledWithoutReasonAndReceivedOrCancelledOrdersAreNotCancelledAgain() throws Exception {
+        String supplier = supplier("Viveros");
+        String draft = draft(supplier, 0).get("externalId").asText();
+        HttpResponse<String> cancelled = operator.post("/purchases/orders/" + draft + "/cancel", null);
+        assertThat(cancelled.statusCode()).as(cancelled.body()).isEqualTo(200);
+        JsonNode events = read(cancelled).get("events");
+        assertThat(events.get(events.size() - 1).get("fromStatus").asText()).isEqualTo("DRAFT");
+        assertThat(events.get(events.size() - 1).get("reason").isNull()).isTrue();
+
+        HttpResponse<String> again = operator.post("/purchases/orders/" + draft + "/cancel", Map.of());
+        assertThat(again.statusCode()).isEqualTo(409);
+        assertThat(read(again).get("code").asText()).isEqualTo("PURCHASE_STATUS_CONFLICT");
+        assertThat(operator.post("/purchases/orders/" + draft + "/update", order(supplier, 0, List.of(line(product, "caja", "1", "1", "0"))))
+            .statusCode()).isEqualTo(409);
+
+        String received = pending(supplier, 0).get("externalId").asText();
+        operator.post("/purchases/orders/" + received + "/receive", Map.of());
+        HttpResponse<String> late = operator.post("/purchases/orders/" + received + "/cancel", Map.of("reason", "Tarde"));
+        assertThat(late.statusCode()).isEqualTo(409);
+        assertThat(read(late).get("code").asText()).isEqualTo("PURCHASE_ALREADY_RECEIVED");
+        assertThat(status(received)).isEqualTo("RECEIVED");
+        assertThat(balance(a, product)).containsExactly("24", "216", "9");
+
+        // The reason is free text but bounded, and no other field is admitted.
+        String pending = pending(supplier, 0).get("externalId").asText();
+        assertThat(operator.post("/purchases/orders/" + pending + "/cancel", Map.of("reason", "x".repeat(501))).statusCode()).isEqualTo(400);
+        assertThat(operator.post("/purchases/orders/" + pending + "/cancel", Map.of("refund", true)).statusCode()).isEqualTo(400);
+        assertThat(status(pending)).isEqualTo("PENDING");
+
+        // A repeated cancellation with the same key returns the original result.
+        String key = UUID.randomUUID().toString();
+        HttpResponse<String> first = operator.post("/purchases/orders/" + pending + "/cancel", Map.of("reason", "Duplicada"), key);
+        HttpResponse<String> replay = operator.post("/purchases/orders/" + pending + "/cancel", Map.of("reason", "Duplicada"), key);
+        assertThat(first.statusCode()).isEqualTo(200);
+        assertThat(replay.statusCode()).isEqualTo(200);
+        assertThat(read(replay).get("events")).isEqualTo(read(first).get("events"));
+    }
+
+    @Test void onlyTheOperatorOfTheBranchEditsOrCancelsOrders() throws Exception {
+        String supplier = supplier("Viveros");
+        String draft = draft(supplier, 0).get("externalId").asText();
+        String pending = pending(supplier, 0).get("externalId").asText();
+        Map<String, Object> body = order(supplier, 0, List.of(line(product, "caja", "9", "1", "0")));
+        Browser manager = account("MANAGER", a);
+        for (Browser forbidden : List.of(manager, admin)) {
+            HttpResponse<String> cancel = forbidden.post("/purchases/orders/" + pending + "/cancel", Map.of());
+            assertThat(cancel.statusCode()).isEqualTo(403);
+            assertThat(read(cancel).get("code").asText()).isEqualTo("PURCHASE_FORBIDDEN");
+            assertThat(forbidden.post("/purchases/orders/" + draft + "/update", body).statusCode()).isEqualTo(403);
+        }
+        Browser foreign = account("OPERATOR", b);
+        assertThat(foreign.post("/purchases/orders/" + pending + "/cancel", Map.of()).statusCode()).isEqualTo(404);
+        assertThat(foreign.post("/purchases/orders/" + draft + "/update", body).statusCode()).isEqualTo(404);
+        // A replacement cannot reference another branch's cancelled order.
+        operator.post("/purchases/orders/" + pending + "/cancel", Map.of());
+        Map<String, Object> replacement = new java.util.HashMap<>(order(supplier, 0, List.of(line(product, "caja", "1", "1", "0"))));
+        replacement.put("replacesOrder", pending);
+        assertThat(foreign.post("/purchases/orders", replacement).statusCode()).isEqualTo(404);
+        assertThat(status(draft)).isEqualTo("DRAFT");
+        assertThat(lines(draft)).containsExactly("1 24 120");
+    }
+
+    @Test void runtimeRoleDeletesLinesOfDraftOrdersOnly() throws Exception {
+        String supplier = supplier("Viveros");
+        String pending = pending(supplier, 0).get("externalId").asText();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbc.update("DELETE FROM purchases_line WHERE order_id="
+            + "(SELECT id FROM purchases_order WHERE external_id=?::uuid)", pending))
+            .hasMessageContaining("PURCHASE_LINE_IMMUTABLE");
+        assertThat(lines(pending)).containsExactly("1 24 120");
+        // Orders are cancelled, never deleted: the runtime role has no DELETE on them.
+        assertThat(jdbc.queryForObject("SELECT has_table_privilege(current_user,'purchases_order','DELETE')", Boolean.class)).isFalse();
+        assertThat(jdbc.queryForObject("SELECT has_table_privilege(current_user,'purchases_event','DELETE')", Boolean.class)).isFalse();
+    }
+
     class Browser {
         final HttpClient http = HttpClient.newBuilder().cookieHandler(new CookieManager()).build();
+        HttpResponse<String> delete(String path) throws Exception {
+            JsonNode csrf = json.readTree(get("/auth/csrf").body());
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1" + path)).DELETE()
+                .header("Idempotency-Key", UUID.randomUUID().toString());
+            if (csrf.has("headerName")) request.header(csrf.get("headerName").asText(), csrf.get("token").asText());
+            return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        }
         HttpResponse<String> get(String path) throws Exception {
             return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1" + path)).GET().build(),
                 HttpResponse.BodyHandlers.ofString());

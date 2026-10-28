@@ -3,6 +3,7 @@ package com.optiplant.purchases.controller;
 import com.optiplant.common.exception.ApiException;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
+import com.optiplant.purchases.dto.PurchaseCancelRequest;
 import com.optiplant.purchases.dto.PurchaseHistoryResponse;
 import com.optiplant.purchases.dto.PurchaseOrderRequest;
 import com.optiplant.purchases.dto.PurchaseOrderResponse;
@@ -23,8 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Purchase orders (RF-0021, RF-0023–RF-0025). Writes take an {@code Idempotency-Key}: repeating a request with the same
- * key returns the original result without new effects.
+ * Purchase orders (RF-0021–RF-0025). Orders are never deleted: there is no DELETE operation (RF-0022). Writes take
+ * an {@code Idempotency-Key}: repeating a request with the same key returns the original result without new effects.
  */
 @RestController
 @RequestMapping("/api/v1/purchases/orders")
@@ -46,6 +47,24 @@ public class PurchaseOrderController {
                                         @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                         @RequestBody JsonNode body) {
         return orders.create(principal, key, PurchaseOrderRequest.from(body));
+    }
+
+    /** RF-0022: rewrites a draft's supplier, conditions and lines; a pending or received order is never rewritten. */
+    @PostMapping("/{order}/update")
+    public PurchaseOrderResponse update(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID order,
+                                        @RequestHeader(value = "Idempotency-Key", required = false) String key,
+                                        @RequestBody(required = false) JsonNode body) {
+        policy.requirePublicReference(order);
+        return orders.update(principal, order, key, PurchaseOrderRequest.edit(body));
+    }
+
+    /** RF-0022: cancels a draft or pending order before its receipt; stock and valuation do not change. */
+    @PostMapping("/{order}/cancel")
+    public PurchaseOrderResponse cancel(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID order,
+                                        @RequestHeader(value = "Idempotency-Key", required = false) String key,
+                                        @RequestBody(required = false) JsonNode body) {
+        policy.requirePublicReference(order);
+        return orders.cancel(principal, order, key, PurchaseCancelRequest.from(body).reason());
     }
 
     /** RF-0021-CA-03: draft → pending receipt, fixing the supplier's historical name. */

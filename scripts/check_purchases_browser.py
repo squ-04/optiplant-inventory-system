@@ -1,4 +1,4 @@
-"""Exercise RF-0021 and RF-0023–RF-0025 purchases in a real browser against an isolated, disposable Compose stack."""
+"""Exercise RF-0021–RF-0026 purchases and valuation in a real browser against an isolated, disposable Compose stack."""
 import http.cookiejar
 import json
 import os
@@ -155,6 +155,69 @@ STAGES = {
       await page.screenshot({ path: config.screenshot, fullPage: true });
       await logout();
       return 'histórico de la red con columna de sucursal y la orden pendiente creada por API; sin desbordamiento a 390 px';""",
+    "operador-cancelar-reemplazar-editar": """
+      await login(config.operator);
+      check(await page.getByRole('link', { name: 'Valoración', exact: true }).count() === 0, 'El operador ve la valoración');
+      await page.getByRole('link', { name: 'Compras', exact: true }).click();
+      const pendingRow = page.getByRole('row').filter({ hasText: 'Pendiente de recepción' }).first();
+      await pendingRow.waitFor();
+      await pendingRow.getByRole('button', { name: /^Ver detalle de OC-/ }).click();
+      const detail = page.locator('#purchase-detail');
+      // RF-0022: a pending order is not edited; it is cancelled with an optional reason.
+      check(await detail.getByRole('button', { name: 'Editar borrador' }).count() === 0, 'Una orden pendiente ofrece edición');
+      await detail.getByRole('button', { name: 'Cancelar orden', exact: true }).click();
+      await detail.getByLabel('Motivo (opcional)').fill('Precio equivocado');
+      await detail.getByRole('button', { name: 'Volver sin cancelar', exact: true }).click();
+      check(await detail.getByRole('button', { name: 'Cancelar orden', exact: true }).count() === 1, 'Volver no restauró las acciones');
+      await detail.getByRole('button', { name: 'Cancelar orden', exact: true }).click();
+      await detail.getByLabel('Motivo (opcional)').fill('Precio equivocado');
+      await detail.getByRole('button', { name: 'Confirmar cancelación', exact: true }).click();
+      await page.getByText(/OC-\\d+ quedó cancelada\\. Las existencias y el costo promedio no cambiaron\\./).waitFor();
+      await detail.getByText('Motivo: Precio equivocado').waitFor();
+      const cancelled = (await detail.locator('#purchase-detail-title').innerText()).replace('Orden ', '');
+      // RF-0022-CA-02: the replacement is a new draft prefilled from the cancelled order.
+      await detail.getByRole('button', { name: 'Crear orden de reemplazo', exact: true }).click();
+      await page.waitForFunction(() => document.activeElement?.closest('#purchase-editor') !== null);
+      await page.locator('#purchase-editor legend').first().filter({ hasText: 'Orden de reemplazo de ' + cancelled }).waitFor();
+      check(await page.getByLabel('Cantidad', { exact: true }).inputValue() === '5', 'La cantidad no se copió');
+      await page.getByLabel('Precio unitario por unidad').fill('12');
+      await page.getByRole('button', { name: 'Crear borrador', exact: true }).click();
+      await page.getByText(new RegExp('Borrador OC-\\\\d+ creado en reemplazo de ' + cancelled)).waitFor();
+      await detail.getByText('Reemplaza a').waitFor();
+      // Only the draft is edited, and the edit keeps it a draft.
+      await detail.getByRole('button', { name: 'Editar borrador', exact: true }).click();
+      await page.waitForFunction(() => document.activeElement?.closest('#purchase-editor') !== null);
+      await page.getByLabel('Cantidad', { exact: true }).fill('6');
+      await page.getByRole('button', { name: 'Guardar borrador', exact: true }).click();
+      await page.getByText(/Borrador OC-\\d+ actualizado: 1 producto por 72,00 COP\\. Sigue en borrador/).waitFor();
+      await page.getByRole('row').filter({ hasText: 'Reemplazada por' }).filter({ hasText: 'Cancelada' }).first().waitFor();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(300);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      check(overflow <= 0, 'Desplazamiento horizontal con el detalle en móvil: ' + overflow + ' px');
+      await page.screenshot({ path: config.screenshotLifecycle, fullPage: true });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await logout();
+      return 'pendiente cancelada con motivo; reemplazo prefijado y vinculado; borrador editado a 72,00 COP; sin desbordamiento a 390 px';""",
+    "gerente-valoracion": """
+      await login(config.manager);
+      await page.getByRole('link', { name: 'Valoración', exact: true }).click();
+      await page.getByRole('heading', { name: 'Valoración del inventario', level: 2 }).waitFor();
+      const row = page.getByRole('row').filter({ hasText: config.sku });
+      await row.waitFor({ timeout: 10000 });
+      // RF-0026: only the received purchase is valued; the cancelled order and the draft changed nothing.
+      const cells = await row.getByRole('cell').allInnerTexts();
+      check(cells.some(c => c.startsWith('24,000 unidad')) && cells.some(c => c.startsWith('9,000000')) && cells.some(c => c.startsWith('216,00')),
+        'Valoración inesperada: ' + cells.join(' | '));
+      await page.locator('.purchase-summary').filter({ hasText: '216,00 COP' }).waitFor();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(300);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      check(overflow <= 0, 'Desplazamiento horizontal de la valoración en móvil: ' + overflow + ' px');
+      await page.screenshot({ path: config.screenshotValuation, fullPage: true });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await logout();
+      return 'valoración de la sucursal: 24,000 unidad a promedio 9,000000 y valor 216,00 COP; sin desbordamiento a 390 px';""",
 }
 
 
@@ -211,7 +274,9 @@ def main():
               "operator": {"code": "OP-SUR", "password": operator_password},
               "manager": {"code": "GER-SUR", "password": manager_password},
               "screenshot": str(directory / "compras-red-movil.png"),
-              "screenshotEditor": str(directory / "compras-orden-movil.png")}
+              "screenshotEditor": str(directory / "compras-orden-movil.png"),
+              "screenshotLifecycle": str(directory / "compras-reemplazo-movil.png"),
+              "screenshotValuation": str(directory / "valoracion-movil.png")}
     def stage(name):
         path = directory / f"{name}.js"
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -268,7 +333,9 @@ def main():
             {"product": product, "unit": "unidad", "quantity": "5", "unitPrice": "10", "discountPercent": "0"}]}), 201, "orden")
         expect(operator.request(f"/purchases/orders/{order['externalId']}/submit", "POST", {}), 200, "envío a recepción")
         stage("administrador-red-movil")
-        print(f"Navegador OK: {len(STAGES)} escenarios de compras (RF-0021, RF-0023–RF-0025).")
+        stage("operador-cancelar-reemplazar-editar")
+        stage("gerente-valoracion")
+        print(f"Navegador OK: {len(STAGES)} escenarios de compras y valoración (RF-0021–RF-0026).")
         return 0
     except (AssertionError, OSError, RuntimeError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Comprobación FALLÓ: {error}", file=sys.stderr)

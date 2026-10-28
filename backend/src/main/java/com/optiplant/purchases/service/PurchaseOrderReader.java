@@ -4,6 +4,7 @@ import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
 import com.optiplant.purchases.dto.PurchaseOrderResponse;
 import com.optiplant.purchases.dto.PurchaseOrderResponse.Event;
 import com.optiplant.purchases.dto.PurchaseOrderResponse.Line;
+import com.optiplant.purchases.dto.PurchaseOrderResponse.OrderReference;
 import com.optiplant.purchases.dto.PurchaseOrderResponse.Person;
 import com.optiplant.purchases.dto.PurchaseOrderResponse.Supplier;
 import java.math.BigDecimal;
@@ -30,9 +31,11 @@ public class PurchaseOrderReader {
             o.supplier_name_snapshot,s.external_id AS supplier,s.code AS supplier_code,
             b.external_id AS branch,b.code AS branch_code,b.name AS branch_name,b.active AS branch_active,
             c.code AS creator_code,c.full_name AS creator_name,r.code AS receiver_code,r.full_name AS receiver_name,
-            (SELECT external_id FROM inventory_operation WHERE purchase_order_id=o.id) AS receipt
+            (SELECT external_id FROM inventory_operation WHERE purchase_order_id=o.id) AS receipt,
+            rp.external_id AS replaces,rp.code AS replaces_code,rb.external_id AS replaced_by,rb.code AS replaced_by_code
         FROM purchases_order o JOIN purchases_supplier s ON s.id=o.supplier_id JOIN identity_branch b ON b.id=o.branch_id
         JOIN identity_user_account c ON c.id=o.created_by LEFT JOIN identity_user_account r ON r.id=o.received_by
+        LEFT JOIN purchases_order rp ON rp.id=o.replaces_order_id LEFT JOIN purchases_order rb ON rb.replaces_order_id=o.id
         """;
 
     private final JdbcTemplate jdbc;
@@ -45,13 +48,14 @@ public class PurchaseOrderReader {
     public PurchaseOrderResponse detail(long orderId, boolean valuation) {
         PurchaseOrderResponse order = orders(ORDER + "WHERE o.id=?", List.of(orderId), false, valuation).getFirst();
         List<Event> events = jdbc.query("""
-            SELECT e.from_status,e.to_status,e.occurred_at,u.code,u.full_name FROM purchases_event e
+            SELECT e.from_status,e.to_status,e.occurred_at,u.code,u.full_name,e.reason FROM purchases_event e
             JOIN identity_user_account u ON u.id=e.actor_id WHERE e.order_id=? ORDER BY e.sequence_no""",
             (r, i) -> new Event(r.getString(1), r.getString(2), r.getObject(3, OffsetDateTime.class).toInstant(),
-                new Person(r.getString(4), r.getString(5))), orderId);
+                new Person(r.getString(4), r.getString(5)), r.getString(6)), orderId);
         return new PurchaseOrderResponse(order.externalId(), order.code(), order.status(), order.branch(), order.supplier(),
             order.paymentTermDays(), order.createdAt(), order.createdBy(), order.receivedAt(), order.receivedBy(),
-            order.dueDate(), order.receiptOperationExternalId(), order.totalNet(), order.exactTotalNet(), order.lines(), events);
+            order.dueDate(), order.receiptOperationExternalId(), order.replacesOrder(), order.replacedBy(), order.totalNet(),
+            order.exactTotalNet(), order.lines(), events);
     }
 
     /** Orders selected by {@code where} (appended to the base query), each with its lines and without events. */
@@ -61,7 +65,7 @@ public class PurchaseOrderReader {
 
     private record Row(long id, UUID externalId, String code, String status, int term, OffsetDateTime createdAt,
                        OffsetDateTime receivedAt, String dueDate, Supplier supplier, Branch branch, Person creator,
-                       Person receiver, UUID receipt) {}
+                       Person receiver, UUID receipt, OrderReference replaces, OrderReference replacedBy) {}
 
     private List<PurchaseOrderResponse> orders(String sql, List<Object> arguments, boolean listing, boolean valuation) {
         List<Row> rows = jdbc.query(sql, (r, i) -> new Row(r.getLong("id"), r.getObject("external_id", UUID.class),
@@ -73,7 +77,7 @@ public class PurchaseOrderReader {
                 r.getBoolean("branch_active")),
             new Person(r.getString("creator_code"), r.getString("creator_name")),
             r.getString("receiver_code") == null ? null : new Person(r.getString("receiver_code"), r.getString("receiver_name")),
-            r.getObject("receipt", UUID.class)), arguments.toArray());
+            r.getObject("receipt", UUID.class), reference(r, "replaces"), reference(r, "replaced_by")), arguments.toArray());
         if (rows.isEmpty()) return List.of();
         Map<Long, List<Line>> lines = new LinkedHashMap<>();
         Map<Long, BigDecimal> totals = new LinkedHashMap<>();
@@ -99,8 +103,13 @@ public class PurchaseOrderReader {
         return rows.stream().map(row -> new PurchaseOrderResponse(row.externalId(), row.code(), row.status(), row.branch(),
             row.supplier(), row.term(), row.createdAt().toInstant(), row.creator(),
             row.receivedAt() == null ? null : row.receivedAt().toInstant(), row.receiver(), row.dueDate(), row.receipt(),
-            money(totals.get(row.id())), plain(totals.get(row.id())), List.copyOf(lines.get(row.id())),
+            row.replaces(), row.replacedBy(), money(totals.get(row.id())), plain(totals.get(row.id())), List.copyOf(lines.get(row.id())),
             listing ? null : List.of())).toList();
+    }
+
+    private static OrderReference reference(java.sql.ResultSet r, String column) throws java.sql.SQLException {
+        UUID id = r.getObject(column, UUID.class);
+        return id == null ? null : new OrderReference(id, r.getString(column + "_code"));
     }
 
     /** Monetary display precision: 2 decimals, half up (INC-013/D03). */

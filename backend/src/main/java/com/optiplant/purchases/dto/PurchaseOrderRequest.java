@@ -13,13 +13,15 @@ import tools.jackson.databind.JsonNode;
 /**
  * A new purchase order of the session's own branch (RF-0021) with its commercial conditions (RF-0023): gross unit
  * price per commercial unit, explicit line discount between 0 and 100% and a payment term in whole days counted from
- * the confirmed receipt. Decimals are exact strings; nothing is rounded.
+ * the confirmed receipt. Decimals are exact strings; nothing is rounded. The same body rewrites a draft (RF-0022);
+ * {@code replacesOrder} is accepted only on creation and names the cancelled order the new one replaces (INC-011/D03).
  */
-public record PurchaseOrderRequest(UUID supplier, int paymentTermDays, List<Line> lines) {
+public record PurchaseOrderRequest(UUID supplier, int paymentTermDays, List<Line> lines, UUID replacesOrder) {
     public static final int MAX_LINES = 100;
     /** Technical limit so the due date (receipt date + term) is always representable (data model §6.3). */
     public static final int MAX_PAYMENT_TERM_DAYS = 36500;
     private static final Set<String> FIELDS = Set.of("supplier", "paymentTermDays", "lines");
+    private static final Set<String> CREATE_FIELDS = Set.of("supplier", "paymentTermDays", "lines", "replacesOrder");
     private static final Set<String> LINE_FIELDS = Set.of("product", "unit", "quantity", "unitPrice", "discountPercent");
     // purchases_line.gross_unit_price is NUMERIC(24,6) and discount_pct NUMERIC(9,6).
     private static final Pattern PRICE = Pattern.compile("^\\d{1,18}(\\.\\d{1,6})?$");
@@ -28,10 +30,25 @@ public record PurchaseOrderRequest(UUID supplier, int paymentTermDays, List<Line
 
     public record Line(UUID product, String unit, BigDecimal quantity, BigDecimal unitPrice, BigDecimal discountPercent) {}
 
+    /** A new order, optionally replacing a cancelled one. */
     public static PurchaseOrderRequest from(JsonNode body) {
-        if (!body.isObject()) throw invalid("La solicitud no es válida.");
+        return parse(body, true);
+    }
+
+    /** The new conditions of a draft; the replaced order is fixed on creation. */
+    public static PurchaseOrderRequest edit(JsonNode body) {
+        return parse(body, false);
+    }
+
+    private static PurchaseOrderRequest parse(JsonNode body, boolean creation) {
+        if (body == null || !body.isObject()) throw invalid("La solicitud no es válida.");
         body.propertyNames().forEach(name -> {
-            if (!FIELDS.contains(name)) throw invalid("Campo no admitido: " + name + ". Los pagos y saldos no forman parte de la compra.");
+            if (!creation && name.equals("replacesOrder")) {
+                throw invalid("La orden reemplazada se indica al crear la orden y no se modifica después.");
+            }
+            if (!(creation ? CREATE_FIELDS : FIELDS).contains(name)) {
+                throw invalid("Campo no admitido: " + name + ". Los pagos y saldos no forman parte de la compra.");
+            }
         });
         UUID supplier = uuid(body.path("supplier"), "Seleccione el proveedor de la orden.");
         int term = paymentTerm(body.path("paymentTermDays"));
@@ -40,7 +57,10 @@ public record PurchaseOrderRequest(UUID supplier, int paymentTermDays, List<Line
         if (lines.size() > MAX_LINES) throw invalid("La orden admite hasta " + MAX_LINES + " líneas.");
         List<Line> parsed = new ArrayList<>();
         for (int index = 0; index < lines.size(); index++) parsed.add(line(lines.get(index), index + 1));
-        return new PurchaseOrderRequest(supplier, term, List.copyOf(parsed));
+        JsonNode replaces = body.path("replacesOrder");
+        UUID replaced = replaces.isMissingNode() || replaces.isNull() ? null
+            : uuid(replaces, "La orden reemplazada debe identificarse con su referencia pública.");
+        return new PurchaseOrderRequest(supplier, term, List.copyOf(parsed), replaced);
     }
 
     private static int paymentTerm(JsonNode value) {

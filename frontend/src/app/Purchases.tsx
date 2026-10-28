@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { PackageCheck, Plus, RefreshCw, Search, Send, Save, Trash2, X } from 'lucide-react';
+import { Ban, CopyPlus, PackageCheck, Pencil, Plus, RefreshCw, Search, Send, Save, Trash2, X } from 'lucide-react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type {
   Branch, LocalCatalog, Product, PurchaseHistory, PurchaseHistoryFilter, PurchaseOrder, PurchaseStatus, Supplier, User,
 } from '../lib/api/client.ts';
 import {
-  MAX_PAYMENT_TERM_DAYS, actionFor, dueDate, lineNet, money, paymentTerm, purchaseStatusLabel, sum,
+  MAX_PAYMENT_TERM_DAYS, actionFor, cancellable, dueDate, editable, lineNet, money, paymentTerm, purchaseStatusLabel,
+  replaceable, sum,
 } from '../lib/purchases/purchases.ts';
 import type { PurchaseAction } from '../lib/purchases/purchases.ts';
 import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
@@ -18,6 +19,7 @@ import { SectionTabs } from '../components/shared/SectionTabs.tsx';
 import { Suppliers } from './Suppliers.tsx';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 // Prices keep up to 6 decimals and discounts are percentages between 0 and 100 (RF-0023); typed with a comma.
@@ -29,6 +31,16 @@ interface LineDraft { key: string; product: string; unit: string; quantity: stri
 const emptyLine = (): LineDraft => ({ key: crypto.randomUUID(), product: '', unit: '', quantity: '', unitPrice: '', discountPercent: '0' });
 interface OrderDraft { supplier: string; paymentTermDays: string; lines: LineDraft[] }
 const emptyOrder = (): OrderDraft => ({ supplier: '', paymentTermDays: '0', lines: [emptyLine()] });
+/** The editor form prefilled with an order's supplier, term and lines, typed as the operator would. */
+const draftFrom = (order: PurchaseOrder): OrderDraft => ({
+  supplier: order.supplier.externalId, paymentTermDays: String(order.paymentTermDays),
+  lines: order.lines.map(line => ({ key: crypto.randomUUID(), product: line.productExternalId, unit: line.unit,
+    quantity: inputDecimal(line.commercialQuantity), unitPrice: inputDecimal(line.unitPrice),
+    discountPercent: inputDecimal(line.discountPercent) })),
+});
+// RF-0022: a new order, the rewrite of a draft, or the order that replaces a cancelled one.
+type EditorMode = { mode: 'create' } | { mode: 'edit'; order: PurchaseOrder } | { mode: 'replace'; order: PurchaseOrder };
+const MAX_CANCEL_REASON = 500;
 
 const STATUS_FILTERS: { value: PurchaseStatus | ''; label: string }[] = [
   { value: '', label: 'Todos los estados' }, { value: 'DRAFT', label: 'Borradores' },
@@ -71,8 +83,12 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
   const [historyError, setHistoryError] = useState('');
   const [selected, setSelected] = useState<PurchaseOrder | null>(null);
   const [detailError, setDetailError] = useState('');
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [editor, setEditor] = useState<EditorMode | null>(null);
+  const editorOpen = editor !== null;
   const [draft, setDraft] = useState<OrderDraft>(emptyOrder);
+  // Which editor the typed draft and its key belong to: reopening the same editor keeps both, so a request whose outcome
+  // is unknown is retried with the same key instead of creating a duplicate (ARQ-007).
+  const [draftFor, setDraftFor] = useState('create');
   // One key per submission attempt; it survives a retry whose outcome is unknown (ARQ-007).
   const [createKey, setCreateKey] = useState(newIdempotencyKey);
   const [actionKeys, setActionKeys] = useState<Record<string, string>>({});
@@ -121,12 +137,21 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
     setConfirmed('');
   }
 
-  function openEditor() {
-    setEditorOpen(true); setFormError(''); setConfirmed('');
+  function openEditor(mode: EditorMode = { mode: 'create' }) {
+    setEditor(mode); setFormError(''); setConfirmed(''); setActionError('');
+    const owner = mode.mode === 'create' ? 'create' : `${mode.mode}:${mode.order.externalId}`;
+    if (owner !== draftFor) {
+      setDraft(mode.mode === 'create' ? emptyOrder() : draftFrom(mode.order));
+      setCreateKey(newIdempotencyKey());
+      setDraftFor(owner);
+    }
+    if (mode.mode === 'edit') setSelected(null);
     revealEditor('purchase-editor');
   }
 
-  function create(event: FormEvent<HTMLFormElement>) {
+  function closeEditor() { setEditor(null); setFormError(''); }
+
+  function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const term = paymentTerm(draft.paymentTermDays);
     if (term === null) {
@@ -137,19 +162,27 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
       product: line.product, unit: line.unit, quantity: apiDecimal(line.quantity), unitPrice: apiDecimal(line.unitPrice),
       discountPercent: apiDecimal(line.discountPercent),
     })) };
+    const target = editor;
+    const request = target?.mode === 'edit' ? client.updatePurchase(target.order.externalId, input, createKey)
+      : client.createPurchase(target?.mode === 'replace' ? { ...input, replacesOrder: target.order.externalId } : input, createKey);
     setBusy(true); setFormError(''); setConfirmed('');
-    client.createPurchase(input, createKey).then(order => {
-      setConfirmed(`Borrador ${order.code} creado con ${order.lines.length} ${order.lines.length === 1 ? 'producto' : 'productos'} `
-        + `por ${decimal(order.totalNet)} COP. Las existencias no cambian hasta confirmar la recepción.`);
+    request.then(order => {
+      const products = `${order.lines.length} ${order.lines.length === 1 ? 'producto' : 'productos'} por ${decimal(order.totalNet)} COP`;
+      setConfirmed(target?.mode === 'edit'
+        ? `Borrador ${order.code} actualizado: ${products}. Sigue en borrador; las existencias no cambian.`
+        : target?.mode === 'replace'
+          ? `Borrador ${order.code} creado en reemplazo de ${target.order.code}, con ${products}. Ambas órdenes quedan en el histórico.`
+          : `Borrador ${order.code} creado con ${products}. Las existencias no cambian hasta confirmar la recepción.`);
       setCreateKey(newIdempotencyKey());
       setDraft(emptyOrder());
-      setEditorOpen(false);
+      setDraftFor('create');
+      setEditor(null);
       setSelected(order);
       void loadHistory();
     }).catch(reason => {
       if (!keepsIdempotencyKey(reason)) setCreateKey(newIdempotencyKey());
       if (reason instanceof ApiError && reason.status === 401) { onError(reason); return; }
-      setFormError(problem(reason, 'No se pudo crear la orden.'));
+      setFormError(problem(reason, target?.mode === 'edit' ? 'No se pudo guardar el borrador.' : 'No se pudo crear la orden.'));
     }).finally(() => setBusy(false));
   }
 
@@ -190,6 +223,31 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
     } finally { setBusy(false); }
   }
 
+  async function cancel(order: PurchaseOrder, reason: string) {
+    const slot = `${order.externalId}:cancel`;
+    const key = actionKeys[slot] ?? newIdempotencyKey();
+    setActionKeys(previous => ({ ...previous, [slot]: key }));
+    setBusy(true); setActionError(''); setConfirmed('');
+    try {
+      const updated = await client.cancelPurchase(order.externalId, reason.trim() || null, key);
+      setActionKeys(({ [slot]: _done, ...rest }) => rest);
+      setSelected(updated);
+      setConfirmed(`${updated.code} quedó cancelada. Las existencias y el costo promedio no cambiaron.`
+        + (order.status === 'PENDING' ? ' Si necesita la compra con otros datos, cree una orden de reemplazo.' : ''));
+      void loadHistory();
+      return true;
+    } catch (reason) {
+      if (!keepsIdempotencyKey(reason)) setActionKeys(({ [slot]: _rejected, ...rest }) => rest);
+      if (reason instanceof ApiError && reason.status === 401) onError(reason);
+      else setActionError(problem(reason, 'No se pudo cancelar la orden.'));
+      return false;
+    } finally { setBusy(false); }
+  }
+
+  const editorTitle = editor?.mode === 'edit' ? `Editar borrador ${editor.order.code}`
+    : editor?.mode === 'replace' ? `Orden de reemplazo de ${editor.order.code}`
+      : `Nueva orden de compra en ${catalog ? `${catalog.branchName} (${catalog.branchCode})` : 'su sucursal'}`;
+
   return <div aria-busy={loading || busy}>
     {dialog}
     <p>{operator
@@ -200,13 +258,17 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
     {operator && catalog && !catalog.branchActive && <p className="notice-warning">
       Sucursal inactiva. Se conserva su histórico, pero no admite nuevas compras.
     </p>}
-    {operator && catalog?.branchActive && !editorOpen && <Button onClick={openEditor}><Plus aria-hidden="true" />Nueva orden de compra</Button>}
+    {operator && catalog?.branchActive && !editorOpen && <Button onClick={() => openEditor()}><Plus aria-hidden="true" />Nueva orden de compra</Button>}
     {confirmed && <p role="status">{confirmed}</p>}
 
-    {operator && editorOpen && <form id="purchase-editor" className="purchase-editor" onSubmit={create}
+    {operator && editorOpen && <form id="purchase-editor" className="purchase-editor" onSubmit={save}
       aria-describedby={formError ? 'purchase-error' : undefined}>
       <fieldset disabled={busy}>
-        <legend>Nueva orden de compra en {catalog ? `${catalog.branchName} (${catalog.branchCode})` : 'su sucursal'}</legend>
+        <legend>{editorTitle}</legend>
+        {editor?.mode === 'replace' && <p className="purchase-replacement-note">
+          Se crea un borrador nuevo con los datos de {editor.order.code} para corregirlos. La orden cancelada se conserva sin
+          cambios y ambas quedan vinculadas en el histórico.
+        </p>}
         <div className="purchase-header-fields">
           <div>
             <label htmlFor="purchase-supplier">Proveedor</label>
@@ -289,9 +351,10 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
         <p className="text-muted-foreground">Se guarda como borrador. El servidor confirma el neto exacto; el costo por unidad
           base se fija al recibir la compra.</p>
         {formError && <p role="alert" id="purchase-error">{formError}</p>}
-        <Button type="submit"><Save aria-hidden="true" />{busy ? 'Creando…' : 'Crear borrador'}</Button>
-        <Button variant="ghost" type="button" onClick={() => { setEditorOpen(false); setFormError(''); }}>
-          <X aria-hidden="true" />Cerrar formulario
+        <Button type="submit"><Save aria-hidden="true" />{editor?.mode === 'edit'
+          ? busy ? 'Guardando…' : 'Guardar borrador' : busy ? 'Creando…' : 'Crear borrador'}</Button>
+        <Button variant="ghost" type="button" onClick={closeEditor}>
+          <X aria-hidden="true" />{editor?.mode === 'edit' ? 'Descartar cambios' : 'Cerrar formulario'}
         </Button>
       </fieldset>
     </form>}
@@ -347,8 +410,12 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
     </>}
 
     {detailError && <p role="alert">{detailError}</p>}
-    {selected && <PurchaseDetail order={selected} action={actionFor(user.role, selected)} valued={!operator} busy={busy} error={actionError}
-      onAction={action => void transition(selected, action)} onClose={() => setSelected(null)} />}
+    {selected && <PurchaseDetail key={selected.externalId} order={selected} action={actionFor(user.role, selected)} valued={!operator}
+      canEdit={editable(user.role, selected) && !editorOpen} canCancel={cancellable(user.role, selected)}
+      canReplace={replaceable(user.role, selected) && !editorOpen && catalog?.branchActive === true}
+      busy={busy} error={actionError} onAction={action => void transition(selected, action)}
+      onEdit={() => openEditor({ mode: 'edit', order: selected })} onReplace={() => openEditor({ mode: 'replace', order: selected })}
+      onCancel={reason => cancel(selected, reason)} onOpen={id => void openDetail(id)} onClose={() => setSelected(null)} />}
   </div>;
 }
 
@@ -363,7 +430,9 @@ function HistoryTable({ history, selected, onOpen }: { history: PurchaseHistory;
         <TableHead scope="col">Recepción</TableHead><TableHead scope="col"><span className="sr-only">Acciones</span></TableHead>
       </TableRow></TableHeader>
       <TableBody>{history.items.map(order => <TableRow key={order.externalId} aria-current={order.externalId === selected ? 'true' : undefined}>
-        <TableCell><span className="record-code">{order.code}</span><span className="cell-note">{when(order.createdAt)}</span></TableCell>
+        <TableCell><span className="record-code">{order.code}</span><span className="cell-note">{when(order.createdAt)}</span>
+          {order.replacesOrder && <span className="cell-note">Reemplaza a {order.replacesOrder.code}</span>}
+          {order.replacedBy && <span className="cell-note">Reemplazada por {order.replacedBy.code}</span>}</TableCell>
         {history.branch === null && <TableCell>{order.branch.name}<span className="cell-note">{order.branch.code}</span></TableCell>}
         <TableCell>{order.supplier.name}<span className="cell-note">{order.supplier.code}</span></TableCell>
         <TableCell><PurchaseStatusBadge status={order.status} /></TableCell>
@@ -381,11 +450,16 @@ function HistoryTable({ history, selected, onOpen }: { history: PurchaseHistory;
 }
 
 // INC-003/D04: the server sends the valuation cost to supervisors only; operators see the conditions they registered.
-function PurchaseDetail({ order, action, valued, busy, error, onAction, onClose }: {
-  order: PurchaseOrder; action: PurchaseAction | null; valued: boolean; busy: boolean; error: string;
-  onAction: (action: PurchaseAction) => void; onClose: () => void;
+function PurchaseDetail({ order, action, valued, canEdit, canCancel, canReplace, busy, error, onAction, onEdit, onReplace, onCancel,
+  onOpen, onClose }: {
+  order: PurchaseOrder; action: PurchaseAction | null; valued: boolean; canEdit: boolean; canCancel: boolean; canReplace: boolean;
+  busy: boolean; error: string; onAction: (action: PurchaseAction) => void; onEdit: () => void; onReplace: () => void;
+  onCancel: (reason: string) => Promise<boolean>; onOpen: (id: string) => void; onClose: () => void;
 }) {
   const received = order.status === 'RECEIVED';
+  // The cancellation form keeps its reason while the detail stays open (AGENTS.md §6).
+  const [cancelling, setCancelling] = useState(false);
+  const [reason, setReason] = useState('');
   return <section id="purchase-detail" className="purchase-detail" aria-labelledby="purchase-detail-title" tabIndex={-1}>
     <header>
       <h3 id="purchase-detail-title">Orden {order.code}</h3>
@@ -399,6 +473,10 @@ function PurchaseDetail({ order, action, valued, busy, error, onAction, onClose 
       <div><dt>Registrada por</dt><dd>{order.createdBy.fullName} ({order.createdBy.code})</dd></div>
       <div><dt>Recibida por</dt><dd>{order.receivedBy && order.receivedAt
         ? `${order.receivedBy.fullName} (${order.receivedBy.code}), ${when(order.receivedAt)}` : 'Sin recibir'}</dd></div>
+      {order.replacesOrder && <div><dt>Reemplaza a</dt><dd><Button variant="link" className="purchase-link"
+        onClick={() => onOpen(order.replacesOrder!.externalId)}>{order.replacesOrder.code}<span className="sr-only"> (orden cancelada)</span></Button></dd></div>}
+      {order.replacedBy && <div><dt>Reemplazada por</dt><dd><Button variant="link" className="purchase-link"
+        onClick={() => onOpen(order.replacedBy!.externalId)}>{order.replacedBy.code}</Button></dd></div>}
     </dl>
     <div className="table-scroll" role="region" aria-label={`Productos de ${order.code}`} tabIndex={0}>
       <Table className="purchase-lines-table">
@@ -428,11 +506,33 @@ function PurchaseDetail({ order, action, valued, busy, error, onAction, onClose 
       <h4>Historia de estados</h4>
       <ol className="purchase-timeline">{order.events.map(event => <li key={`${event.toStatus}-${event.occurredAt}`}>
         <strong>{purchaseStatusLabel(event.toStatus)}</strong> el {when(event.occurredAt)}, por {event.actor.fullName} ({event.actor.code})
+        {event.reason && <span className="cell-note">Motivo: {event.reason}</span>}
       </li>)}</ol>
     </>}
     {error && <p role="alert">{error}</p>}
-    {action === 'submit' && <Button disabled={busy} onClick={() => onAction('submit')}><Send aria-hidden="true" />Enviar a recepción</Button>}
-    {action === 'receive' && <Button disabled={busy} onClick={() => onAction('receive')}><PackageCheck aria-hidden="true" />Confirmar recepción</Button>}
-    <Button variant="ghost" onClick={onClose}><X aria-hidden="true" />Cerrar detalle</Button>
+    {cancelling ? <form className="purchase-cancel" aria-labelledby="purchase-cancel-title" onSubmit={event => {
+      event.preventDefault();
+      void onCancel(reason).then(done => { if (done) { setCancelling(false); setReason(''); } });
+    }}>
+      <fieldset disabled={busy}>
+        <legend id="purchase-cancel-title">Cancelar {order.code}</legend>
+        <p>La orden quedará cancelada y se conservará en el histórico. {order.status === 'PENDING'
+          ? 'No se registra ningún ingreso: las existencias y el costo promedio no cambian. Después podrá crear otra orden que la reemplace.'
+          : 'El borrador no tuvo efectos en el inventario.'} La cancelación no se puede deshacer.</p>
+        <label htmlFor="purchase-cancel-reason">Motivo (opcional)</label>
+        <Textarea id="purchase-cancel-reason" value={reason} maxLength={MAX_CANCEL_REASON} rows={2}
+          aria-describedby="purchase-cancel-hint" onChange={event => setReason(event.target.value)} />
+        <p id="purchase-cancel-hint" className="text-muted-foreground">Hasta {MAX_CANCEL_REASON} caracteres. Queda en la historia de estados.</p>
+        <Button type="submit" variant="destructive"><Ban aria-hidden="true" />{busy ? 'Cancelando…' : 'Confirmar cancelación'}</Button>
+        <Button type="button" variant="ghost" onClick={() => { setCancelling(false); setReason(''); }}>Volver sin cancelar</Button>
+      </fieldset>
+    </form> : <div className="purchase-actions">
+      {action === 'submit' && <Button disabled={busy} onClick={() => onAction('submit')}><Send aria-hidden="true" />Enviar a recepción</Button>}
+      {action === 'receive' && <Button disabled={busy} onClick={() => onAction('receive')}><PackageCheck aria-hidden="true" />Confirmar recepción</Button>}
+      {canEdit && <Button variant="outline" disabled={busy} onClick={onEdit}><Pencil aria-hidden="true" />Editar borrador</Button>}
+      {canReplace && <Button variant="outline" disabled={busy} onClick={onReplace}><CopyPlus aria-hidden="true" />Crear orden de reemplazo</Button>}
+      {canCancel && <Button variant="outline" disabled={busy} onClick={() => setCancelling(true)}><Ban aria-hidden="true" />Cancelar orden</Button>}
+      <Button variant="ghost" onClick={onClose}><X aria-hidden="true" />Cerrar detalle</Button>
+    </div>}
   </section>;
 }

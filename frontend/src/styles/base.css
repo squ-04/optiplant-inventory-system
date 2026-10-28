@@ -259,6 +259,17 @@ table.restock-table { min-width: 56rem; }
   .purchase-facts { display: grid; gap: var(--space-3) var(--space-6); margin-block: var(--space-4); }
   .purchase-facts dt { color: var(--color-muted); font-size: .875rem; font-weight: 500; }
   .purchase-timeline { padding-left: var(--space-6); }
+  /* RF-0022: lifecycle actions, the cancellation form and the links between a cancelled order and its replacement. */
+  .purchase-actions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin-top: var(--space-4); }
+  .purchase-actions button { margin: 0; }
+  form.purchase-cancel { max-width: 40rem; margin-top: var(--space-4); padding: var(--space-4); background: var(--color-background);
+    border: 1px solid var(--color-border); border-left: .25rem solid var(--color-destructive); border-radius: var(--radius-panel); }
+  .purchase-facts .purchase-link { min-height: 0; padding: 0; margin: 0; font-weight: 600; }
+  .purchase-replacement-note { padding: var(--space-3) var(--space-4); background: var(--color-tint); border-left: .25rem solid var(--color-action); }
+  /* RF-0026: recorded valuation of a branch. */
+  table.valuation-table { min-width: 44rem; }
+  .valuation-table td:first-child { min-width: 12rem; }
+  .valuation-table tfoot td { font-weight: 650; font-variant-numeric: tabular-nums; }
 
   @media (min-width: 48rem) {
     .purchase-header-fields { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: end; }

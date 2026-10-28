@@ -129,6 +129,9 @@ export type PurchaseStatus = 'DRAFT' | 'PENDING' | 'RECEIVED' | 'CANCELLED';
 /** Commercial conditions of one line (RF-0023), as exact decimal strings in API format. */
 export interface PurchaseLineInput { product: string; unit: string; quantity: string; unitPrice: string; discountPercent: string }
 export interface PurchaseOrderInput { supplier: string; paymentTermDays: number; lines: PurchaseLineInput[] }
+/** A new order may replace a cancelled order of the branch (RF-0022-CA-02); a draft edit never changes it. */
+export interface NewPurchaseOrderInput extends PurchaseOrderInput { replacesOrder?: string }
+export interface PurchaseOrderReference { externalId: string; code: string }
 export interface PurchasePerson { code: string; fullName: string }
 export interface PurchaseLine {
   lineNo: number; productExternalId: string; sku: string; productName: string; unit: string; factor: string;
@@ -138,19 +141,31 @@ export interface PurchaseLine {
   /** Net cost per base unit fixed by the receipt (inventory valuation); null before it and always for operators. */
   unitBaseCost: string | null;
 }
-export interface PurchaseEvent { fromStatus: PurchaseStatus | null; toStatus: PurchaseStatus; occurredAt: string; actor: PurchasePerson }
+/** `reason` is the optional reason of a cancellation. */
+export interface PurchaseEvent {
+  fromStatus: PurchaseStatus | null; toStatus: PurchaseStatus; occurredAt: string; actor: PurchasePerson; reason: string | null;
+}
 export interface PurchaseOrder {
   externalId: string; code: string; status: PurchaseStatus; branch: Branch;
   /** `name` is the historical supplier name kept by the order (RF-0021-CA-03). */
   supplier: { externalId: string; code: string; name: string };
   paymentTermDays: number; createdAt: string; createdBy: PurchasePerson;
   receivedAt: string | null; receivedBy: PurchasePerson | null; dueDate: string | null;
-  receiptOperationExternalId: string | null; totalNet: string; exactTotalNet: string; lines: PurchaseLine[];
+  receiptOperationExternalId: string | null;
+  /** RF-0022-CA-02: the cancelled order this one replaces, and the order that replaced this one. */
+  replacesOrder: PurchaseOrderReference | null; replacedBy: PurchaseOrderReference | null;
+  totalNet: string; exactTotalNet: string; lines: PurchaseLine[];
   /** State history, returned by the detail query only. */
   events: PurchaseEvent[] | null;
 }
 export interface PurchaseSummary { orders: number; drafts: number; pending: number; received: number; cancelled: number }
 export interface PurchaseHistory { readAt: string; branch: Branch | null; summary: PurchaseSummary; items: PurchaseOrder[] }
+/** RF-0026: recorded valuation of one product in a branch; `value` at 2 decimals, `exactValue` unrounded. */
+export interface ValuationItem {
+  productExternalId: string; sku: string; productName: string; baseUnitName: string; physicalQuantity: string;
+  averageCost: string; value: string; exactValue: string;
+}
+export interface InventoryValuation { branch: Branch; readAt: string; totalValue: string; exactTotalValue: string; items: ValuationItem[] }
 export interface PurchaseHistoryFilter { branch?: string; supplier?: string; product?: string; status?: PurchaseStatus; limit?: number }
 
 export interface BootstrapDto {
@@ -334,9 +349,16 @@ function purchaseLineDto(value: unknown): PurchaseLine {
 }
 function purchaseEventDto(value: unknown): PurchaseEvent {
   if (!record(value) || !(value.fromStatus === null || PURCHASE_STATUSES.includes(String(value.fromStatus))) ||
-      !PURCHASE_STATUSES.includes(String(value.toStatus)) || !instant(value.occurredAt)) throw invalid();
+      !PURCHASE_STATUSES.includes(String(value.toStatus)) || !instant(value.occurredAt) ||
+      !(value.reason === null || text(value.reason))) throw invalid();
   personDto(value.actor);
   return value as unknown as PurchaseEvent;
+}
+const orderReference = (value: unknown) => value === null || (record(value) && uuid(value.externalId) && text(value.code));
+function valuationItemDto(value: unknown): ValuationItem {
+  if (!record(value) || !uuid(value.productExternalId) || !['sku', 'productName', 'baseUnitName'].every(k => text(value[k])) ||
+      !['physicalQuantity', 'averageCost', 'value', 'exactValue'].every(k => decimal(value[k]))) throw invalid();
+  return value as unknown as ValuationItem;
 }
 function purchaseDto(value: unknown): PurchaseOrder {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !PURCHASE_STATUSES.includes(String(value.status)) ||
@@ -348,6 +370,7 @@ function purchaseDto(value: unknown): PurchaseOrder {
   const received = value.status === 'RECEIVED';
   if (received ? !instant(value.receivedAt) || !day(value.dueDate) || !uuid(value.receiptOperationExternalId)
     : value.receivedAt !== null || value.dueDate !== null || value.receivedBy !== null) throw invalid();
+  if (!orderReference(value.replacesOrder) || !orderReference(value.replacedBy)) throw invalid();
   branchDto(value.branch);
   personDto(value.createdBy);
   if (received) personDto(value.receivedBy);
@@ -578,8 +601,18 @@ export class ApiClient {
    * RF-0021/RF-0023: creates a draft order in the operator's branch. Reuse the same key to retry a request whose outcome
    * is unknown; the server returns the original order without creating another.
    */
-  async createPurchase(input: PurchaseOrderInput, idempotencyKey: string): Promise<PurchaseOrder> {
+  async createPurchase(input: NewPurchaseOrderInput, idempotencyKey: string): Promise<PurchaseOrder> {
     return purchaseDto(await this.request('/purchases/orders', 'POST', input, undefined, { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0022: rewrites a draft; a pending or received order answers 409 `PURCHASE_NOT_EDITABLE`. */
+  async updatePurchase(id: string, input: PurchaseOrderInput, idempotencyKey: string): Promise<PurchaseOrder> {
+    return purchaseDto(await this.request(`/purchases/orders/${encodeURIComponent(id)}/update`, 'POST', input, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0022: cancels a draft or pending order before its receipt, with an optional reason; stock never changes. */
+  async cancelPurchase(id: string, reason: string | null, idempotencyKey: string): Promise<PurchaseOrder> {
+    return purchaseDto(await this.request(`/purchases/orders/${encodeURIComponent(id)}/cancel`, 'POST',
+      reason ? { reason } : {}, undefined, { 'Idempotency-Key': idempotencyKey }));
   }
   /** RF-0021-CA-03: moves a draft to pending receipt. */
   async submitPurchase(id: string, idempotencyKey: string): Promise<PurchaseOrder> {
@@ -593,6 +626,13 @@ export class ApiClient {
   }
   async purchase(id: string): Promise<PurchaseOrder> {
     return purchaseDto(await this.request(`/purchases/orders/${encodeURIComponent(id)}`));
+  }
+  /** RF-0026: current weighted-average valuation of a branch; managers read their own, administrators any. */
+  async inventoryValuation(branch: string): Promise<InventoryValuation> {
+    const value = await this.request(`/inventory/branches/${encodeURIComponent(branch)}/valuation`);
+    if (!record(value) || !instant(value.readAt) || !decimal(value.totalValue) || !decimal(value.exactTotalValue)) throw invalid();
+    return { branch: branchDto(value.branch), readAt: value.readAt as string, totalValue: value.totalValue as string,
+      exactTotalValue: value.exactTotalValue as string, items: listDto(value.items, valuationItemDto) };
   }
   /** RF-0025: purchase history by branch, supplier, product and status, newest first. */
   async purchaseHistory(filter: PurchaseHistoryFilter = {}): Promise<PurchaseHistory> {
