@@ -87,7 +87,7 @@ class MigrationLifecycleTest {
             """, Long.class)).isEqualTo(32);
         assertThat(database().queryForObject("SELECT count(*) FROM identity_branch", Long.class)).isEqualTo(2);
         assertThat(database().queryForObject("SELECT count(*) FROM identity_user_account WHERE role='ADMIN'", Long.class)).isEqualTo(1);
-        assertThat(database().queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Long.class)).isEqualTo(9);
+        assertThat(database().queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Long.class)).isEqualTo(10);
     }
 
     @Test @Order(4)

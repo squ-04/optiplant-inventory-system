@@ -28,8 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Purchase orders of the session's own active branch: creation as a draft with its conditions (RF-0021, RF-0023), the
- * transition to pending receipt that fixes the supplier name and line snapshots (RF-0021-CA-03) and the complete receipt
- * (RF-0024). The receipt changes stock only through {@link InventoryLedger} (ARQ PEN-005): one {@code PURCHASE_RECEIPT}
+ * transition to pending receipt that fixes the supplier name and line snapshots (RF-0021-CA-03), the complete receipt
+ * (RF-0024) and the rest of the approved lifecycle (RF-0022, INC-011/D01, D03): only drafts are rewritten, drafts and
+ * pending orders are cancelled before receipt without touching stock or valuation, and a cancelled order may be
+ * replaced by a new one that references it. Orders are never deleted. The receipt changes stock only through {@link InventoryLedger} (ARQ PEN-005): one {@code PURCHASE_RECEIPT}
  * operation linked to the order, with one valued entry per line at its net cost per base unit. Only operators execute
  * purchases (§5.2); managers and administrators consult them through {@link PurchaseHistoryService}. Since only
  * operators call these operations, their responses never carry the valuation cost (INC-003/D04).
@@ -39,6 +41,8 @@ public class PurchaseOrderService {
     static final String CREATE = "purchases.order-create.v1";
     static final String SUBMIT = "purchases.order-submit.v1";
     static final String RECEIVE = "purchases.order-receive.v1";
+    static final String UPDATE = "purchases.order-update.v1";
+    static final String CANCEL = "purchases.order-cancel.v1";
     static final ZoneId BOGOTA = ZoneId.of("America/Bogota");
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
@@ -85,15 +89,108 @@ public class PurchaseOrderService {
             PurchaseOrderResponse.class, () -> reader.detail(receive(context, order), false));
     }
 
+    /** RF-0022: rewrites the supplier, conditions and lines of a draft; any other state is rejected unchanged. */
+    @Transactional
+    public PurchaseOrderResponse update(SessionPrincipal principal, UUID order, String key, PurchaseOrderRequest request) {
+        IdempotencyService.requireKey(key);
+        Context context = context(principal);
+        return idempotency.execute(context.actorId(), UPDATE, order.toString(), key, request, 200,
+            PurchaseOrderResponse.class, () -> reader.detail(update(context, order, request), false));
+    }
+
+    /** RF-0022: cancels a draft or pending order before its receipt, with an optional reason; stock never changes. */
+    @Transactional
+    public PurchaseOrderResponse cancel(SessionPrincipal principal, UUID order, String key, String reason) {
+        IdempotencyService.requireKey(key);
+        Context context = context(principal);
+        return idempotency.execute(context.actorId(), CANCEL, order.toString(), key,
+            Map.of("order", order, "reason", reason == null ? "" : reason), 200,
+            PurchaseOrderResponse.class, () -> reader.detail(cancel(context, order, reason), false));
+    }
+
+    private record Resolved(OperableUnits.Unit unit, PurchaseOrderRequest.Line line, BigDecimal base, BigDecimal net) {}
+
     private long insert(Context context, PurchaseOrderRequest request) {
+        Map<String, Object> supplier = supplier(request.supplier());
+        Long replaced = request.replacesOrder() == null ? null : replaceable(context, request.replacesOrder());
+        List<Resolved> lines = resolve(context, request);
+        Timestamp now = Timestamp.from(clock.instant());
+        UUID externalId = UUID.randomUUID();
+        // The business code derives from the internal id, so it is written once the id exists.
+        long orderId = jdbc.queryForObject("""
+            INSERT INTO purchases_order(external_id,code,branch_id,supplier_id,supplier_name_snapshot,status,created_by,
+                payment_term_days,replaces_order_id,created_at,updated_at) VALUES (?,?,?,?,?,'DRAFT',?,?,?,?,?) RETURNING id""",
+            Long.class, externalId, externalId.toString(), context.branchId(), supplier.get("id"), supplier.get("name"),
+            context.actorId(), request.paymentTermDays(), replaced, now, now);
+        jdbc.update("UPDATE purchases_order SET code=? WHERE id=?", "OC-%06d".formatted(orderId), orderId);
+        insertLines(orderId, lines, now);
+        event(orderId, null, "DRAFT", context.actorId(), now, null);
+        return orderId;
+    }
+
+    private long update(Context context, UUID externalId, PurchaseOrderRequest request) {
+        Locked order = lock(context, externalId);
+        if (!order.status().equals("DRAFT")) {
+            // INC-011/D03: a pending order is not rewritten; it is cancelled and replaced so both records remain.
+            throw new ApiException(409, "PURCHASE_NOT_EDITABLE", "Solo se editan órdenes en borrador; la orden " + order.code()
+                + " está " + label(order.status()) + (order.status().equals("PENDING")
+                    ? ". Para cambiarla, cancélela y cree otra que la reemplace." : ".") + " No se modificó.");
+        }
+        Map<String, Object> supplier = supplier(request.supplier());
+        List<Resolved> lines = resolve(context, request);
+        Timestamp now = Timestamp.from(clock.instant());
+        // A draft keeps the current supplier name; it is fixed again on submit (H v1.3/02).
+        jdbc.update("UPDATE purchases_order SET supplier_id=?,supplier_name_snapshot=?,payment_term_days=?,updated_at=? WHERE id=?",
+            supplier.get("id"), supplier.get("name"), request.paymentTermDays(), now, order.id());
+        jdbc.update("DELETE FROM purchases_line WHERE order_id=?", order.id());
+        insertLines(order.id(), lines, now);
+        return order.id();
+    }
+
+    private long cancel(Context context, UUID externalId, String reason) {
+        Locked order = lock(context, externalId);
+        if (order.status().equals("RECEIVED")) {
+            throw new ApiException(409, "PURCHASE_ALREADY_RECEIVED", "La orden " + order.code() + " ya fue recibida: una orden "
+                + "recibida no se cancela ni se borra. No se modificó la compra ni el inventario.");
+        }
+        if (!order.status().equals("DRAFT") && !order.status().equals("PENDING")) {
+            throw new ApiException(409, "PURCHASE_STATUS_CONFLICT", "Solo se cancelan órdenes en borrador o pendientes de "
+                + "recepción; la orden " + order.code() + " está " + label(order.status()) + ". No se modificó.");
+        }
+        Timestamp now = Timestamp.from(clock.instant());
+        jdbc.update("UPDATE purchases_order SET status='CANCELLED',updated_at=? WHERE id=?", now, order.id());
+        event(order.id(), order.status(), "CANCELLED", context.actorId(), now, reason);
+        return order.id();
+    }
+
+    private Map<String, Object> supplier(UUID externalId) {
         Map<String, Object> supplier = jdbc.queryForList("SELECT id,name,active FROM purchases_supplier WHERE external_id=?",
-            request.supplier()).stream().findFirst()
+            externalId).stream().findFirst()
             .orElseThrow(() -> new ApiException(404, "SUPPLIER_NOT_FOUND", "No se encontró el proveedor."));
         if (!(Boolean) supplier.get("active")) {
             throw new ApiException(409, "SUPPLIER_INACTIVE", "El proveedor está inactivo y no admite nuevas órdenes.");
         }
-        // Resolve and validate every line before the first write: a rejected line leaves no order behind.
-        record Resolved(OperableUnits.Unit unit, PurchaseOrderRequest.Line line, BigDecimal base, BigDecimal net) {}
+        return supplier;
+    }
+
+    /** RF-0022-CA-02: the replaced order is a cancelled order of the same branch that no other order replaces yet. */
+    private long replaceable(Context context, UUID externalId) {
+        Locked order = lock(context, externalId);
+        if (!order.status().equals("CANCELLED")) {
+            throw new ApiException(409, "PURCHASE_NOT_REPLACEABLE", "Solo se reemplaza una orden cancelada; la orden "
+                + order.code() + " está " + label(order.status()) + ". No se creó la orden.");
+        }
+        List<String> replacing = jdbc.queryForList("SELECT code FROM purchases_order WHERE replaces_order_id=?", String.class,
+            order.id());
+        if (!replacing.isEmpty()) {
+            throw new ApiException(409, "PURCHASE_ALREADY_REPLACED", "La orden " + order.code() + " ya fue reemplazada por la "
+                + "orden " + replacing.getFirst() + ". No se creó la orden.");
+        }
+        return order.id();
+    }
+
+    /** Resolves and validates every line before the first write: a rejected line leaves the order untouched. */
+    private List<Resolved> resolve(Context context, PurchaseOrderRequest request) {
         List<Resolved> lines = new ArrayList<>();
         for (int index = 0; index < request.lines().size(); index++) {
             PurchaseOrderRequest.Line line = request.lines().get(index);
@@ -107,15 +204,10 @@ public class PurchaseOrderService {
             }
             lines.add(new Resolved(unit, line, base, net(line.quantity(), line.unitPrice(), line.discountPercent())));
         }
-        Timestamp now = Timestamp.from(clock.instant());
-        UUID externalId = UUID.randomUUID();
-        // The business code derives from the internal id, so it is written once the id exists.
-        long orderId = jdbc.queryForObject("""
-            INSERT INTO purchases_order(external_id,code,branch_id,supplier_id,supplier_name_snapshot,status,created_by,
-                payment_term_days,created_at,updated_at) VALUES (?,?,?,?,?,'DRAFT',?,?,?,?) RETURNING id""", Long.class,
-            externalId, externalId.toString(), context.branchId(), supplier.get("id"), supplier.get("name"), context.actorId(),
-            request.paymentTermDays(), now, now);
-        jdbc.update("UPDATE purchases_order SET code=? WHERE id=?", "OC-%06d".formatted(orderId), orderId);
+        return lines;
+    }
+
+    private void insertLines(long orderId, List<Resolved> lines, Timestamp now) {
         for (int index = 0; index < lines.size(); index++) {
             Resolved resolved = lines.get(index);
             jdbc.update("""
@@ -126,8 +218,6 @@ public class PurchaseOrderService {
                 orderId, index + 1, resolved.line().quantity(), resolved.base(), resolved.line().unitPrice(),
                 resolved.line().discountPercent(), resolved.net(), now, resolved.unit().productId(), resolved.unit().id());
         }
-        event(orderId, null, "DRAFT", context.actorId(), now);
-        return orderId;
     }
 
     private long submit(Context context, UUID externalId) {
@@ -161,7 +251,7 @@ public class PurchaseOrderService {
         // H v1.3/02: the transition takes the supplier's current name; from PENDING on it never changes again.
         jdbc.update("UPDATE purchases_order o SET status='PENDING',supplier_name_snapshot=s.name,updated_at=? "
             + "FROM purchases_supplier s WHERE o.id=? AND s.id=o.supplier_id", now, order.id());
-        event(order.id(), "DRAFT", "PENDING", context.actorId(), now);
+        event(order.id(), "DRAFT", "PENDING", context.actorId(), now, null);
         return order.id();
     }
 
@@ -207,7 +297,7 @@ public class PurchaseOrderService {
         Timestamp at = Timestamp.from(receivedAt);
         jdbc.update("UPDATE purchases_order SET status='RECEIVED',received_at=?,received_by=?,due_date=?,updated_at=? WHERE id=?",
             at, context.actorId(), due, at, order.id());
-        event(order.id(), "PENDING", "RECEIVED", context.actorId(), at);
+        event(order.id(), "PENDING", "RECEIVED", context.actorId(), at, null);
         return order.id();
     }
 
@@ -232,10 +322,10 @@ public class PurchaseOrderService {
             .orElseThrow(() -> new ApiException(404, "PURCHASE_NOT_FOUND", "No existe esa orden de compra en su sucursal."));
     }
 
-    private void event(long orderId, String from, String to, long actorId, Timestamp at) {
-        jdbc.update("INSERT INTO purchases_event(order_id,sequence_no,from_status,to_status,actor_id,occurred_at) "
-            + "SELECT ?,coalesce(max(sequence_no),0)+1,?,?,?,? FROM purchases_event WHERE order_id=?",
-            orderId, from, to, actorId, at, orderId);
+    private void event(long orderId, String from, String to, long actorId, Timestamp at, String reason) {
+        jdbc.update("INSERT INTO purchases_event(order_id,sequence_no,from_status,to_status,actor_id,occurred_at,reason) "
+            + "SELECT ?,coalesce(max(sequence_no),0)+1,?,?,?,?,? FROM purchases_event WHERE order_id=?",
+            orderId, from, to, actorId, at, reason, orderId);
     }
 
     /** Only the operator of an active branch executes purchases (§5.2, RF-0003-CA-08). */
