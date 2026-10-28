@@ -193,6 +193,16 @@ class InventoryMovementHttpTest {
         assertThat(fraction.statusCode()).isEqualTo(400);
     }
 
+    @Test void manualMovementsTakeProductAndUnitNamesFromTheCurrentCatalog() throws Exception {
+        // Without a source document, a movement snapshots the catalog as it is when it is registered.
+        jdbc.update("UPDATE catalog_product SET name='Maceta renombrada' WHERE external_id=?", product);
+        var created = account("OPERATOR", a).post("/inventory/movements", entry(product, "caja", "1", "10", "Ingreso de prueba"));
+        assertThat(created.statusCode()).isEqualTo(201);
+        assertThat(jdbc.queryForObject("SELECT product_name_snapshot||'|'||unit_name_snapshot FROM inventory_movement "
+            + "WHERE external_id=?::uuid", String.class, json.readTree(created.body()).get("movementExternalId").asText()))
+            .isEqualTo("Maceta renombrada|caja");
+    }
+
     @Test void weightedAverageEntriesAndOrdinaryExitFollowRf0026Ca01() throws Exception {
         valuedEntry(a, product, "10", "100");
         valuedEntry(a, product, "5", "130");

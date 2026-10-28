@@ -1,5 +1,6 @@
 package com.optiplant.inventory.service;
 
+import com.optiplant.catalog.service.OperableUnits;
 import com.optiplant.catalog.service.UnitConversion;
 import com.optiplant.common.exception.ApiException;
 import com.optiplant.common.idempotency.IdempotencyService;
@@ -44,11 +45,13 @@ public class ManualMovementService {
     private final JdbcTemplate jdbc;
     private final InventoryLedger ledger;
     private final IdempotencyService idempotency;
+    private final OperableUnits units;
 
-    public ManualMovementService(JdbcTemplate jdbc, InventoryLedger ledger, IdempotencyService idempotency) {
+    public ManualMovementService(JdbcTemplate jdbc, InventoryLedger ledger, IdempotencyService idempotency, OperableUnits units) {
         this.jdbc = jdbc;
         this.ledger = ledger;
         this.idempotency = idempotency;
+        this.units = units;
     }
 
     @Transactional
@@ -102,7 +105,7 @@ public class ManualMovementService {
                 originalOperation = original.operationId();
             }
         } else {
-            Unit unit = unit(branchId, request.product(), request.unit());
+            OperableUnits.Unit unit = units.find(branchId, request.product(), request.unit());
             BigDecimal base = UnitConversion.toBase(request.quantity(), unit.factor(), unit.divisible(), unit.baseDivisible());
             Cost cost = request.direction() == Direction.IN ? new Cost.AverageOrJustified(request.unitCost()) : new Cost.Average();
             line = new InventoryLedger.Line(unit.productId(), unit.id(), unit.factor(), request.quantity(), base,
@@ -120,26 +123,6 @@ public class ManualMovementService {
                 row.getString(2), row.getString(3), line.commercialQty().setScale(3).toPlainString(),
                 line.baseQty().setScale(3).toPlainString(), row.getString("base_unit_name"), request.reason(),
                 row.getString("code"), request.reference(), movement.resulting().quantity().setScale(3).toPlainString()), movement.id());
-    }
-
-    private record Unit(long id, long productId, BigDecimal factor, boolean divisible, boolean baseDivisible) {}
-
-    /** An active unit of a product that is active and enabled in the branch catalog (RF-0012). */
-    private Unit unit(long branchId, UUID product, String unitName) {
-        List<Map<String, Object>> found = jdbc.queryForList("""
-            SELECT p.id AS product_id,p.base_divisible,(p.active AND coalesce(bp.enabled,false)) AS operable
-            FROM catalog_product p LEFT JOIN catalog_branch_product bp ON bp.product_id=p.id AND bp.branch_id=?
-            WHERE p.external_id=?""", branchId, product);
-        if (found.isEmpty()) throw new ApiException(404, "PRODUCT_NOT_FOUND", "El producto no existe.");
-        if (!(Boolean) found.getFirst().get("operable")) {
-            throw new ApiException(409, "PRODUCT_NOT_OPERABLE", "El producto no está activo y habilitado en el catálogo de la sucursal.");
-        }
-        long productId = ((Number) found.getFirst().get("product_id")).longValue();
-        boolean baseDivisible = (Boolean) found.getFirst().get("base_divisible");
-        return jdbc.query("SELECT id,factor,divisible FROM catalog_product_unit WHERE product_id=? AND name=? AND active",
-                (row, index) -> new Unit(row.getLong(1), productId, row.getBigDecimal(2), row.getBoolean(3), baseDivisible),
-                productId, unitName).stream().findFirst()
-            .orElseThrow(() -> new ApiException(404, "PRODUCT_UNIT_NOT_FOUND", "La unidad no existe o no está activa para este producto."));
     }
 
     private record Original(long id, long operationId, String kind, String direction, long productId, long unitId,

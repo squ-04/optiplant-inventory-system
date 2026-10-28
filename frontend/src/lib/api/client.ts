@@ -123,6 +123,36 @@ export interface MovementHistoryEntry {
 /** RF-0018: auditable movements of one branch, newest first. */
 export interface MovementHistory { branch: Branch; readAt: string; items: MovementHistoryEntry[] }
 
+/** RF-0021: minimum supplier reference; no fiscal or contact data. */
+export interface Supplier { externalId: string; code: string; name: string; active: boolean }
+export type PurchaseStatus = 'DRAFT' | 'PENDING' | 'RECEIVED' | 'CANCELLED';
+/** Commercial conditions of one line (RF-0023), as exact decimal strings in API format. */
+export interface PurchaseLineInput { product: string; unit: string; quantity: string; unitPrice: string; discountPercent: string }
+export interface PurchaseOrderInput { supplier: string; paymentTermDays: number; lines: PurchaseLineInput[] }
+export interface PurchasePerson { code: string; fullName: string }
+export interface PurchaseLine {
+  lineNo: number; productExternalId: string; sku: string; productName: string; unit: string; factor: string;
+  commercialQuantity: string; baseQuantity: string; baseUnitName: string; unitPrice: string; discountPercent: string;
+  /** Line net at 2 decimals for display; `exactNetAmount` keeps every decimal. */
+  netAmount: string; exactNetAmount: string;
+  /** Net cost per base unit fixed by the receipt (inventory valuation); null before it and always for operators. */
+  unitBaseCost: string | null;
+}
+export interface PurchaseEvent { fromStatus: PurchaseStatus | null; toStatus: PurchaseStatus; occurredAt: string; actor: PurchasePerson }
+export interface PurchaseOrder {
+  externalId: string; code: string; status: PurchaseStatus; branch: Branch;
+  /** `name` is the historical supplier name kept by the order (RF-0021-CA-03). */
+  supplier: { externalId: string; code: string; name: string };
+  paymentTermDays: number; createdAt: string; createdBy: PurchasePerson;
+  receivedAt: string | null; receivedBy: PurchasePerson | null; dueDate: string | null;
+  receiptOperationExternalId: string | null; totalNet: string; exactTotalNet: string; lines: PurchaseLine[];
+  /** State history, returned by the detail query only. */
+  events: PurchaseEvent[] | null;
+}
+export interface PurchaseSummary { orders: number; drafts: number; pending: number; received: number; cancelled: number }
+export interface PurchaseHistory { readAt: string; branch: Branch | null; summary: PurchaseSummary; items: PurchaseOrder[] }
+export interface PurchaseHistoryFilter { branch?: string; supplier?: string; product?: string; status?: PurchaseStatus; limit?: number }
+
 export interface BootstrapDto {
   externalId: string;
   occurredAt: string;
@@ -280,6 +310,49 @@ function movementDto(value: unknown): Movement {
       !['kind', 'direction', 'sku', 'productName', 'unit', 'actorCode'].every(k => text(value[k])) ||
       typeof value.quantity !== 'string' || !/^\d+(\.\d+)?$/.test(value.quantity)) throw invalid();
   return value as unknown as Movement;
+}
+
+const PURCHASE_STATUSES = ['DRAFT', 'PENDING', 'RECEIVED', 'CANCELLED'];
+const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0;
+const day = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+function supplierDto(value: unknown): Supplier {
+  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !text(value.name) ||
+      typeof value.active !== 'boolean') throw invalid();
+  return value as unknown as Supplier;
+}
+function personDto(value: unknown): PurchasePerson {
+  if (!record(value) || !text(value.code) || !text(value.fullName)) throw invalid();
+  return value as unknown as PurchasePerson;
+}
+function purchaseLineDto(value: unknown): PurchaseLine {
+  if (!record(value) || !count(value.lineNo) || !uuid(value.productExternalId) ||
+      !['sku', 'productName', 'unit', 'baseUnitName'].every(k => text(value[k])) ||
+      !['factor', 'commercialQuantity', 'baseQuantity', 'unitPrice', 'discountPercent', 'netAmount', 'exactNetAmount']
+        .every(k => decimal(value[k])) ||
+      !(value.unitBaseCost === null || decimal(value.unitBaseCost))) throw invalid();
+  return value as unknown as PurchaseLine;
+}
+function purchaseEventDto(value: unknown): PurchaseEvent {
+  if (!record(value) || !(value.fromStatus === null || PURCHASE_STATUSES.includes(String(value.fromStatus))) ||
+      !PURCHASE_STATUSES.includes(String(value.toStatus)) || !instant(value.occurredAt)) throw invalid();
+  personDto(value.actor);
+  return value as unknown as PurchaseEvent;
+}
+function purchaseDto(value: unknown): PurchaseOrder {
+  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !PURCHASE_STATUSES.includes(String(value.status)) ||
+      !record(value.supplier) || !uuid(value.supplier.externalId) || !text(value.supplier.code) || !text(value.supplier.name) ||
+      !count(value.paymentTermDays) || !instant(value.createdAt) || !decimal(value.totalNet) || !decimal(value.exactTotalNet)) {
+    throw invalid();
+  }
+  // The receipt fields exist together, only for a received order (purchases_order CHECK).
+  const received = value.status === 'RECEIVED';
+  if (received ? !instant(value.receivedAt) || !day(value.dueDate) || !uuid(value.receiptOperationExternalId)
+    : value.receivedAt !== null || value.dueDate !== null || value.receivedBy !== null) throw invalid();
+  branchDto(value.branch);
+  personDto(value.createdBy);
+  if (received) personDto(value.receivedBy);
+  return { ...(value as unknown as PurchaseOrder), lines: listDto(value.lines, purchaseLineDto),
+    events: value.events === null ? null : listDto(value.events, purchaseEventDto) };
 }
 
 export class ApiClient {
@@ -490,5 +563,49 @@ export class ApiClient {
         !Number.isInteger(value.activeCount) || value.activeCount < 0) throw invalid();
     return { readAt: value.readAt as string, branch: value.branch === null ? null : branchDto(value.branch),
       activeCount: value.activeCount, items: listDto(value.items, reorderAlertDto) };
+  }
+  /** RF-0021: suppliers, readable by every profile to use them in purchases. */
+  async suppliers(): Promise<Supplier[]> {
+    return listDto(await this.request('/purchases/suppliers'), supplierDto);
+  }
+  async createSupplier(data: { code: string; name: string }): Promise<Supplier> {
+    return supplierDto(await this.request('/purchases/suppliers', 'POST', data));
+  }
+  async updateSupplier(id: string, data: { code: string; name: string }): Promise<Supplier> {
+    return supplierDto(await this.request(`/purchases/suppliers/${encodeURIComponent(id)}/update`, 'POST', data));
+  }
+  /**
+   * RF-0021/RF-0023: creates a draft order in the operator's branch. Reuse the same key to retry a request whose outcome
+   * is unknown; the server returns the original order without creating another.
+   */
+  async createPurchase(input: PurchaseOrderInput, idempotencyKey: string): Promise<PurchaseOrder> {
+    return purchaseDto(await this.request('/purchases/orders', 'POST', input, undefined, { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0021-CA-03: moves a draft to pending receipt. */
+  async submitPurchase(id: string, idempotencyKey: string): Promise<PurchaseOrder> {
+    return purchaseDto(await this.request(`/purchases/orders/${encodeURIComponent(id)}/submit`, 'POST', {}, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0024: confirms the complete receipt; stock increases once through the inventory ledger. */
+  async receivePurchase(id: string, idempotencyKey: string): Promise<PurchaseOrder> {
+    return purchaseDto(await this.request(`/purchases/orders/${encodeURIComponent(id)}/receive`, 'POST', {}, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  async purchase(id: string): Promise<PurchaseOrder> {
+    return purchaseDto(await this.request(`/purchases/orders/${encodeURIComponent(id)}`));
+  }
+  /** RF-0025: purchase history by branch, supplier, product and status, newest first. */
+  async purchaseHistory(filter: PurchaseHistoryFilter = {}): Promise<PurchaseHistory> {
+    const query = new URLSearchParams();
+    for (const key of ['branch', 'supplier', 'product', 'status'] as const) if (filter[key]) query.set(key, filter[key]);
+    if (filter.limit !== undefined) query.set('limit', String(filter.limit));
+    const suffix = query.size > 0 ? `?${query}` : '';
+    const value = await this.request(`/purchases/orders${suffix}`);
+    if (!record(value) || !instant(value.readAt) || !record(value.summary) ||
+        !['orders', 'drafts', 'pending', 'received', 'cancelled'].every(k => count((value.summary as Record<string, unknown>)[k]))) {
+      throw invalid();
+    }
+    return { readAt: value.readAt as string, branch: value.branch === null ? null : branchDto(value.branch),
+      summary: value.summary as unknown as PurchaseSummary, items: listDto(value.items, purchaseDto) };
   }
 }
