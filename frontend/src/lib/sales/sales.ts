@@ -1,3 +1,5 @@
+import { ApiError } from '../api/client.ts';
+import { keepsIdempotencyKey } from '../inventory/movements.ts';
 import { lineNet, sum } from '../purchases/purchases.ts';
 
 /**
@@ -49,4 +51,22 @@ export function subtract(left: string, right: string): string {
   const units = (value: string) => { const [integer, fraction = ''] = value.split('.'); return BigInt(integer + fraction.padEnd(scale, '0')); };
   const digits = (units(left) - units(right)).toString().padStart(scale + 1, '0');
   return scale === 0 ? digits : `${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
+}
+
+/**
+ * How the form reacts to a failed confirmation (ARQ-007, RF-0027-CA-02). An unknown outcome keeps the key, also if the
+ * draft is edited, so a retry never sells twice. `IDEMPOTENCY_CONFLICT` means that key already confirmed a sale with
+ * other data: the earlier attempt did withdraw stock, so the records are reloaded and a new key is used from then on.
+ */
+export function confirmationFailure(reason: unknown): { message: string; keepKey: boolean; alreadyConfirmed: boolean } {
+  if (reason instanceof ApiError && reason.problem.code === 'IDEMPOTENCY_CONFLICT') {
+    return { keepKey: false, alreadyConfirmed: true, message: 'La confirmación anterior sí quedó registrada antes de editar el '
+      + 'borrador y ya descontó existencias. Revise el comprobante más reciente antes de confirmar otra venta; el borrador se conserva.' };
+  }
+  const message = reason instanceof TypeError
+    ? 'Sin comunicación con el servidor. No se sabe si la venta quedó confirmada: repita la confirmación y no se duplicará.'
+    : reason instanceof ApiError && reason.status >= 500
+      ? 'El servidor no pudo completar la venta. Repita la confirmación; no se duplicará.'
+      : reason instanceof Error ? reason.message : 'No se pudo confirmar la venta.';
+  return { message, keepKey: keepsIdempotencyKey(reason), alreadyConfirmed: false };
 }

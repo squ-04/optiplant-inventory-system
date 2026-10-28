@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Plus, ReceiptText, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { Branch, LocalCatalog, PriceList, Sale, SaleHistory, User } from '../lib/api/client.ts';
 import { lineNet, money, sum } from '../lib/purchases/purchases.ts';
-import { netUnitPrice, shortages, subtract } from '../lib/sales/sales.ts';
+import { confirmationFailure, netUnitPrice, shortages, subtract } from '../lib/sales/sales.ts';
 import { listPriceOf } from '../lib/prices/prices.ts';
-import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
+import { newIdempotencyKey } from '../lib/inventory/movements.ts';
 import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
 import { useConfirmation } from '../components/shared/ConfirmDialog.tsx';
@@ -22,12 +22,6 @@ interface LineDraft { key: string; product: string; unit: string; quantity: stri
 const emptyLine = (): LineDraft => ({ key: crypto.randomUUID(), product: '', unit: '', quantity: '', discountPercent: '0' });
 interface SaleDraft { priceList: string; lines: LineDraft[] }
 const emptySale = (): SaleDraft => ({ priceList: '', lines: [emptyLine()] });
-
-const problem = (reason: unknown, fallback: string) => reason instanceof TypeError
-  ? 'Sin comunicación con el servidor. No se sabe si la venta quedó confirmada: repita la confirmación sin cambios y no se duplicará.'
-  : reason instanceof ApiError && reason.status >= 500
-    ? 'El servidor no pudo completar la venta. Repita la confirmación sin cambios; no se duplicará.'
-    : reason instanceof Error ? reason.message : fallback;
 
 interface Props { client: ApiClient; user: User; onError: (reason: unknown) => void; onChanged: () => void; revision: number; visible: boolean }
 
@@ -76,14 +70,22 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
     return () => { active = false; };
   }, [client, operator, draft.priceList, revision]);
 
+  // Only the latest history request may update the view: a slower earlier response (another branch) is discarded.
+  const historyRequest = useRef(0);
   async function loadHistory(target = consulted) {
+    const request = ++historyRequest.current;
+    const current = () => request === historyRequest.current;
     setLoading(true); setHistoryError('');
-    try { setHistory(await client.sales(target ? { branch: target } : {})); } catch (reason) {
+    try {
+      const value = await client.sales(target ? { branch: target } : {});
+      if (current()) setHistory(value);
+    } catch (reason) {
+      if (!current()) return;
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setHistoryError(reason instanceof TypeError
         ? 'Sin comunicación con el servidor. El registro de ventas mostrado puede estar desactualizado.'
         : reason instanceof Error ? reason.message : 'No se pudo consultar el registro de ventas.');
-    } finally { setLoading(false); }
+    } finally { if (current()) setLoading(false); }
   }
   useEffect(() => { if (visible) void loadHistory(); }, [visible, consulted, revision]);
 
@@ -156,9 +158,11 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
       onChanged();
       void loadHistory();
     } catch (reason) {
-      if (!keepsIdempotencyKey(reason)) setSaleKey(newIdempotencyKey());
+      const failure = confirmationFailure(reason);
+      if (!failure.keepKey) setSaleKey(newIdempotencyKey());
+      if (failure.alreadyConfirmed) { onChanged(); void loadHistory(); }
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
-      else setFormError(problem(reason, 'No se pudo confirmar la venta.'));
+      else setFormError(failure.message);
     } finally { setBusy(false); }
   }
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError } from '../src/lib/api/client.ts';
-import { baseQuantity, compareDecimal, netUnitPrice, shortages, subtract } from '../src/lib/sales/sales.ts';
+import { baseQuantity, compareDecimal, confirmationFailure, netUnitPrice, shortages, subtract } from '../src/lib/sales/sales.ts';
 
 test('net unit price applies the line discount exactly', () => {
   // RF-0029-CA-02: price 100 with 10% nets 90; 0% keeps 100 and 100% produces zero.
@@ -30,6 +30,23 @@ test('shortages add every line of a product against its available base quantity'
   assert.deepEqual([...shortages(lines, { p: '3', q: '12' })], ['p']);
   assert.deepEqual([...shortages(lines, { p: '4', q: '11.999' })], ['q']);
   assert.equal(shortages([{ product: 'p', quantity: '', factor: '1' }], { p: '0' }).size, 0);
+});
+
+test('a failed confirmation keeps the key only while its outcome is unknown', () => {
+  // Connection loss or a server error: the outcome is unknown, so the same key is kept even if the draft is edited.
+  const offline = confirmationFailure(new TypeError('fetch failed'));
+  assert.equal(offline.keepKey, true);
+  assert.equal(offline.alreadyConfirmed, false);
+  assert.match(offline.message, /no se duplicará/);
+  assert.equal(confirmationFailure(new ApiError(503, { detail: 'x' })).keepKey, true);
+  // A business rejection is final: a later attempt uses a new key.
+  const rejected = confirmationFailure(new ApiError(409, { code: 'INSUFFICIENT_STOCK', detail: 'Existencias insuficientes.' }));
+  assert.deepEqual(rejected, { keepKey: false, alreadyConfirmed: false, message: 'Existencias insuficientes.' });
+  // The kept key already confirmed a sale with other data: say so instead of reporting a bare conflict.
+  const conflict = confirmationFailure(new ApiError(409, { code: 'IDEMPOTENCY_CONFLICT', detail: 'La clave ya se usó.' }));
+  assert.equal(conflict.keepKey, false);
+  assert.equal(conflict.alreadyConfirmed, true);
+  assert.match(conflict.message, /sí quedó registrada/);
 });
 
 const branch = { externalId: '4d4f8f15-6cfc-4c49-9d4c-58d7a0b2c111', code: 'SUC-1', name: 'Centro', active: true };
