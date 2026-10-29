@@ -1,6 +1,7 @@
 package com.optiplant.transfers.service;
 
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
+import com.optiplant.logistics.dto.DeliveryTiming;
 import com.optiplant.transfers.dto.TransferResponse;
 import com.optiplant.transfers.dto.TransferResponse.Decision;
 import com.optiplant.transfers.dto.TransferResponse.Discrepancy;
@@ -32,7 +33,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class TransferReader {
     private static final String TRANSFER = """
-        SELECT t.id,t.external_id,t.code,t.status,t.requested_at,
+        SELECT t.id,t.external_id,t.code,t.status,t.requested_at,CURRENT_TIMESTAMP AS read_at,
             o.external_id AS origin,o.code AS origin_code,o.name AS origin_name,o.active AS origin_active,
             d.external_id AS destination,d.code AS destination_code,d.name AS destination_name,d.active AS destination_active,
             r.code AS requester_code,r.full_name AS requester_name,
@@ -86,7 +87,7 @@ public class TransferReader {
         }
         return new TransferResponse(transfer.externalId(), transfer.code(), transfer.status(), transfer.origin(),
             transfer.destination(), transfer.requestedAt(), transfer.requestedBy(), transfer.approval(), transfer.dispatch(),
-            transfer.arrival(), discrepancy, transfer.sourceDiscrepancy(), transfer.lines(), events);
+            transfer.arrival(), transfer.timing(), discrepancy, transfer.sourceDiscrepancy(), transfer.lines(), events);
     }
 
     /** Transfers selected by {@code where} (appended to the base query), each with its lines and without events. */
@@ -96,7 +97,7 @@ public class TransferReader {
 
     private record Row(long id, UUID externalId, String code, String status, OffsetDateTime requestedAt, Branch origin,
                        Branch destination, Person requester, Decision approval, Dispatch dispatch, Decision arrival,
-                       Discrepancy discrepancy, SourceDiscrepancy source) {}
+                       Discrepancy discrepancy, SourceDiscrepancy source, java.time.Instant readAt) {}
 
     private List<TransferResponse> transfers(String sql, List<Object> arguments, boolean availability) {
         List<Row> rows = jdbc.query(sql, (r, i) -> new Row(r.getLong("id"), r.getObject("external_id", UUID.class),
@@ -123,7 +124,8 @@ public class TransferReader {
                     new Person(r.getString("loss_code"), r.getString("loss_name")), r.getString("loss_reason"),
                     r.getString("loss_evidence")), null),
             r.getObject("source_discrepancy") == null ? null : new SourceDiscrepancy(r.getObject("source_discrepancy", UUID.class),
-                r.getObject("source_transfer", UUID.class), r.getString("source_code"))), arguments.toArray());
+                r.getObject("source_transfer", UUID.class), r.getString("source_code")),
+            r.getObject("read_at", OffsetDateTime.class).toInstant()), arguments.toArray());
         if (rows.isEmpty()) return List.of();
         Map<Long, List<Line>> lines = new LinkedHashMap<>();
         rows.forEach(row -> lines.put(row.id(), new ArrayList<>()));
@@ -155,7 +157,7 @@ public class TransferReader {
             }, rows.stream().map(Row::id).toArray());
         return rows.stream().map(row -> new TransferResponse(row.externalId(), row.code(), row.status(), row.origin(),
             row.destination(), row.requestedAt().toInstant(), row.requester(), row.approval(), row.dispatch(), row.arrival(),
-            row.discrepancy(), row.source(), List.copyOf(lines.get(row.id())),
+            timing(row), row.discrepancy(), row.source(), List.copyOf(lines.get(row.id())),
             null)).toList();
     }
 
@@ -166,6 +168,13 @@ public class TransferReader {
             prepared.add(new Prepared(line.get("lineNo").asInt(), line.get("quantity").asText(), line.get("baseQuantity").asText()));
         }
         return List.copyOf(prepared);
+    }
+
+    /** RF-0040: the arrival is complete only when the transfer was received complete. */
+    private static DeliveryTiming timing(Row row) {
+        return row.dispatch() == null ? null : DeliveryTiming.of(row.dispatch().departedAt(), row.dispatch().estimatedArrivalAt(),
+            row.arrival() == null ? null : row.arrival().occurredAt(),
+            TransferStatus.RECEIVED_COMPLETE.name().equals(row.status()), row.readAt());
     }
 
     /** Dispatched minus received, once the arrival exists. */

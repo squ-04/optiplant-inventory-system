@@ -1,6 +1,7 @@
 package com.optiplant.transfers.dto;
 
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
+import com.optiplant.logistics.dto.DeliveryTiming;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -15,7 +16,8 @@ import java.util.UUID;
  * listings. {@code dispatch} (RF-0035-CA-01) holds the carrier, the actual departure, the estimated arrival and the route
  * used with its priority at dispatch time, and each line its dispatched quantity; both are null until dispatched.
  * {@code arrival} (RF-0036/RF-0037) is the single confirmed arrival, and each line its received and missing quantities;
- * null until received. {@code inTransitBaseQuantity} is what is still pending in transit for a dispatched line.
+ * null until received. {@code timing} (RF-0040) compares the estimated and the real delivery time, null until dispatched.
+ * {@code inTransitBaseQuantity} is what is still pending in transit for a dispatched line.
  * {@code discrepancy} (RF-0038/RF-0039) is the shortage alert of a received-with-discrepancy transfer, with its treatment
  * and the transit loss registered apart; its {@code resends} (detail only) are the new transfers that reference it.
  * {@code sourceDiscrepancy} is the shortage a resend refers to. Costs are not exposed: operators do not consult
@@ -23,8 +25,8 @@ import java.util.UUID;
  */
 public record TransferResponse(UUID externalId, String code, String status, Branch origin, Branch destination,
                                Instant requestedAt, Person requestedBy, Decision approval, Dispatch dispatch, Decision arrival,
-                               Discrepancy discrepancy, SourceDiscrepancy sourceDiscrepancy, List<Line> lines,
-                               List<Event> events) {
+                               DeliveryTiming timing, Discrepancy discrepancy, SourceDiscrepancy sourceDiscrepancy,
+                               List<Line> lines, List<Event> events) {
     public record Person(String code, String fullName) {}
 
     public record Decision(Instant occurredAt, Person actor) {}
