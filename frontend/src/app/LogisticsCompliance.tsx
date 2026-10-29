@@ -4,6 +4,7 @@ import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { Branch, ComplianceFilter, ComplianceMetrics, ComplianceReport, User } from '../lib/api/client.ts';
 import { dateTime as when } from '../lib/format.ts';
 import { ZONE_NOTE, bogotaDateTime, compliance, complianceBase, currentMonth, periodError } from '../lib/logistics/compliance.ts';
+import { loadLatest, requestGate } from '../lib/latestRequest.ts';
 import { RoutePriorityBadge } from '../components/shared/RoutePriorityBadge.tsx';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -31,22 +32,18 @@ export function LogisticsCompliance({ client, user, onError, revision, visible }
   }, [client, admin, visible, revision]);
 
   // Only the latest report request may update the view: a slower earlier response (another period) is discarded.
-  const reportRequest = useRef(0);
-  async function load(target = consulted) {
-    const request = ++reportRequest.current;
-    const current = () => request === reportRequest.current;
-    setLoading(true); setError('');
-    try {
-      const value = await client.complianceReport(target);
-      if (current()) setReport(value);
-    } catch (reason) {
-      if (!current()) return;
+  const reports = useRef(requestGate());
+  const load = (target = consulted) => loadLatest(reports.current, () => client.complianceReport(target), {
+    start: () => { setLoading(true); setError(''); },
+    value: setReport,
+    error: reason => {
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setError(reason instanceof TypeError
         ? 'Sin comunicación con el servidor. El reporte mostrado puede estar desactualizado.'
         : reason instanceof Error ? reason.message : 'No se pudo generar el reporte de cumplimiento.');
-    } finally { if (current()) setLoading(false); }
-  }
+    },
+    done: () => setLoading(false),
+  });
   useEffect(() => { if (visible) void load(); }, [visible, consulted, revision]);
 
   function submit() {
