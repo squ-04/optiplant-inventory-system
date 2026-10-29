@@ -135,9 +135,13 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
     }).finally(() => setBusy(false));
   }
 
-  /** Runs one transition with a key that survives a retry whose outcome is unknown. */
-  async function act(transfer: Transfer, action: string, call: (key: string) => Promise<Transfer>, done: (updated: Transfer) => string) {
-    const slot = `${transfer.externalId}:${action}`;
+  /**
+   * Runs one transition with a key that survives a retry whose outcome is unknown. The key belongs to the exact body, so
+   * editing the quantities or the reason afterwards sends a new request instead of an idempotency conflict.
+   */
+  async function act(transfer: Transfer, action: string, body: unknown, call: (key: string) => Promise<Transfer>,
+                     done: (updated: Transfer) => string) {
+    const slot = `${transfer.externalId}:${action}:${JSON.stringify(body)}`;
     const key = actionKeys[slot] ?? newIdempotencyKey();
     setActionKeys(previous => ({ ...previous, [slot]: key }));
     setBusy(true); setActionError(''); setConfirmed('');
@@ -157,7 +161,7 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
   }
 
   const prepare = (transfer: Transfer, lines: { lineNo: number; quantity: string }[]) =>
-    act(transfer, 'prepare', key => client.prepareTransfer(transfer.externalId, lines, key),
+    act(transfer, 'prepare', lines, key => client.prepareTransfer(transfer.externalId, lines, key),
       updated => `Preparación de ${updated.code} guardada. El destino ya ve las cantidades a enviar; el gerente de origen debe aprobarla. `
         + 'No se reservaron existencias.');
 
@@ -169,16 +173,16 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
       confirmLabel: 'Aprobar transferencia',
     });
     if (!accepted) return;
-    await act(transfer, 'approve', key => client.approveTransfer(transfer.externalId, key),
+    await act(transfer, 'approve', null, key => client.approveTransfer(transfer.externalId, key),
       updated => `${updated.code} quedó aprobada. Queda pendiente el despacho del origen.`);
   }
 
   const reject = (transfer: Transfer, reason: string) =>
-    act(transfer, 'reject', key => client.rejectTransfer(transfer.externalId, reason, key),
+    act(transfer, 'reject', reason, key => client.rejectTransfer(transfer.externalId, reason, key),
       updated => `${updated.code} quedó rechazada con su motivo. Las cantidades y existencias no cambiaron.`);
 
   const cancel = (transfer: Transfer, reason: string) =>
-    act(transfer, 'cancel', key => client.cancelTransfer(transfer.externalId, reason || null, key),
+    act(transfer, 'cancel', reason, key => client.cancelTransfer(transfer.externalId, reason || null, key),
       updated => `${updated.code} quedó cancelada. Las existencias no cambiaron.`);
 
   const requestable = catalog?.items ?? [];
@@ -463,9 +467,9 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
             <Input id={`transfer-prepare-${line.lineNo}`} value={quantities[line.lineNo] ?? ''} required inputMode="decimal"
               pattern={decimalInputPattern(3)} aria-describedby={hint} aria-invalid={check === 'exceeds' || undefined}
               onChange={event => setQuantities(previous => ({ ...previous, [line.lineNo]: event.target.value }))} />
-            <p id={hint} className={check === 'exceeds' ? 'field-error' : check === 'short' ? 'transfer-warning' : 'text-muted-foreground'}>
+            <p id={hint} className={check === 'exceeds' ? 'field-error' : check === 'exceedsAvailable' ? 'transfer-warning' : 'text-muted-foreground'}>
               {check === 'exceeds' ? `No puede superar lo solicitado: ${decimal(line.requestedQuantity)} ${line.unit}.`
-                : check === 'short' ? `Supera la disponibilidad actual del origen (${decimal(line.originAvailableQuantity!)} ${line.baseUnitName}); `
+                : check === 'exceedsAvailable' ? `Supera la disponibilidad actual del origen (${decimal(line.originAvailableQuantity!)} ${line.baseUnitName}); `
                   + 'el despacho no podrá confirmarse sin existencias suficientes.'
                   : `Solicitado: ${decimal(line.requestedQuantity)} ${line.unit}.`
                     + (line.originAvailableQuantity !== null ? ` Disponible: ${decimal(line.originAvailableQuantity)} ${line.baseUnitName}.` : '')}

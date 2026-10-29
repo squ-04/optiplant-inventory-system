@@ -70,7 +70,7 @@ export function multiply(left: string, right: string): string | null {
   return fraction ? `${integer}.${fraction}` : integer;
 }
 
-export type PreparationCheck = 'ok' | 'invalid' | 'exceeds' | 'short';
+export type PreparationCheck = 'ok' | 'invalid' | 'exceeds' | 'exceedsAvailable';
 
 /**
  * Checks a typed preparation quantity (API decimal) against the request and, when known, the origin's availability in
@@ -82,6 +82,6 @@ export function checkPreparation(quantity: string, requested: string, factor: st
   if (relation === null) return 'invalid';
   if (relation > 0) return 'exceeds';
   const base = multiply(quantity, factor);
-  if (available !== null && base !== null && compareDecimal(base, available)! > 0) return 'short';
+  if (available !== null && base !== null && compareDecimal(base, available)! > 0) return 'exceedsAvailable';
   return 'ok';
 }

@@ -84,7 +84,7 @@ test('preparation never exceeds the request and warns when it exceeds the origin
   assert.equal(checkPreparation('0', '2.000', '12', '30.000'), 'ok');
   assert.equal(checkPreparation('3', '2.000', '12', null), 'exceeds');
   // 2 boxes of 12 = 24 units, only 20 available: allowed, because preparing does not reserve, but warned.
-  assert.equal(checkPreparation('2', '2.000', '12', '20.000'), 'short');
+  assert.equal(checkPreparation('2', '2.000', '12', '20.000'), 'exceedsAvailable');
   assert.equal(checkPreparation('2', '2.000', '12', null), 'ok');
   assert.equal(checkPreparation('', '2.000', '12', null), 'invalid');
   assert.equal(checkPreparation('-1', '2.000', '12', null), 'invalid');
