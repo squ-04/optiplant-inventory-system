@@ -34,6 +34,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>A document that must store the applied cost on its own line before posting (a sale line) calls {@link #lock}
  * first: the returned average cannot change until the transaction ends.
+ *
+ * <p>A dispatch (RF-0035, INC-016/D01) is an ordinary exit from the origin at its current average, and every dispatched
+ * line opens its transit balance in the same posting: the transit receives the whole value withdrawn from the origin,
+ * with the final rounding difference of a depleting exit kept apart (data model §5.2). The destination is not touched.
  */
 @Service
 public class InventoryLedger {
@@ -62,19 +66,35 @@ public class InventoryLedger {
      */
     public record Snapshot(String sku, String productName, String unitName) {}
 
-    /** {@code snapshot} is null for movements without a source document: they take the current catalog names. */
+    /**
+     * {@code snapshot} is null for movements without a source document: they take the current catalog names.
+     * {@code dispatchLineId} is set only on the lines of a dispatch.
+     */
     public record Line(long productId, long productUnitId, BigDecimal factor, BigDecimal commercialQty, BigDecimal baseQty,
                        Direction direction, Cost cost, Long purchaseLineId, Long saleLineId, Long originalMovementId,
-                       Snapshot snapshot) {
+                       Snapshot snapshot, Long dispatchLineId) {
+        public Line(long productId, long productUnitId, BigDecimal factor, BigDecimal commercialQty, BigDecimal baseQty,
+                    Direction direction, Cost cost, Long purchaseLineId, Long saleLineId, Long originalMovementId,
+                    Snapshot snapshot) {
+            this(productId, productUnitId, factor, commercialQty, baseQty, direction, cost, purchaseLineId, saleLineId,
+                originalMovementId, snapshot, null);
+        }
+
         public Line(long productId, long productUnitId, BigDecimal factor, BigDecimal commercialQty, BigDecimal baseQty,
                     Direction direction, Cost cost, Long purchaseLineId, Long saleLineId, Long originalMovementId) {
             this(productId, productUnitId, factor, commercialQty, baseQty, direction, cost, purchaseLineId, saleLineId,
-                originalMovementId, null);
+                originalMovementId, null, null);
         }
     }
 
+    /** {@code dispatchId} is set only on a {@link Kind#DISPATCH} operation. */
     public record Operation(Kind kind, long branchId, long actorId, String reason, Long purchaseOrderId, Long saleId,
-                            Long originalOperationId, List<Line> lines) {}
+                            Long originalOperationId, List<Line> lines, Long dispatchId) {
+        public Operation(Kind kind, long branchId, long actorId, String reason, Long purchaseOrderId, Long saleId,
+                         Long originalOperationId, List<Line> lines) {
+            this(kind, branchId, actorId, reason, purchaseOrderId, saleId, originalOperationId, lines, null);
+        }
+    }
 
     public record Balance(BigDecimal quantity, BigDecimal value, BigDecimal average) {}
 
@@ -109,6 +129,12 @@ public class InventoryLedger {
         if (operation.reason() == null || operation.reason().isBlank()) {
             throw new ApiException(400, "VALIDATION_FAILED", "El motivo es obligatorio.");
         }
+        boolean dispatch = operation.kind() == Kind.DISPATCH;
+        if (dispatch != (operation.dispatchId() != null) || operation.lines().stream().anyMatch(line -> dispatch
+            != (line.dispatchLineId() != null) || (dispatch && (line.direction() != Direction.OUT
+                || !(line.cost() instanceof Cost.Average))))) {
+            throw new IllegalArgumentException("A dispatch, and only a dispatch, posts exits at the average linked to its lines");
+        }
         // Lock every affected balance in a stable order to avoid deadlocks between concurrent operations.
         Map<Long, Balance> balances = new LinkedHashMap<>();
         operation.lines().stream().map(Line::productId).distinct().sorted(Comparator.naturalOrder())
@@ -125,9 +151,9 @@ public class InventoryLedger {
         Instant now = clock.instant();
         UUID operationExternalId = UUID.randomUUID();
         Long operationId = jdbc.queryForObject("INSERT INTO inventory_operation(external_id,kind,occurred_at,actor_id,reason,"
-                + "purchase_order_id,sale_id,original_operation_id) VALUES (?,?,?,?,?,?,?,?) RETURNING id", Long.class,
+                + "purchase_order_id,sale_id,original_operation_id,dispatch_id) VALUES (?,?,?,?,?,?,?,?,?) RETURNING id", Long.class,
             operationExternalId, operation.kind().name(), Timestamp.from(now), operation.actorId(), operation.reason().strip(),
-            operation.purchaseOrderId(), operation.saleId(), operation.originalOperationId());
+            operation.purchaseOrderId(), operation.saleId(), operation.originalOperationId(), operation.dispatchId());
         List<PostedMovement> posted = new ArrayList<>();
         for (Valued value : valued) {
             Line line = value.line();
@@ -135,8 +161,8 @@ public class InventoryLedger {
             Long movementId = jdbc.queryForObject("""
                 INSERT INTO inventory_movement(external_id,operation_id,branch_id,product_id,product_unit_id,direction,
                     commercial_qty,base_qty,factor_snapshot,sku_snapshot,product_name_snapshot,unit_name_snapshot,
-                    historical_base_cost,purchase_line_id,sale_line_id,original_movement_id)
-                SELECT ?,?,?,p.id,u.id,?,?,?,?,coalesce(?,p.sku),coalesce(?,p.name),coalesce(?,u.name),?,?,?,?
+                    historical_base_cost,purchase_line_id,sale_line_id,original_movement_id,dispatch_line_id)
+                SELECT ?,?,?,p.id,u.id,?,?,?,?,coalesce(?,p.sku),coalesce(?,p.name),coalesce(?,u.name),?,?,?,?,?
                 FROM catalog_product p
                 JOIN catalog_product_unit u ON u.product_id=p.id WHERE p.id=? AND u.id=?
                 RETURNING id""", Long.class,
@@ -144,13 +170,14 @@ public class InventoryLedger {
                 line.baseQty(), line.factor(), line.snapshot() == null ? null : line.snapshot().sku(),
                 line.snapshot() == null ? null : line.snapshot().productName(),
                 line.snapshot() == null ? null : line.snapshot().unitName(), value.appliedCost(), line.purchaseLineId(), line.saleLineId(),
-                line.originalMovementId(), line.productId(), line.productUnitId());
+                line.originalMovementId(), line.dispatchLineId(), line.productId(), line.productUnitId());
             jdbc.update("INSERT INTO inventory_valuation_component(movement_id,component_kind,amount) VALUES (?,'BASE',?)",
                 movementId, value.baseAmount());
             if (value.adjustmentAmount().signum() != 0) {
                 jdbc.update("INSERT INTO inventory_valuation_component(movement_id,component_kind,amount) VALUES (?,?,?)",
                     movementId, value.adjustmentKind(), value.adjustmentAmount());
             }
+            if (dispatch) openTransit(line, operationId, value);
             posted.add(new PostedMovement(movementExternalId, movementId, value.appliedCost(), value.baseAmount(),
                 value.adjustmentAmount(), value.resulting()));
         }
@@ -161,6 +188,20 @@ public class InventoryLedger {
         // RF-0019/RF-0020: every stock change re-evaluates the restock alert of its product-branch combination.
         balances.keySet().forEach(product -> alerts.evaluate(operation.branchId(), product));
         return new Posted(operationExternalId, operationId, now, posted);
+    }
+
+    /**
+     * Opens the transit balance of a dispatched line with everything its exit withdrew from the origin: the base value
+     * and, apart, the final rounding difference of a depleting exit (both negated: the exit's amounts are negative).
+     */
+    private void openTransit(Line line, long operationId, Valued exit) {
+        BigDecimal value = exit.baseAmount().negate();
+        BigDecimal rounding = exit.adjustmentAmount().negate();
+        Long transitId = jdbc.queryForObject("INSERT INTO inventory_transit(dispatch_line_id,pending_base_qty,pending_base_value,"
+            + "pending_rounding_value) VALUES (?,?,?,?) RETURNING id", Long.class, line.dispatchLineId(), line.baseQty(), value,
+            rounding);
+        jdbc.update("INSERT INTO inventory_transit_entry(transit_id,operation_id,entry_kind,qty_delta,base_value_delta,"
+            + "rounding_value_delta) VALUES (?,?,'DISPATCH',?,?,?)", transitId, operationId, line.baseQty(), value, rounding);
     }
 
     private record Valued(Line line, BigDecimal appliedCost, BigDecimal baseAmount, String adjustmentKind,
