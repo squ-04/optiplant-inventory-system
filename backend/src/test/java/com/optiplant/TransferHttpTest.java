@@ -458,6 +458,25 @@ class TransferHttpTest {
         assertThat(code(originManager.post("/transfers/" + id + "/approve", Map.of()))).isEqualTo("TRANSFER_STATUS_CONFLICT");
         assertThat(events(id, "APPROVED")).isEqualTo(1);
 
+        // Preparation, rejection and cancellation are replayed with their key, never applied twice.
+        String replayed = requested().get("externalId").asText();
+        String prepareKey = UUID.randomUUID().toString();
+        assertThat(originOperator.post("/transfers/" + replayed + "/prepare", prepared(1, "1", 2, "5"), prepareKey).statusCode()).isEqualTo(200);
+        assertThat(originOperator.post("/transfers/" + replayed + "/prepare", prepared(1, "1", 2, "5"), prepareKey).statusCode()).isEqualTo(200);
+        assertThat(code(originOperator.post("/transfers/" + replayed + "/prepare", prepared(1, "2", 2, "5"), prepareKey)))
+            .isEqualTo("IDEMPOTENCY_CONFLICT");
+        assertThat(events(replayed, "PREPARING")).isEqualTo(1);
+        String rejectKey = UUID.randomUUID().toString();
+        Map<String, Object> reason = Map.of("reason", "Sin existencias");
+        assertThat(originManager.post("/transfers/" + replayed + "/reject", reason, rejectKey).statusCode()).isEqualTo(200);
+        assertThat(originManager.post("/transfers/" + replayed + "/reject", reason, rejectKey).statusCode()).isEqualTo(200);
+        assertThat(events(replayed, "REJECTED")).isEqualTo(1);
+        String cancelled = requested().get("externalId").asText();
+        String cancelKey = UUID.randomUUID().toString();
+        assertThat(destinationOperator.post("/transfers/" + cancelled + "/cancel", Map.of(), cancelKey).statusCode()).isEqualTo(200);
+        assertThat(destinationOperator.post("/transfers/" + cancelled + "/cancel", Map.of(), cancelKey).statusCode()).isEqualTo(200);
+        assertThat(events(cancelled, "CANCELLED")).isEqualTo(1);
+
         // Simultaneous approval and rejection: exactly one transition wins; the other changes nothing.
         String raced = preparing();
         List<Integer> statuses = race(
@@ -483,6 +502,8 @@ class TransferHttpTest {
     @Test void stateHistoryIsAppendOnlyForTheApplication() throws Exception {
         String id = requested().get("externalId").asText();
         assertThatThrownBy(() -> jdbc.update("UPDATE transfers_event SET reason='x' WHERE transfer_id="
+            + "(SELECT id FROM transfers_transfer WHERE external_id=?::uuid)", id)).hasStackTraceContaining("permission denied for table transfers_event");
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM transfers_event WHERE transfer_id="
             + "(SELECT id FROM transfers_transfer WHERE external_id=?::uuid)", id)).hasStackTraceContaining("permission denied for table transfers_event");
     }
 
