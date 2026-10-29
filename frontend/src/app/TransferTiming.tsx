@@ -9,7 +9,7 @@ import { ZONE_NOTE, bogotaDateTime, deliveryOutcome, deviation, duration } from 
 export function TransferTiming({ transfer }: { transfer: Transfer }) {
   const { dispatch, arrival, timing } = transfer;
   if (!dispatch || !timing) return null;
-  const late = timing.overdue || (timing.onTime === false);
+  const late = timing.overdue || (timing.onTime === false) || !timing.consistent;
   return <section className="transfer-timing" aria-labelledby={`timing-${transfer.externalId}`}>
     <h4 id={`timing-${transfer.externalId}`}><Clock aria-hidden="true" />Tiempo de entrega</h4>
     <p>Salida real: {bogotaDateTime(dispatch.departedAt)}</p>
@@ -21,6 +21,7 @@ export function TransferTiming({ transfer }: { transfer: Transfer }) {
       <div><h5>Real</h5>
         <dl><div><dt>Llegada</dt><dd>{arrival ? bogotaDateTime(arrival.occurredAt) : 'Sin llegada confirmada'}</dd></div>
           <div><dt>Duración</dt><dd>{timing.actualSeconds === null ? 'Sin calcular hasta la llegada'
+            : !timing.consistent ? 'No calculable: llegada anterior a la salida'
             : `${duration(timing.actualSeconds)}${timing.delivery === 'DISCREPANCY' ? ' hasta la llegada parcial' : ''}`}</dd></div></dl></div>
     </div>
     <p className={late ? 'notice-warning' : 'text-muted-foreground'}>{deliveryOutcome(timing)}

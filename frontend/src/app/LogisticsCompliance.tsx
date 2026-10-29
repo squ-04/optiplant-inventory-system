@@ -94,6 +94,8 @@ export function LogisticsCompliance({ client, user, onError, revision, visible }
           <dt>Cumplimiento</dt><dd>{compliance(report.summary)}<small>{complianceBase(report.summary)}</small></dd></div>
         <div><dt>Completas con retraso</dt><dd>{report.summary.lateComplete}</dd></div>
         <div><dt>Recibidas con discrepancia</dt><dd>{report.summary.discrepancy}</dd></div>
+        {report.summary.inconsistentTiming > 0 && <div><dt>Tiempos inconsistentes</dt>
+          <dd>{report.summary.inconsistentTiming}<small>Llegada anterior a la salida; no cumplen</small></dd></div>}
         <div><dt>Vencidas en tránsito</dt><dd>{report.overdueInTransit.length}<small>No cuentan en el porcentaje</small></dd></div>
       </dl>
       <Outcomes metrics={report.summary} />
@@ -171,7 +173,8 @@ function MetricsCell({ metrics }: { metrics: ComplianceMetrics }) {
   return <TableCell className={metrics.compliancePercent === null ? 'not-calculable' : undefined}>
     <span className="font-semibold">{compliance(metrics)}</span>
     <span className="cell-note">{complianceBase(metrics)}{metrics.arrivals > 0
-      ? `; ${metrics.lateComplete} con retraso, ${metrics.discrepancy} con discrepancia` : ''}</span>
+      ? `; ${metrics.lateComplete} con retraso, ${metrics.discrepancy} con discrepancia${metrics.inconsistentTiming > 0
+        ? `, ${metrics.inconsistentTiming} con tiempo inconsistente` : ''}` : ''}</span>
   </TableCell>;
 }
 
@@ -184,11 +187,14 @@ function Outcomes({ metrics }: { metrics: ComplianceMetrics }) {
       <span className="on-time" style={{ width: share(metrics.onTimeComplete) }} />
       <span className="late" style={{ width: share(metrics.lateComplete) }} />
       <span className="discrepancy" style={{ width: share(metrics.discrepancy) }} />
+      <span className="inconsistent" style={{ width: share(metrics.inconsistentTiming) }} />
     </div>
     <ul className="compliance-legend">
       <li><i className="on-time" aria-hidden="true" />Completas a tiempo: {metrics.onTimeComplete}</li>
       <li><i className="late" aria-hidden="true" />Completas con retraso: {metrics.lateComplete}</li>
       <li><i className="discrepancy" aria-hidden="true" />Con discrepancia: {metrics.discrepancy}</li>
+      {metrics.inconsistentTiming > 0 && <li><i className="inconsistent" aria-hidden="true" />Tiempo inconsistente:
+        {' '}{metrics.inconsistentTiming}</li>}
     </ul>
   </figure>;
 }

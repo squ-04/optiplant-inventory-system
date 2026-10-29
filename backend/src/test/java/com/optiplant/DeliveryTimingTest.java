@@ -17,14 +17,14 @@ class DeliveryTimingTest {
     @Test void aPartialArrivalKeepsItsOwnDurationAndIsNeverComplete() {
         // RF-0040-CA-02: dispatched at 10:00, single partial reception confirmed at 12:00.
         DeliveryTiming timing = DeliveryTiming.of(bogota(10, 0), bogota(11, 0), bogota(12, 0), false, bogota(15, 0));
-        assertThat(timing).isEqualTo(new DeliveryTiming(3600, 7200L, 3600L, "DISCREPANCY", false, false));
+        assertThat(timing).isEqualTo(new DeliveryTiming(3600, 7200L, 3600L, "DISCREPANCY", false, false, true));
         // Resolving the alert at 15:00 is not an arrival: a later reading gives the same 2 hours.
         assertThat(DeliveryTiming.of(bogota(10, 0), bogota(11, 0), bogota(12, 0), false, bogota(23, 0))).isEqualTo(timing);
     }
 
     @Test void aCompleteArrivalIsOnTimeUpToTheEstimatedInstantIncluded() {
         assertThat(DeliveryTiming.of(bogota(10, 0), bogota(12, 0), bogota(12, 0), true, bogota(12, 0)))
-            .isEqualTo(new DeliveryTiming(7200, 7200L, 0L, "COMPLETE", true, false));
+            .isEqualTo(new DeliveryTiming(7200, 7200L, 0L, "COMPLETE", true, false, true));
         assertThat(DeliveryTiming.of(bogota(10, 0), bogota(12, 0), bogota(11, 30), true, bogota(12, 0)).onTime()).isTrue();
         DeliveryTiming late = DeliveryTiming.of(bogota(10, 0), bogota(12, 0), bogota(12, 1), true, bogota(13, 0));
         assertThat(late.onTime()).isFalse();
@@ -35,7 +35,15 @@ class DeliveryTimingTest {
 
     @Test void withoutArrivalNothingIsInventedAndOnlyTheDeadlineIsChecked() {
         DeliveryTiming pending = DeliveryTiming.of(bogota(10, 0), bogota(12, 0), null, false, bogota(12, 0));
-        assertThat(pending).isEqualTo(new DeliveryTiming(7200, null, null, null, null, false));
+        assertThat(pending).isEqualTo(new DeliveryTiming(7200, null, null, null, null, false, true));
         assertThat(DeliveryTiming.of(bogota(10, 0), bogota(12, 0), null, false, bogota(12, 1)).overdue()).isTrue();
+    }
+
+    @Test void anArrivalRecordedBeforeTheDepartureIsKeptButNeverOnTime() {
+        // Only data corrected outside the application: the reception refuses an arrival before the departure.
+        DeliveryTiming timing = DeliveryTiming.of(bogota(10, 0), bogota(12, 0), bogota(9, 58), true, bogota(13, 0));
+        assertThat(timing).isEqualTo(new DeliveryTiming(7200, -120L, -7320L, "COMPLETE", false, false, false));
+        // The departure itself is a valid arrival instant.
+        assertThat(DeliveryTiming.of(bogota(10, 0), bogota(12, 0), bogota(10, 0), true, bogota(13, 0)).consistent()).isTrue();
     }
 }

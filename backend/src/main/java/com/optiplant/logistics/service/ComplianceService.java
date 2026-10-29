@@ -51,7 +51,7 @@ public class ComplianceService {
     }
 
     /** A confirmed arrival of the period with the branches and the route of its transfer. */
-    private record Arrival(long origin, long destination, Long route, boolean onTime, boolean complete) {}
+    private record Arrival(long origin, long destination, Long route, boolean onTime, boolean complete, boolean consistent) {}
 
     public ComplianceReportResponse report(SessionPrincipal principal, LocalDate from, LocalDate to, UUID branch) {
         if (to.isBefore(from)) {
@@ -77,7 +77,7 @@ public class ComplianceService {
             DeliveryTiming timing = DeliveryTiming.of(r.getObject("dispatched_at", OffsetDateTime.class).toInstant(),
                 r.getObject("estimated_arrival_at", OffsetDateTime.class).toInstant(), arrived, complete, arrived);
             return new Arrival(r.getLong("origin_branch_id"), r.getLong("destination_branch_id"),
-                r.getObject("route_id", Long.class), Boolean.TRUE.equals(timing.onTime()), complete);
+                r.getObject("route_id", Long.class), Boolean.TRUE.equals(timing.onTime()), complete, timing.consistent());
         }, start, end);
 
         List<BranchCompliance> branches = new ArrayList<>();
@@ -119,9 +119,12 @@ public class ComplianceService {
         List<Arrival> selected = arrivals.stream().filter(filter).toList();
         int onTime = (int) selected.stream().filter(Arrival::onTime).count();
         int complete = (int) selected.stream().filter(Arrival::complete).count();
+        // A complete reception whose arrival precedes its departure is neither punctual nor late: it is shown apart.
+        int inconsistent = (int) selected.stream().filter(a -> a.complete() && !a.consistent()).count();
         String percent = selected.isEmpty() ? null : BigDecimal.valueOf(onTime * 100L)
             .divide(BigDecimal.valueOf(selected.size()), 2, RoundingMode.HALF_UP).toPlainString();
-        return new Metrics(selected.size(), onTime, complete - onTime, selected.size() - complete, percent);
+        return new Metrics(selected.size(), onTime, complete - onTime - inconsistent, selected.size() - complete, inconsistent,
+            percent);
     }
 
     private static Branch branch(ResultSet r, String alias) throws SQLException {

@@ -103,7 +103,7 @@ class LogisticsComplianceHttpTest {
         assertThat(received.get("status").asText()).isEqualTo("RECEIVED_DISCREPANCY");
         assertThat(received.get("timing")).isEqualTo(json.readTree(
             "{\"estimatedSeconds\":3600,\"actualSeconds\":7200,\"deviationSeconds\":3600,\"delivery\":\"DISCREPANCY\","
-                + "\"onTime\":false,\"overdue\":false}"));
+                + "\"onTime\":false,\"overdue\":false,\"consistent\":true}"));
         // RF-0040-CA-01: both values belong to the same transfer.
         assertThat(OffsetDateTime.parse(received.at("/dispatch/estimatedArrivalAt").asText()).toInstant())
             .isEqualTo(at(day, 11, 0).toInstant());
@@ -247,6 +247,28 @@ class LogisticsComplianceHttpTest {
         assertThat(report(cManager, day, day, null).get("summary")).isEqualTo(metrics(1, 0, 1, 0, "0.00"));
     }
 
+    @Test void anArrivalRecordedBeforeItsDepartureIsShownApartAndNeverCompliant() throws Exception {
+        LocalDate day = LocalDate.of(2025, 7, 8);
+        String anomalous = inTransit(a, "1");
+        String punctual = inTransit(a, "1");
+        assertThat(bOperator.post("/transfers/" + anomalous + "/receive", quantities("1")).statusCode()).isEqualTo(200);
+        assertThat(bOperator.post("/transfers/" + punctual + "/receive", quantities("1")).statusCode()).isEqualTo(200);
+        // A correction made outside the application leaves the arrival 2 minutes before the departure.
+        times(anomalous, at(day, 10, 0), at(day, 12, 0), at(day, 9, 58));
+        times(punctual, at(day, 10, 0), at(day, 12, 0), at(day, 11, 0));
+
+        // The record still loads, in the detail and in the listing, flagged instead of rejected.
+        JsonNode detail = read(bManager.get("/transfers/" + anomalous));
+        assertThat(detail.at("/timing/actualSeconds").asLong()).isEqualTo(-120);
+        assertThat(detail.at("/timing/consistent").asBoolean()).isFalse();
+        assertThat(detail.at("/timing/onTime").asBoolean()).isFalse();
+        assertThat(ids(bManager.get("/transfers?direction=INCOMING&status=RECEIVED_COMPLETE"))).contains(anomalous, punctual);
+        // It stays in the denominator as a confirmed arrival but is never compliant: 1 / 2.
+        JsonNode report = report(bManager, day, day, null);
+        assertThat(report.get("summary")).isEqualTo(metrics(2, 1, 0, 0, 1, "50.00"));
+        assertThat(route(report, "AB").get("metrics")).isEqualTo(metrics(2, 1, 0, 0, 1, "50.00"));
+    }
+
     @Test void onlyManagersOfTheirBranchAndAdministratorsReadTheReport() throws Exception {
         String period = "from=2025-06-01&to=2025-06-30";
         assertError(aOperator.get("/logistics/compliance?" + period), 403, "ROLE_FORBIDDEN");
@@ -286,8 +308,13 @@ class LogisticsComplianceHttpTest {
     }
 
     JsonNode metrics(int arrivals, int onTime, int late, int discrepancy, String percent) {
-        return json.readTree("{\"arrivals\":%d,\"onTimeComplete\":%d,\"lateComplete\":%d,\"discrepancy\":%d,\"compliancePercent\":%s}"
-            .formatted(arrivals, onTime, late, discrepancy, percent == null ? "null" : "\"" + percent + "\""));
+        return metrics(arrivals, onTime, late, discrepancy, 0, percent);
+    }
+
+    JsonNode metrics(int arrivals, int onTime, int late, int discrepancy, int inconsistent, String percent) {
+        return json.readTree(("{\"arrivals\":%d,\"onTimeComplete\":%d,\"lateComplete\":%d,\"discrepancy\":%d,"
+            + "\"inconsistentTiming\":%d,\"compliancePercent\":%s}").formatted(arrivals, onTime, late, discrepancy, inconsistent,
+            percent == null ? "null" : "\"" + percent + "\""));
     }
 
     JsonNode branchOf(JsonNode report, UUID branch) {

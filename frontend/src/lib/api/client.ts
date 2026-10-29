@@ -249,18 +249,22 @@ export interface TransferDispatch {
  * RF-0040 (H v0.15): exact seconds computed by the server. The real time runs from the actual departure to the single
  * confirmed arrival and is null without one; `deviationSeconds` is the arrival minus the estimate (positive when late).
  * `onTime` (RF-0043) is true only for a complete reception not later than the estimate; `overdue` marks a transfer
- * still without arrival whose estimate has passed.
+ * still without arrival whose estimate has passed. `consistent` is false when the recorded arrival precedes the departure
+ * (data corrected outside the application): its negative duration is shown as an anomaly, never rejected, so one such
+ * record cannot hide the whole listing.
  */
 export interface DeliveryTiming {
   estimatedSeconds: number; actualSeconds: number | null; deviationSeconds: number | null;
-  delivery: 'COMPLETE' | 'DISCREPANCY' | null; onTime: boolean | null; overdue: boolean;
+  delivery: 'COMPLETE' | 'DISCREPANCY' | null; onTime: boolean | null; overdue: boolean; consistent: boolean;
 }
 /**
  * RF-0043: `compliancePercent` is complete punctual arrivals / confirmed arrivals with two decimals; null means
  * «No calculable» (no arrivals in the period).
  */
 export interface ComplianceMetrics {
-  arrivals: number; onTimeComplete: number; lateComplete: number; discrepancy: number; compliancePercent: string | null;
+  arrivals: number; onTimeComplete: number; lateComplete: number; discrepancy: number;
+  /** Complete receptions whose recorded arrival precedes the departure: in the denominator, never compliant. */
+  inconsistentTiming: number; compliancePercent: string | null;
 }
 export interface ComplianceReport {
   timeZone: string; from: string; to: string; generatedAt: string; branch: Branch | null; summary: ComplianceMetrics;
@@ -556,22 +560,25 @@ function discrepancyDto(value: unknown): TransferDiscrepancy {
 const seconds = (value: unknown) => typeof value === 'number' && Number.isInteger(value);
 /** The real time, the delivery kind and the punctuality exist together, only once something has arrived. */
 function timingDto(value: unknown): boolean {
-  if (!record(value) || !count(value.estimatedSeconds) || typeof value.overdue !== 'boolean') return false;
+  if (!record(value) || !count(value.estimatedSeconds) || typeof value.overdue !== 'boolean'
+      || typeof value.consistent !== 'boolean') return false;
   if (value.actualSeconds === null) {
-    return value.deviationSeconds === null && value.delivery === null && value.onTime === null;
+    return value.deviationSeconds === null && value.delivery === null && value.onTime === null && value.consistent;
   }
-  return count(value.actualSeconds) && seconds(value.deviationSeconds) && typeof value.onTime === 'boolean'
+  // A negative real duration is accepted and flagged: it is exactly the inconsistent case.
+  return seconds(value.actualSeconds) && seconds(value.deviationSeconds) && typeof value.onTime === 'boolean'
     && (value.delivery === 'COMPLETE' || value.delivery === 'DISCREPANCY') && !value.overdue
-    && (!value.onTime || value.delivery === 'COMPLETE');
+    && value.consistent === ((value.actualSeconds as number) >= 0)
+    && (!value.onTime || (value.delivery === 'COMPLETE' && value.consistent));
 }
 const percent = (value: unknown) => value === null || (typeof value === 'string' && /^\d{1,3}\.\d{2}$/.test(value));
 function complianceMetricsDto(value: unknown): ComplianceMetrics {
-  if (!record(value) || !['arrivals', 'onTimeComplete', 'lateComplete', 'discrepancy'].every(k => count(value[k]))
+  if (!record(value) || !['arrivals', 'onTimeComplete', 'lateComplete', 'discrepancy', 'inconsistentTiming'].every(k => count(value[k]))
       || !percent(value.compliancePercent)) throw invalid();
   const metrics = value as unknown as ComplianceMetrics;
-  // «No calculable» exactly when nothing arrived; the three outcomes add up to the arrivals.
-  if ((metrics.arrivals === 0) !== (metrics.compliancePercent === null)
-      || metrics.onTimeComplete + metrics.lateComplete + metrics.discrepancy !== metrics.arrivals) throw invalid();
+  // «No calculable» exactly when nothing arrived; the four outcomes add up to the arrivals.
+  if ((metrics.arrivals === 0) !== (metrics.compliancePercent === null) || metrics.onTimeComplete + metrics.lateComplete
+      + metrics.discrepancy + metrics.inconsistentTiming !== metrics.arrivals) throw invalid();
   return metrics;
 }
 function complianceDto(value: unknown): ComplianceReport {

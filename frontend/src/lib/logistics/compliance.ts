@@ -20,13 +20,17 @@ export function duration(seconds: number): string {
 
 /** How the real arrival compares with the estimate; null while nothing has arrived. */
 export function deviation(timing: DeliveryTiming): string | null {
-  if (timing.deviationSeconds === null) return null;
+  if (timing.deviationSeconds === null || !timing.consistent) return null;
   if (timing.deviationSeconds === 0) return 'A la hora estimada';
   return `${duration(timing.deviationSeconds)} ${timing.deviationSeconds > 0 ? 'después' : 'antes'} de lo estimado`;
 }
 
+/** An arrival recorded before its departure only comes from data corrected outside the application. */
+export const INCONSISTENT_TIMING = 'La llegada registrada es anterior a la salida; revise los datos del despacho. No cuenta como cumplida';
+
 /** RF-0040: a partial arrival is never presented as a complete delivery. */
 export function deliveryOutcome(timing: DeliveryTiming): string {
+  if (!timing.consistent) return INCONSISTENT_TIMING;
   if (timing.delivery === null) return timing.overdue ? 'En tránsito, llegada estimada vencida' : 'En tránsito, sin llegada confirmada';
   if (timing.delivery === 'DISCREPANCY') return 'Recibida con discrepancia: entrega parcial, no cumple';
   return timing.onTime ? 'Recibida completa a tiempo: cumple' : 'Recibida completa con retraso: no cumple';

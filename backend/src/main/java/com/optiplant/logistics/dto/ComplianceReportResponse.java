@@ -20,10 +20,14 @@ public record ComplianceReportResponse(String timeZone, LocalDate from, LocalDat
     /**
      * {@code arrivals} are the transfers with a confirmed arrival in the period; {@code onTimeComplete} the complete
      * receptions not later than the estimated arrival; {@code lateComplete} the complete ones after it;
-     * {@code discrepancy} the ones received with discrepancy, counted as not compliant whatever their alert state.
-     * {@code compliancePercent} is onTimeComplete / arrivals with two decimals, null («No calculable») without arrivals.
+     * {@code discrepancy} the ones received with discrepancy, counted as not compliant whatever their alert state;
+     * {@code inconsistentTiming} the complete ones whose recorded arrival precedes the departure (data corrected outside
+     * the application): confirmed arrivals, so in the denominator, but never compliant. The four counts add up to
+     * arrivals. {@code compliancePercent} is onTimeComplete / arrivals with two decimals, null («No calculable») without
+     * arrivals.
      */
-    public record Metrics(int arrivals, int onTimeComplete, int lateComplete, int discrepancy, String compliancePercent) {}
+    public record Metrics(int arrivals, int onTimeComplete, int lateComplete, int discrepancy, int inconsistentTiming,
+                          String compliancePercent) {}
 
     public record BranchCompliance(Branch branch, Metrics asOrigin, Metrics asDestination) {}
 

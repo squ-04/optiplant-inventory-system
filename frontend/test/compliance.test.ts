@@ -9,11 +9,11 @@ import { documentStatusLabel } from '../src/lib/format.ts';
 const origin = { externalId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', code: 'A', name: 'Medellín', active: true };
 const destination = { externalId: '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e', code: 'B', name: 'Bogotá', active: true };
 const person = { code: 'U1', fullName: 'Ana Pérez' };
-const metrics = (arrivals: number, onTime: number, late: number, discrepancy: number, percent: string | null) =>
-  ({ arrivals, onTimeComplete: onTime, lateComplete: late, discrepancy, compliancePercent: percent });
+const metrics = (arrivals: number, onTime: number, late: number, discrepancy: number, percent: string | null, inconsistent = 0) =>
+  ({ arrivals, onTimeComplete: onTime, lateComplete: late, discrepancy, inconsistentTiming: inconsistent, compliancePercent: percent });
 // RF-0040-CA-02: dispatched 10:00, single partial arrival 12:00 (Bogotá).
 const partialTiming = { estimatedSeconds: 3600, actualSeconds: 7200, deviationSeconds: 3600, delivery: 'DISCREPANCY' as const,
-  onTime: false, overdue: false };
+  onTime: false, overdue: false, consistent: true };
 const transfer = {
   externalId: '4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a', code: 'TR-000001', status: 'RECEIVED_DISCREPANCY', origin, destination,
   requestedAt: '2026-10-20T13:00:00Z', requestedBy: person, approval: { occurredAt: '2026-10-20T14:00:00Z', actor: person },
@@ -51,7 +51,8 @@ test('RF-0040: a partial arrival keeps its two hours and is never presented as c
 });
 
 test('RF-0040: timing without arrival invents nothing, and inconsistent timings are rejected', async () => {
-  const pending = { estimatedSeconds: 14400, actualSeconds: null, deviationSeconds: null, delivery: null, onTime: null, overdue: true };
+  const pending = { estimatedSeconds: 14400, actualSeconds: null, deviationSeconds: null, delivery: null, onTime: null, overdue: true,
+    consistent: true };
   const h = client({ ...transfer, status: 'IN_TRANSIT', arrival: null, timing: pending },
     { ...transfer, timing: { ...partialTiming, onTime: true } },
     { ...transfer, timing: { ...pending, delivery: 'COMPLETE' } },
@@ -77,6 +78,26 @@ test('RF-0043: the report keeps its 50 % with the overdue transfer apart and «N
   assert.equal(h.urls[1], 'http://localhost:8080/api/v1/logistics/compliance?from=2026-10-01&to=2026-10-29');
   assert.equal(compliance(empty.summary), 'No calculable');
   assert.equal(complianceBase(empty.summary), 'Sin llegadas confirmadas en el período');
+});
+
+test('an arrival recorded before its departure is shown as an anomaly instead of hiding the listing', async () => {
+  const anomalous = { ...partialTiming, actualSeconds: -120, deviationSeconds: -3720, delivery: 'COMPLETE' as const,
+    consistent: false };
+  const h = client({ readAt: '2026-10-29T15:00:00Z', branch: null,
+    items: [{ ...transfer, status: 'RECEIVED_COMPLETE', timing: anomalous }, { ...transfer, externalId: '7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d' }] },
+    { ...transfer, timing: { ...anomalous, consistent: true } }, { ...transfer, timing: { ...anomalous, onTime: true } },
+    { ...report, summary: metrics(2, 1, 0, 0, '50.00', 1) });
+  const listing = await h.client.transfers();
+  assert.equal(listing.items.length, 2);
+  assert.equal(deliveryOutcome(listing.items[0].timing!),
+    'La llegada registrada es anterior a la salida; revise los datos del despacho. No cuenta como cumplida');
+  assert.equal(deviation(listing.items[0].timing!), null);
+  // A negative duration must be flagged, and is never on time.
+  await assert.rejects(h.client.transfer(transfer.externalId));
+  await assert.rejects(h.client.transfer(transfer.externalId));
+  const read = await h.client.complianceReport({ from: '2026-10-01', to: '2026-10-29' });
+  assert.equal(read.summary.inconsistentTiming, 1);
+  assert.equal(compliance(read.summary), '50,00 %');
 });
 
 test('RF-0043: a report whose KPI contradicts its counts is rejected', async () => {

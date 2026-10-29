@@ -370,6 +370,7 @@ table.restock-table { min-width: 56rem; }
   .compliance-legend .on-time { background: var(--color-success); }
   .compliance-legend .late { background: var(--color-warning); }
   .compliance-legend .discrepancy { background: var(--color-action); }
+  .compliance-outcomes .inconsistent, .compliance-legend .inconsistent { background: var(--color-muted); }
   .compliance-section { margin-top: var(--space-8, 2rem); }
   .compliance-section td.not-calculable { color: var(--color-muted); }
 
