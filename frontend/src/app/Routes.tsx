@@ -33,6 +33,8 @@ export function Routes({ client, user, onError, revision, visible }: Props) {
   const [editing, setEditing] = useState<Route | 'new' | null>(null);
   // The typed data survives closing the form while the view stays open (AGENTS.md §6).
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  // Whose data the draft holds: a new route keeps its typed data across closing; editing a route loads that route.
+  const [draftOwner, setDraftOwner] = useState<string>('new');
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmed, setConfirmed] = useState('');
@@ -59,7 +61,11 @@ export function Routes({ client, user, onError, revision, visible }: Props) {
     if (target !== 'new') {
       setDraft({ code: target.code, origin: target.origin.externalId, destination: target.destination.externalId,
         priority: target.priority, active: target.active });
-    } else if (editing !== 'new') setDraft(emptyDraft());
+      setDraftOwner(target.externalId);
+    } else if (draftOwner !== 'new') {
+      setDraft(emptyDraft());
+      setDraftOwner('new');
+    }
     revealEditor('route-editor');
   }
 
@@ -81,6 +87,7 @@ export function Routes({ client, user, onError, revision, visible }: Props) {
           : `Ruta ${saved.code} actualizada. Los despachos ya registrados conservan la prioridad que tenían.`);
         setEditing(null);
         setDraft(emptyDraft());
+        setDraftOwner('new');
         void load();
       }).catch(reason => handle(reason, setFormError, 'No se pudo guardar la ruta.'))
       .finally(() => setBusy(false));

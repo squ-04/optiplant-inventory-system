@@ -12,7 +12,8 @@ import {
 import { CLOSED_BEFORE_DISPATCH, TRANSFER_STATUS, TRANSFER_STATUSES } from '../lib/transfers/statuses.ts';
 import { canDispatch, routeFor } from '../lib/logistics/routes.ts';
 import { RoutePriorityBadge } from '../components/shared/RoutePriorityBadge.tsx';
-import { TransferDispatchForm } from './TransferDispatchForm.tsx';
+import { TransferDispatchForm, emptyDispatchDraft } from './TransferDispatchForm.tsx';
+import type { DispatchDraft } from '../lib/logistics/routes.ts';
 import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
 import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
@@ -56,6 +57,7 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
   const [branches, setBranches] = useState<Branch[]>([]);
   // RF-0035: the dispatch uses the active route of the transfer's origin and destination.
   const [routes, setRoutes] = useState<Route[] | null>(null);
+  const [routesError, setRoutesError] = useState('');
   const [filter, setFilter] = useState<TransferHistoryFilter>({});
   const [consulted, setConsulted] = useState<TransferHistoryFilter>({});
   const [history, setHistory] = useState<TransferHistory | null>(null);
@@ -82,7 +84,11 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
     if (operator) {
       client.transferOrigins().then(setOrigins).catch(onError);
       client.localCatalog().then(setCatalog).catch(onError);
-      client.routes().then(setRoutes).catch(onError);
+      setRoutesError('');
+      client.routes().then(setRoutes).catch(reason => {
+        if (reason instanceof ApiError && reason.status === 401) onError(reason);
+        else setRoutesError(`No se pudieron consultar las rutas (${problem(reason, 'error desconocido')}). Vuelva a abrir la vista para reintentar.`);
+      });
     }
     if (admin) client.visibleBranches().then(setBranches).catch(onError);
   }, [client, admin, operator, revision, visible]);
@@ -322,7 +328,7 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
     {selected && <TransferDetail key={selected.externalId} transfer={selected} user={user} busy={busy} error={actionError}
       onPrepare={lines => prepare(selected, lines)} onApprove={() => void approve(selected)}
       onReject={reason => reject(selected, reason)} onCancel={reason => cancel(selected, reason)}
-      route={routes ? routeFor(routes, selected) : null} routesLoaded={routes !== null}
+      route={routes ? routeFor(routes, selected) : null} routesLoaded={routes !== null} routesError={routesError}
       onDispatch={input => dispatch(selected, input)}
       onClose={() => setSelected(null)} />}
   </section>;
@@ -374,16 +380,18 @@ function TransferProgress({ transfer }: { transfer: Transfer }) {
 }
 
 function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onReject, onCancel, onClose, route, routesLoaded,
-                          onDispatch }: {
+                          routesError, onDispatch }: {
   transfer: Transfer; user: User; busy: boolean; error: string;
   onPrepare: (lines: { lineNo: number; quantity: string }[]) => Promise<boolean>; onApprove: () => void;
   onReject: (reason: string) => Promise<boolean>; onCancel: (reason: string) => Promise<boolean>; onClose: () => void;
-  route: Route | null; routesLoaded: boolean; onDispatch: (input: TransferDispatchInput) => Promise<boolean>;
+  route: Route | null; routesLoaded: boolean; routesError: string; onDispatch: (input: TransferDispatchInput) => Promise<boolean>;
 }) {
   // Forms keep what was typed while the detail stays open (AGENTS.md §6).
   const [mode, setMode] = useState<'prepare' | 'reject' | 'cancel' | 'dispatch' | null>(null);
   const [quantities, setQuantities] = useState<Record<number, string>>({});
   const [reason, setReason] = useState('');
+  const [dispatchDraft, setDispatchDraft] = useState<DispatchDraft>(emptyDispatchDraft);
+  const [dispatchTouched, setDispatchTouched] = useState(false);
   const where = side(user, transfer);
   const showAvailability = transfer.lines.some(line => line.originAvailableQuantity !== null);
   const preparable = canPrepare(user, transfer);
@@ -477,7 +485,9 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
     </>}
     {error && <p role="alert">{error}</p>}
 
-    {mode === 'dispatch' ? <TransferDispatchForm transfer={transfer} route={route} routesLoaded={routesLoaded} busy={busy}
+    {mode === 'dispatch' ? <TransferDispatchForm transfer={transfer} route={route} routesLoaded={routesLoaded}
+      routesError={routesError} busy={busy} draft={dispatchDraft} onChange={setDispatchDraft} touched={dispatchTouched}
+      onTouched={() => setDispatchTouched(true)}
       onDispatch={input => onDispatch(input).then(done => { if (done) setMode(null); return done; })}
       onBack={() => setMode(null)} />
     : mode === 'prepare' ? <form className="purchase-cancel transfer-prepare" aria-labelledby="transfer-prepare-title" onSubmit={event => {

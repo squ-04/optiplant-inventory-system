@@ -155,6 +155,11 @@ STAGES = {
       await page.getByRole('button', { name: 'Confirmar despacho', exact: true }).click();
       await page.getByText('Indique el transportista: nombre o identificador.').waitFor();
       await page.getByLabel('Transportista', { exact: true }).fill('Transportes Andinos');
+      // What was typed survives going back while the detail stays open (AGENTS.md §6).
+      await page.getByRole('button', { name: 'Volver sin despachar', exact: true }).click();
+      await page.getByRole('button', { name: 'Registrar despacho', exact: true }).click();
+      check(await page.getByLabel('Transportista', { exact: true }).inputValue() === 'Transportes Andinos',
+        'El despacho pierde el transportista al volver');
       const arrival = new Date(Date.now() - 5 * 3600000 + 26 * 3600000).toISOString().slice(0, 16);
       await page.getByLabel('Llegada estimada', { exact: true }).fill(arrival);
       await page.setViewportSize({ width: 390, height: 844 });
@@ -170,7 +175,7 @@ STAGES = {
       await page.getByRole('cell', { name: '18,000 unidad' }).waitFor();
       check(await page.getByRole('button', { name: 'Registrar despacho' }).count() === 0, 'Se puede despachar dos veces');
       await logout();
-      return 'el operador de origen despacha 1 caja por R-NORTE-SUR; el origen baja de 30 a 18 unidades y sin desbordamiento a 390 px';""",
+      return 'el operador de origen despacha 1 caja por R-NORTE-SUR (lo escrito se conserva al volver); el origen baja de 30 a 18 unidades y sin desbordamiento a 390 px';""",
     "destino-ve-despacho": """
       await login(config.destination);
       await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
