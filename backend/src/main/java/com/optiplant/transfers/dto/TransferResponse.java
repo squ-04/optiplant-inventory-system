@@ -10,7 +10,8 @@ import java.util.UUID;
  * Each line keeps the requested and the prepared quantities apart (RF-0033-CA-02); the prepared ones are null until the
  * origin prepares the transfer. {@code originAvailableQuantity} is the origin's current physical stock in base units
  * (no reservations, glossary §5.3), returned only to readers of the origin branch and administrators; it is null for the
- * destination. {@code approval} is the approval event (RF-0034-CA-01), null until approved. {@code events} is null in
+ * destination. {@code unitDivisible} and {@code baseDivisible} let the client apply the preparation's unit rules
+ * before sending. {@code approval} is the approval event (RF-0034-CA-01), null until approved. {@code events} is null in
  * listings.
  */
 public record TransferResponse(UUID externalId, String code, String status, Branch origin, Branch destination,
@@ -22,7 +23,8 @@ public record TransferResponse(UUID externalId, String code, String status, Bran
 
     public record Line(int lineNo, UUID productExternalId, String sku, String productName, String unit, String factor,
                        String baseUnitName, String requestedQuantity, String requestedBaseQuantity, String preparedQuantity,
-                       String preparedBaseQuantity, String originAvailableQuantity) {}
+                       String preparedBaseQuantity, String originAvailableQuantity, boolean unitDivisible,
+                       boolean baseDivisible) {}
 
     public record Prepared(int lineNo, String quantity, String baseQuantity) {}
 

@@ -4,9 +4,10 @@ import { ArrowRight, Ban, CheckCircle2, ClipboardCheck, Plus, RefreshCw, Search,
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { Branch, LocalCatalog, Transfer, TransferHistory, TransferHistoryFilter, TransferStatus, User } from '../lib/api/client.ts';
 import {
-  TRANSFER_STEPS, canCancel, canDecide, canPrepare, cancelReasonRequired, checkPreparation, compareDecimal, side,
-  transferStatusLabel,
+  TRANSFER_STEPS, blocksPreparation, canCancel, canDecide, canPrepare, cancelReasonRequired, checkPreparation, compareDecimal,
+  preparationMessage, side, stepLabel, transferStatusLabel,
 } from '../lib/transfers/transfers.ts';
+import { CLOSED_BEFORE_DISPATCH, TRANSFER_STATUS, TRANSFER_STATUSES } from '../lib/transfers/statuses.ts';
 import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
 import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
@@ -26,16 +27,11 @@ const emptyLine = (): LineDraft => ({ key: crypto.randomUUID(), product: '', uni
 interface RequestDraft { origin: string; lines: LineDraft[] }
 const emptyRequest = (): RequestDraft => ({ origin: '', lines: [emptyLine()] });
 
+// Every state of lib/transfers/statuses.ts is a filter option, so a new or renamed state needs no change here.
 const STATUS_FILTERS: { value: TransferStatus | ''; label: string }[] = [
-  { value: '', label: 'Todos los estados' }, { value: 'REQUESTED', label: 'Solicitadas' },
-  { value: 'PREPARING', label: 'En preparación' }, { value: 'APPROVED', label: 'Aprobadas' },
-  { value: 'IN_TRANSIT', label: 'En tránsito' }, { value: 'CANCELLED', label: 'Canceladas' },
-  { value: 'REJECTED', label: 'Rechazadas' },
+  { value: '', label: 'Todos los estados' },
+  ...TRANSFER_STATUSES.map(status => ({ value: status, label: TRANSFER_STATUS[status].filterLabel })),
 ];
-// The dispatch step belongs to RF-0035; it is shown as the next step, never offered as an action here.
-const STEP_LABELS: Record<string, string> = {
-  REQUESTED: 'Solicitada', PREPARING: 'En preparación', APPROVED: 'Aprobada', IN_TRANSIT: 'Despacho',
-};
 
 const problem = (reason: unknown, fallback: string) => reason instanceof TypeError
   ? 'Sin comunicación con el servidor. No se sabe si la operación quedó registrada: repítala sin cambios y no se duplicará.'
@@ -347,7 +343,7 @@ function HistoryTable({ history, selected, onOpen }: { history: TransferHistory;
 
 /** The transfer's place in its cycle; closed states say how and why the cycle ended. */
 function TransferProgress({ transfer }: { transfer: Transfer }) {
-  const closed = transfer.status === 'CANCELLED' || transfer.status === 'REJECTED';
+  const closed = CLOSED_BEFORE_DISPATCH.includes(transfer.status);
   const reached = (transfer.events ?? []).map(event => event.toStatus);
   const current = TRANSFER_STEPS.indexOf(transfer.status);
   return <ol className="transfer-steps" aria-label="Avance de la transferencia">
@@ -355,7 +351,7 @@ function TransferProgress({ transfer }: { transfer: Transfer }) {
       const done = closed ? reached.includes(step) : current >= 0 && index <= current;
       const here = !closed && index === current;
       return <li key={step} data-state={here ? 'current' : done ? 'done' : 'pending'} aria-current={here ? 'step' : undefined}>
-        {STEP_LABELS[step]}<span className="sr-only">{here ? ' (estado actual)' : done ? ' (completado)' : ' (pendiente)'}</span>
+        {stepLabel(step)}<span className="sr-only">{here ? ' (estado actual)' : done ? ' (completado)' : ' (pendiente)'}</span>
       </li>;
     })}
   </ol>;
@@ -376,7 +372,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
   const decidable = canDecide(user, transfer);
   const cancellable = canCancel(user, transfer);
   const reasonRequired = mode === 'reject' || (mode === 'cancel' && cancelReasonRequired(transfer));
-  const closing = [...(transfer.events ?? [])].reverse().find(event => event.toStatus === 'CANCELLED' || event.toStatus === 'REJECTED');
+  const closing = [...(transfer.events ?? [])].reverse().find(event => CLOSED_BEFORE_DISPATCH.includes(event.toStatus));
 
   function startPreparation() {
     setQuantities(Object.fromEntries(transfer.lines.map(line =>
@@ -384,8 +380,8 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
     setMode('prepare');
   }
   const checks = Object.fromEntries(transfer.lines.map(line => [line.lineNo,
-    checkPreparation(apiDecimal(quantities[line.lineNo] ?? ''), line.requestedQuantity, line.factor, line.originAvailableQuantity)]));
-  const blocked = Object.values(checks).some(check => check === 'exceeds' || check === 'invalid');
+    checkPreparation(apiDecimal(quantities[line.lineNo] ?? ''), line)]));
+  const blocked = Object.values(checks).some(blocksPreparation);
 
   return <section id="transfer-detail" className="purchase-detail transfer-detail" aria-labelledby="transfer-detail-title" tabIndex={-1}>
     <header>
@@ -461,17 +457,18 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
           Preparar no reserva ni descuenta existencias.</p>
         {transfer.lines.map(line => {
           const check = checks[line.lineNo];
+          const blocking = blocksPreparation(check);
+          const message = preparationMessage(check, line);
           const hint = `transfer-prepare-hint-${line.lineNo}`;
           return <div key={line.lineNo} className="transfer-prepare-line">
             <label htmlFor={`transfer-prepare-${line.lineNo}`}>{line.sku} {line.productName} ({line.unit})</label>
-            <Input id={`transfer-prepare-${line.lineNo}`} value={quantities[line.lineNo] ?? ''} required inputMode="decimal"
-              pattern={decimalInputPattern(3)} aria-describedby={hint} aria-invalid={check === 'exceeds' || undefined}
+            <Input id={`transfer-prepare-${line.lineNo}`} value={quantities[line.lineNo] ?? ''} required 
+              inputMode={line.unitDivisible ? 'decimal' : 'numeric'} pattern={quantityPattern(line.unitDivisible)}
+              title={line.unitDivisible ? 'Hasta 3 decimales con coma, por ejemplo 2,5.' : 'Número entero.'}
+              aria-describedby={hint} aria-invalid={blocking || undefined}
               onChange={event => setQuantities(previous => ({ ...previous, [line.lineNo]: event.target.value }))} />
-            <p id={hint} className={check === 'exceeds' ? 'field-error' : check === 'exceedsAvailable' ? 'transfer-warning' : 'text-muted-foreground'}>
-              {check === 'exceeds' ? `No puede superar lo solicitado: ${decimal(line.requestedQuantity)} ${line.unit}.`
-                : check === 'exceedsAvailable' ? `Supera la disponibilidad actual del origen (${decimal(line.originAvailableQuantity!)} ${line.baseUnitName}); `
-                  + 'el despacho no podrá confirmarse sin existencias suficientes.'
-                  : `Solicitado: ${decimal(line.requestedQuantity)} ${line.unit}.`
+            <p id={hint} className={blocking ? 'field-error' : message ? 'transfer-warning' : 'text-muted-foreground'}>
+              {message ?? `Solicitado: ${decimal(line.requestedQuantity)} ${line.unit}.`
                     + (line.originAvailableQuantity !== null ? ` Disponible: ${decimal(line.originAvailableQuantity)} ${line.baseUnitName}.` : '')}
             </p>
           </div>;

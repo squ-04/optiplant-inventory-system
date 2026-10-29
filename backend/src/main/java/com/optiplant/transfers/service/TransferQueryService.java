@@ -26,8 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class TransferQueryService {
     public static final int DEFAULT_LIMIT = 100;
     public static final int MAX_LIMIT = 500;
-    private static final Set<String> STATUSES = Set.of("REQUESTED", "PREPARING", "APPROVED", "IN_TRANSIT", "RECEIVED_COMPLETE",
-        "RECEIVED_DISCREPANCY", "CANCELLED", "REJECTED");
     private static final Set<String> DIRECTIONS = Set.of("INCOMING", "OUTGOING");
 
     private final JdbcTemplate jdbc;
@@ -42,8 +40,8 @@ public class TransferQueryService {
 
     public TransferHistoryResponse history(SessionPrincipal principal, UUID branch, String direction, String status, Integer limit) {
         if (branch != null) policy.requirePublicReference(branch);
-        if (status != null && !STATUSES.contains(status)) {
-            throw new ApiException(400, "VALIDATION_FAILED", "Estado no admitido: use " + String.join(", ", STATUSES.stream().sorted().toList()) + ".");
+        if (status != null && !TransferStatus.isCode(status)) {
+            throw new ApiException(400, "VALIDATION_FAILED", "Estado no admitido: use " + TransferStatus.codes() + ".");
         }
         if (direction != null && !DIRECTIONS.contains(direction)) {
             throw new ApiException(400, "VALIDATION_FAILED", "Sentido no admitido: use INCOMING (hacia la sucursal) u OUTGOING (desde la sucursal).");

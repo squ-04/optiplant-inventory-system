@@ -80,13 +80,17 @@ STAGES = {
       await quantity.fill('3');
       await page.getByText('No puede superar lo solicitado: 2,000 caja.').waitFor();
       check(await page.getByRole('button', { name: 'Guardar preparación' }).isDisabled(), 'Se puede guardar más de lo solicitado');
+      // The same unit rule as the server: a box is indivisible.
+      await quantity.fill('1,5');
+      await page.getByText('La unidad no admite fracciones: la cantidad debe ser entera.').waitFor();
+      check(await page.getByRole('button', { name: 'Guardar preparación' }).isDisabled(), 'Se puede guardar una fracción de caja');
       await quantity.fill('1');
       await page.getByRole('button', { name: 'Guardar preparación', exact: true }).click();
       await page.getByText(/^Preparación de TR-000001 guardada/).waitFor();
       await page.getByText('Menos de lo solicitado').waitFor();
       check(await page.getByRole('button', { name: 'Aprobar transferencia' }).count() === 0, 'El operador ve la aprobación');
       await logout();
-      return 'el operador de origen ve 30 unidades disponibles, no puede preparar 3 de 2 cajas y prepara 1 caja';""",
+      return 'el operador de origen ve 30 unidades disponibles, no puede preparar 3 de 2 cajas ni 1,5 cajas y prepara 1 caja';""",
     "gerente-aprueba": """
       await login(config.originManager);
       await page.getByRole('link', { name: 'Transferencias', exact: true }).click();

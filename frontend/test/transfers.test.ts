@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError } from '../src/lib/api/client.ts';
 import {
-  canCancel, canDecide, canPrepare, cancelReasonRequired, checkPreparation, compareDecimal, multiply, side, transferStatusLabel,
+  canCancel, canDecide, canPrepare, cancelReasonRequired, checkPreparation, compareDecimal, multiply, preparationMessage, side,
+  stepLabel, transferStatusLabel,
 } from '../src/lib/transfers/transfers.ts';
+import { TRANSFER_STATUS, TRANSFER_STATUSES, TRANSFER_STEPS } from '../src/lib/transfers/statuses.ts';
 
 const origin = { externalId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', code: 'A', name: 'Medellín', active: true };
 const destination = { externalId: '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e', code: 'B', name: 'Bogotá', active: true };
@@ -11,7 +13,7 @@ const person = { code: 'U1', fullName: 'Ana Pérez' };
 const line = {
   lineNo: 1, productExternalId: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f', sku: 'MAC-1', productName: 'Maceta', unit: 'caja',
   factor: '12', baseUnitName: 'unidad', requestedQuantity: '2.000', requestedBaseQuantity: '24.000', preparedQuantity: null,
-  preparedBaseQuantity: null, originAvailableQuantity: null,
+  preparedBaseQuantity: null, originAvailableQuantity: null, unitDivisible: false, baseDivisible: false,
 };
 const requested = {
   externalId: '4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a', code: 'TR-000001', status: 'REQUESTED', origin, destination,
@@ -80,14 +82,52 @@ test('decimals are compared and multiplied exactly', () => {
 });
 
 test('preparation never exceeds the request and warns when it exceeds the origin availability', () => {
-  assert.equal(checkPreparation('2', '2.000', '12', '30.000'), 'ok');
-  assert.equal(checkPreparation('0', '2.000', '12', '30.000'), 'ok');
-  assert.equal(checkPreparation('3', '2.000', '12', null), 'exceeds');
+  const boxes = { ...line, originAvailableQuantity: '30.000' };
+  assert.equal(checkPreparation('2', boxes), 'ok');
+  assert.equal(checkPreparation('0', boxes), 'ok');
+  assert.equal(checkPreparation('3', line), 'exceeds');
   // 2 boxes of 12 = 24 units, only 20 available: allowed, because preparing does not reserve, but warned.
-  assert.equal(checkPreparation('2', '2.000', '12', '20.000'), 'exceedsAvailable');
-  assert.equal(checkPreparation('2', '2.000', '12', null), 'ok');
-  assert.equal(checkPreparation('', '2.000', '12', null), 'invalid');
-  assert.equal(checkPreparation('-1', '2.000', '12', null), 'invalid');
+  assert.equal(checkPreparation('2', { ...line, originAvailableQuantity: '20.000' }), 'exceedsAvailable');
+  assert.equal(checkPreparation('2', line), 'ok');
+  assert.equal(checkPreparation('', line), 'invalid');
+  assert.equal(checkPreparation('-1', line), 'invalid');
+});
+
+test('preparation applies the same unit rules as the server, in the same order', () => {
+  // UnitConversion.toBase: fractions of an indivisible unit, base equivalents beyond 3 decimals or fractional bases.
+  assert.equal(checkPreparation('1.5', line), 'fraction');
+  assert.equal(checkPreparation('1.2345', { ...line, unitDivisible: true, baseDivisible: true }), 'decimals');
+  const kilos = { ...line, unit: 'bulto', factor: '0.5', unitDivisible: true, baseDivisible: true, requestedQuantity: '5.000' };
+  assert.equal(checkPreparation('1.5', kilos), 'ok');
+  assert.equal(checkPreparation('0.001', kilos), 'baseDecimals');
+  const halves = { ...line, factor: '1', unitDivisible: true, baseDivisible: false, requestedQuantity: '5.000' };
+  assert.equal(checkPreparation('1.5', halves), 'baseFraction');
+  assert.equal(checkPreparation('2', halves), 'ok');
+  // Zero is never converted, as on the server, and the request limit is checked last.
+  assert.equal(checkPreparation('0', halves), 'ok');
+  assert.equal(checkPreparation('2.5', { ...line, requestedQuantity: '2.000', unitDivisible: true, baseDivisible: true }), 'exceeds');
+});
+
+test('each rejected preparation explains the rule with the server wording', () => {
+  assert.equal(preparationMessage('fraction', line), 'La unidad no admite fracciones: la cantidad debe ser entera.');
+  assert.equal(preparationMessage('baseFraction', line), 'El equivalente en unidad base debe ser entero.');
+  assert.equal(preparationMessage('baseDecimals', line), 'El equivalente en unidad base excede 3 decimales; no se redondea.');
+  assert.equal(preparationMessage('exceeds', line), 'No puede superar lo solicitado: 2,000 caja.');
+  assert.equal(preparationMessage('ok', line), null);
+});
+
+test('transfer statuses are declared once and every view derives from them', () => {
+  assert.deepEqual(TRANSFER_STATUSES, ['REQUESTED', 'PREPARING', 'APPROVED', 'IN_TRANSIT', 'RECEIVED_COMPLETE',
+    'RECEIVED_DISCREPANCY', 'CANCELLED', 'REJECTED']);
+  for (const status of TRANSFER_STATUSES) {
+    assert.ok(TRANSFER_STATUS[status].label.length > 0);
+    assert.ok(TRANSFER_STATUS[status].filterLabel.length > 0);
+    assert.equal(transferStatusLabel(status), TRANSFER_STATUS[status].label);
+  }
+  assert.deepEqual(TRANSFER_STEPS, ['REQUESTED', 'PREPARING', 'APPROVED', 'IN_TRANSIT']);
+  assert.equal(stepLabel('PREPARING'), TRANSFER_STATUS.PREPARING.label);
+  // The fourth step is the dispatch that RF-0035 will record.
+  assert.equal(stepLabel('IN_TRANSIT'), 'Despacho');
 });
 
 function harness(responses: Response[]) {

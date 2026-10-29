@@ -1,3 +1,6 @@
+import { isTransferStatus } from '../transfers/statuses.ts';
+import type { TransferStatus } from '../transfers/statuses.ts';
+
 export interface User {
   externalId: string;
   code: string;
@@ -176,8 +179,7 @@ export interface ValuationItem {
 export interface InventoryValuation { branch: Branch; readAt: string; totalValue: string; exactTotalValue: string; items: ValuationItem[] }
 export interface PurchaseHistoryFilter { branch?: string; supplier?: string; product?: string; status?: PurchaseStatus; limit?: number }
 
-export type TransferStatus = 'REQUESTED' | 'PREPARING' | 'APPROVED' | 'IN_TRANSIT' | 'RECEIVED_COMPLETE' | 'RECEIVED_DISCREPANCY'
-  | 'CANCELLED' | 'REJECTED';
+export type { TransferStatus };
 export interface TransferLineInput { product: string; unit: string; quantity: string }
 export interface TransferInput { origin: string; lines: TransferLineInput[] }
 /**
@@ -188,6 +190,8 @@ export interface TransferLine {
   lineNo: number; productExternalId: string; sku: string; productName: string; unit: string; factor: string;
   baseUnitName: string; requestedQuantity: string; requestedBaseQuantity: string; preparedQuantity: string | null;
   preparedBaseQuantity: string | null; originAvailableQuantity: string | null;
+  /** Whether the requested unit and the base unit admit fractions, so preparation applies the server's rules. */
+  unitDivisible: boolean; baseDivisible: boolean;
 }
 export interface TransferPrepared { lineNo: number; quantity: string; baseQuantity: string }
 export interface TransferEvent {
@@ -427,20 +431,19 @@ function valuationItemDto(value: unknown): ValuationItem {
       !['physicalQuantity', 'averageCost', 'value', 'exactValue'].every(k => decimal(value[k]))) throw invalid();
   return value as unknown as ValuationItem;
 }
-const TRANSFER_STATUSES = ['REQUESTED', 'PREPARING', 'APPROVED', 'IN_TRANSIT', 'RECEIVED_COMPLETE', 'RECEIVED_DISCREPANCY',
-  'CANCELLED', 'REJECTED'];
 const optionalDecimal = (value: unknown) => value === null || decimal(value);
 function transferLineDto(value: unknown): TransferLine {
   if (!record(value) || !count(value.lineNo) || !uuid(value.productExternalId) ||
       !['sku', 'productName', 'unit', 'baseUnitName'].every(k => text(value[k])) ||
       !['factor', 'requestedQuantity', 'requestedBaseQuantity'].every(k => decimal(value[k])) ||
       !['preparedQuantity', 'preparedBaseQuantity', 'originAvailableQuantity'].every(k => optionalDecimal(value[k])) ||
+      typeof value.unitDivisible !== 'boolean' || typeof value.baseDivisible !== 'boolean' ||
       (value.preparedQuantity === null) !== (value.preparedBaseQuantity === null)) throw invalid();
   return value as unknown as TransferLine;
 }
 function transferEventDto(value: unknown): TransferEvent {
-  if (!record(value) || !(value.fromStatus === null || TRANSFER_STATUSES.includes(String(value.fromStatus))) ||
-      !TRANSFER_STATUSES.includes(String(value.toStatus)) || !instant(value.occurredAt) ||
+  if (!record(value) || !(value.fromStatus === null || isTransferStatus(value.fromStatus)) ||
+      !isTransferStatus(value.toStatus) || !instant(value.occurredAt) ||
       !(value.reason === null || text(value.reason))) throw invalid();
   personDto(value.actor);
   const preparation = value.preparation === null ? null : listDto(value.preparation, item => {
@@ -450,7 +453,7 @@ function transferEventDto(value: unknown): TransferEvent {
   return { ...(value as unknown as TransferEvent), preparation };
 }
 function transferDto(value: unknown): Transfer {
-  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !TRANSFER_STATUSES.includes(String(value.status)) ||
+  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !isTransferStatus(value.status) ||
       !instant(value.requestedAt)) throw invalid();
   branchDto(value.origin);
   branchDto(value.destination);

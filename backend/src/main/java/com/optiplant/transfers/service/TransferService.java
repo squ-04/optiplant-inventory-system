@@ -335,17 +335,7 @@ public class TransferService {
     }
 
     static String label(String status) {
-        return switch (status) {
-            case "REQUESTED" -> "solicitada";
-            case "PREPARING" -> "en preparación";
-            case "APPROVED" -> "aprobada";
-            case "IN_TRANSIT" -> "en tránsito";
-            case "RECEIVED_COMPLETE" -> "recibida completa";
-            case "RECEIVED_DISCREPANCY" -> "recibida con faltantes";
-            case "CANCELLED" -> "cancelada";
-            case "REJECTED" -> "rechazada";
-            default -> status;
-        };
+        return TransferStatus.labelOf(status);
     }
 
     private static String plain(BigDecimal value) {

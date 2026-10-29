@@ -83,8 +83,9 @@ public class TransferReader {
         jdbc.query("""
             SELECT l.transfer_id,l.line_no,p.external_id,l.sku_snapshot,l.product_name_snapshot,l.unit_name_snapshot,
                 l.factor_snapshot,p.base_unit_name,l.requested_commercial_qty,l.requested_base_qty,l.prepared_commercial_qty,
-                l.prepared_base_qty,%s AS available
+                l.prepared_base_qty,u.divisible,p.base_divisible,%s AS available
             FROM transfers_line l JOIN catalog_product p ON p.id=l.product_id JOIN transfers_transfer t ON t.id=l.transfer_id
+            JOIN catalog_product_unit u ON u.id=l.product_unit_id
             WHERE l.transfer_id IN (%s) ORDER BY l.transfer_id,l.line_no""".formatted(availability
                 ? "(SELECT coalesce(sum(ib.physical_qty),0) FROM inventory_balance ib WHERE ib.branch_id=t.origin_branch_id "
                     + "AND ib.product_id=l.product_id)" : "NULL::numeric", ids),
@@ -94,7 +95,7 @@ public class TransferReader {
                     plain(r.getBigDecimal("factor_snapshot")), r.getString("base_unit_name"),
                     quantity(r.getBigDecimal("requested_commercial_qty")), quantity(r.getBigDecimal("requested_base_qty")),
                     quantity(r.getBigDecimal("prepared_commercial_qty")), quantity(r.getBigDecimal("prepared_base_qty")),
-                    quantity(r.getBigDecimal("available"))));
+                    quantity(r.getBigDecimal("available")), r.getBoolean("divisible"), r.getBoolean("base_divisible")));
             }, rows.stream().map(Row::id).toArray());
         return rows.stream().map(row -> new TransferResponse(row.externalId(), row.code(), row.status(), row.origin(),
             row.destination(), row.requestedAt().toInstant(), row.requester(), row.approval(), List.copyOf(lines.get(row.id())),

@@ -202,6 +202,9 @@ class TransferHttpTest {
         assertThat(created.at("/lines/0/unit").asText()).isEqualTo("caja");
         assertThat(created.at("/lines/1/requestedQuantity").asText()).isEqualTo("5.000");
         assertThat(created.at("/lines/0/preparedQuantity").isNull()).isTrue();
+        // The client applies the same unit rules as the server when preparing.
+        assertThat(created.at("/lines/0/unitDivisible").asBoolean(true)).isFalse();
+        assertThat(created.at("/lines/0/baseDivisible").asBoolean(true)).isFalse();
         assertThat(created.get("approval").isNull()).isTrue();
         // RF-0032-CA-02: a valid multi-line request keeps its quantities without reserving them.
         assertThat(balances()).isEqualTo(stock);
@@ -523,7 +526,9 @@ class TransferHttpTest {
         assertThat(read(otherOperator.get("/transfers")).findValuesAsString("externalId")).doesNotContain(id);
         assertThat(otherOperator.get("/transfers?branch=" + a).statusCode()).isEqualTo(403);
         assertThat(otherManager.get("/transfers/" + id).statusCode()).isEqualTo(404);
-        assertThat(destinationOperator.get("/transfers?status=CLOSED").statusCode()).isEqualTo(400);
+        HttpResponse<String> unknown = destinationOperator.get("/transfers?status=CLOSED");
+        assertThat(unknown.statusCode()).isEqualTo(400);
+        assertThat(read(unknown).get("detail").asText()).contains("REQUESTED (solicitada)", "REJECTED (rechazada)");
         assertThat(admin.get("/transfers/origins").statusCode()).isEqualTo(403);
     }
 
