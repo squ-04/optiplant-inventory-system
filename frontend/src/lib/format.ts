@@ -1,3 +1,5 @@
+import { TRANSFER_STATUS } from './transfers/statuses.ts';
+
 /** Presentation of server values shared by every view, so dates and codes read the same everywhere. */
 const LOCALE = 'es-CO';
 
@@ -13,11 +15,11 @@ export const roleLabel = (role: string) => ROLES[role] ?? role;
 const DIRECTIONS: Record<string, string> = { IN: 'Entrada', OUT: 'Salida' };
 export const directionLabel = (direction: string) => DIRECTIONS[direction] ?? direction;
 
-// Statuses of purchases, sales and transfers (data model V2/V3); unknown codes are shown as received.
+// Statuses of purchases, sales and transfers (data model V2/V3); unknown codes are shown as received. Transfer states
+// come from their single definition (RF-0042: «Recibida con discrepancia»).
 const DOCUMENT_STATUSES: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(TRANSFER_STATUS).map(([code, status]) => [code, status.label])),
   DRAFT: 'Borrador', PENDING: 'Pendiente', RECEIVED: 'Recibida', CANCELLED: 'Cancelada', CONFIRMED: 'Confirmada',
-  REQUESTED: 'Solicitada', PREPARING: 'En preparación', APPROVED: 'Aprobada', IN_TRANSIT: 'En tránsito',
-  RECEIVED_COMPLETE: 'Recibida completa', RECEIVED_DISCREPANCY: 'Recibida con diferencias',
 };
 export const documentStatusLabel = (status: string) => DOCUMENT_STATUSES[status] ?? status;
 

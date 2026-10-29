@@ -20,7 +20,7 @@ const line = {
 const requested = {
   externalId: '4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a', code: 'TR-000001', status: 'REQUESTED', origin, destination,
   requestedAt: '2026-10-28T15:00:00Z', requestedBy: person, approval: null, dispatch: null, arrival: null, discrepancy: null,
-  sourceDiscrepancy: null, lines: [line],
+  timing: null, sourceDiscrepancy: null, lines: [line],
   events: [{ fromStatus: null, toStatus: 'REQUESTED', occurredAt: '2026-10-28T15:00:00Z', actor: person, reason: null, preparation: null }],
 };
 const preparing = {

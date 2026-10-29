@@ -238,6 +238,56 @@ STAGES = {
       await page.getByText(/Reclamación: Gerente Sur/).waitFor();
       await logout();
       return 'el gerente de destino no resuelve sin tratamiento; resuelve con reclamación y la alerta pasa a resueltas con responsable';""",
+    "destino-ve-tiempos": """
+      await login(config.destination);
+      check(await page.getByRole('link', { name: 'Cumplimiento' }).count() === 0, 'El operador ve el reporte de cumplimiento');
+      await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
+      await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
+      // RF-0042-CA-02: resolving the alert keeps the confirmed state.
+      await page.locator('#transfer-detail').getByText('Recibida con discrepancia', { exact: true }).first().waitFor();
+      await page.getByRole('heading', { name: 'Tiempo de entrega' }).waitFor();
+      await page.getByText(/Recibida con discrepancia: entrega parcial, no cumple/).waitFor();
+      await page.getByText(/Hora de Bogotá \\(America\\/Bogota\\)/).waitFor();
+      await page.locator('.transfer-timing-compare').getByRole('heading', { name: 'Real', exact: true }).waitFor();
+      check(await page.locator('.transfer-timing-compare dt', { hasText: 'Duración' }).count() === 2, 'Falta la duración estimada o real');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(300);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      check(overflow <= 0, 'Desplazamiento horizontal del documento en móvil: ' + overflow + ' px');
+      await page.getByRole('heading', { name: 'Tiempo de entrega' }).scrollIntoViewIfNeeded();
+      await page.screenshot({ path: config.screenshot.replace('.png', '-tiempos.png') });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await logout();
+      return 'tras resolver la alerta, el destino ve TR-000001 «Recibida con discrepancia» con estimado y real en hora de Bogotá, sin opción de reporte; sin desbordamiento a 390 px';""",
+    "gerente-reporta-cumplimiento": """
+      await login(config.destinationManager);
+      await page.getByRole('link', { name: 'Cumplimiento', exact: true }).click();
+      await page.getByRole('heading', { name: 'Cumplimiento logístico', level: 2 }).waitFor();
+      await page.getByRole('heading', { name: /Sucursal Sur \\(SUR\\): del/ }).waitFor();
+      // A zero arrival with discrepancy counts as not compliant, even with its alert resolved.
+      const summary = page.getByRole('definition').filter({ hasText: '0 de 1 llegada completas a tiempo' });
+      await summary.waitFor();
+      check((await summary.textContent()).startsWith('0,00 %'), 'El KPI no es 0,00 %');
+      await page.getByRole('region', { name: 'Cumplimiento por ruta' }).getByText('R-NORTE-SUR').waitFor();
+      await page.getByText('Con discrepancia: 1').waitFor();
+      await page.getByLabel('Desde', { exact: true }).fill('2031-02-01');
+      await page.getByLabel('Hasta', { exact: true }).fill('2031-01-01');
+      await page.getByRole('button', { name: 'Generar reporte', exact: true }).click();
+      await page.getByText('La fecha final del período no puede ser anterior a la inicial.').waitFor();
+      await page.getByLabel('Hasta', { exact: true }).fill('2031-02-28');
+      await page.getByRole('button', { name: 'Generar reporte', exact: true }).click();
+      await page.getByRole('heading', { name: /del 01\\/02\\/2031 al 28\\/02\\/2031/ }).waitFor();
+      await page.getByText('Sin llegadas confirmadas en el período').first().waitFor();
+      check(await page.getByRole('definition').filter({ hasText: 'No calculable' }).count() === 1, 'Sin llegadas no muestra «No calculable»');
+      check(await page.locator('#compliance-branch').count() === 0, 'El gerente puede elegir otra sucursal');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(300);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      check(overflow <= 0, 'Desplazamiento horizontal del documento en móvil: ' + overflow + ' px');
+      await page.screenshot({ path: config.screenshot.replace('.png', '-cumplimiento.png'), fullPage: true });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await logout();
+      return 'el gerente de destino ve 0,00 % (0 de 1) por la llegada con discrepancia aunque la alerta esté resuelta, rechaza un período invertido y muestra «No calculable» sin llegadas; sin desbordamiento a 390 px';""",
     "gerente-origen-pierde": """
       await login(config.originManager);
       await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
@@ -274,6 +324,19 @@ STAGES = {
       await page.getByText('Reenvío de', { exact: true }).waitFor();
       await logout();
       return 'el destino filtra la alerta resuelta y solicita el reenvío de 1 caja como TR-000002 vinculada al faltante de TR-000001';""",
+    "admin-reporta-red": """
+      await login(config.admin);
+      await page.getByRole('link', { name: 'Cumplimiento', exact: true }).click();
+      await page.getByRole('heading', { name: /Toda la red: del/ }).waitFor();
+      const branches = page.getByRole('region', { name: 'Cumplimiento por sucursal' });
+      await branches.getByRole('row', { name: /Sucursal Norte/ }).getByText('0,00 %').waitFor();
+      await page.locator('#compliance-branch').selectOption({ label: 'NORTE · Sucursal Norte' });
+      await page.getByRole('button', { name: 'Generar reporte', exact: true }).click();
+      await page.getByRole('heading', { name: /Sucursal Norte \\(NORTE\\): del/ }).waitFor();
+      check(await branches.getByRole('row').filter({ hasText: 'Sucursal Sur' }).count() === 0, 'El reporte de NORTE incluye a SUR');
+      await page.getByText(/Ninguna transferencia con llegada estimada en el período sigue en tránsito/).waitFor();
+      await logout();
+      return 'el administrador ve la red con NORTE como origen en 0,00 % y filtra el reporte a NORTE';""",
 }
 
 
@@ -391,7 +454,7 @@ def main():
                        text=True, check=True, timeout=60)
         for name in STAGES:
             stage(name)
-        print(f"Navegador OK: {len(STAGES)} escenarios de transferencias y rutas (RF-0032–RF-0039, RF-0041).")
+        print(f"Navegador OK: {len(STAGES)} escenarios de transferencias, rutas y logística (RF-0032–RF-0043).")
         return 0
     except (AssertionError, OSError, RuntimeError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Comprobación FALLÓ: {error}", file=sys.stderr)

@@ -232,6 +232,8 @@ export interface Transfer {
   dispatch: TransferDispatch | null;
   /** RF-0036/RF-0037: the single confirmed arrival; null until received. */
   arrival: { occurredAt: string; actor: PurchasePerson } | null;
+  /** RF-0040: estimated versus real delivery time; null until dispatched. */
+  timing: DeliveryTiming | null;
   discrepancy: TransferDiscrepancy | null;
   /** The shortage a resend refers to. */
   sourceDiscrepancy: { externalId: string; transferExternalId: string; transferCode: string } | null;
@@ -243,6 +245,33 @@ export interface TransferDispatch {
   carrier: string; departedAt: string; estimatedArrivalAt: string; actor: PurchasePerson; routeCode: string;
   routePriority: RoutePriority;
 }
+/**
+ * RF-0040 (H v0.15): exact seconds computed by the server. The real time runs from the actual departure to the single
+ * confirmed arrival and is null without one; `deviationSeconds` is the arrival minus the estimate (positive when late).
+ * `onTime` (RF-0043) is true only for a complete reception not later than the estimate; `overdue` marks a transfer
+ * still without arrival whose estimate has passed.
+ */
+export interface DeliveryTiming {
+  estimatedSeconds: number; actualSeconds: number | null; deviationSeconds: number | null;
+  delivery: 'COMPLETE' | 'DISCREPANCY' | null; onTime: boolean | null; overdue: boolean;
+}
+/**
+ * RF-0043: `compliancePercent` is complete punctual arrivals / confirmed arrivals with two decimals; null means
+ * «No calculable» (no arrivals in the period).
+ */
+export interface ComplianceMetrics {
+  arrivals: number; onTimeComplete: number; lateComplete: number; discrepancy: number; compliancePercent: string | null;
+}
+export interface ComplianceReport {
+  timeZone: string; from: string; to: string; generatedAt: string; branch: Branch | null; summary: ComplianceMetrics;
+  branches: { branch: Branch; asOrigin: ComplianceMetrics; asDestination: ComplianceMetrics }[];
+  routes: { externalId: string; code: string; origin: Branch; destination: Branch; priority: RoutePriority; active: boolean;
+    metrics: ComplianceMetrics }[];
+  /** Still in transit with the estimate of the period already passed; never part of the KPI. */
+  overdueInTransit: { externalId: string; code: string; origin: Branch; destination: Branch; routeCode: string | null;
+    carrier: string; departedAt: string; estimatedArrivalAt: string }[];
+}
+export interface ComplianceFilter { from: string; to: string; branch?: string }
 export interface TransferDispatchInput { carrier: string; departedAt: string; estimatedArrivalAt: string }
 export type { RoutePriority };
 /** RF-0041: a directed route with its manual priority. */
@@ -524,6 +553,50 @@ function discrepancyDto(value: unknown): TransferDiscrepancy {
   });
   return { ...(value as unknown as TransferDiscrepancy), resends };
 }
+const seconds = (value: unknown) => typeof value === 'number' && Number.isInteger(value);
+/** The real time, the delivery kind and the punctuality exist together, only once something has arrived. */
+function timingDto(value: unknown): boolean {
+  if (!record(value) || !count(value.estimatedSeconds) || typeof value.overdue !== 'boolean') return false;
+  if (value.actualSeconds === null) {
+    return value.deviationSeconds === null && value.delivery === null && value.onTime === null;
+  }
+  return count(value.actualSeconds) && seconds(value.deviationSeconds) && typeof value.onTime === 'boolean'
+    && (value.delivery === 'COMPLETE' || value.delivery === 'DISCREPANCY') && !value.overdue
+    && (!value.onTime || value.delivery === 'COMPLETE');
+}
+const percent = (value: unknown) => value === null || (typeof value === 'string' && /^\d{1,3}\.\d{2}$/.test(value));
+function complianceMetricsDto(value: unknown): ComplianceMetrics {
+  if (!record(value) || !['arrivals', 'onTimeComplete', 'lateComplete', 'discrepancy'].every(k => count(value[k]))
+      || !percent(value.compliancePercent)) throw invalid();
+  const metrics = value as unknown as ComplianceMetrics;
+  // «No calculable» exactly when nothing arrived; the three outcomes add up to the arrivals.
+  if ((metrics.arrivals === 0) !== (metrics.compliancePercent === null)
+      || metrics.onTimeComplete + metrics.lateComplete + metrics.discrepancy !== metrics.arrivals) throw invalid();
+  return metrics;
+}
+function complianceDto(value: unknown): ComplianceReport {
+  if (!record(value) || !text(value.timeZone) || !day(value.from) || !day(value.to) || !instant(value.generatedAt)) throw invalid();
+  if (value.branch !== null) branchDto(value.branch);
+  complianceMetricsDto(value.summary);
+  const branches = listDto(value.branches, item => {
+    if (!record(item)) throw invalid();
+    branchDto(item.branch); complianceMetricsDto(item.asOrigin); complianceMetricsDto(item.asDestination);
+    return item as unknown as ComplianceReport['branches'][number];
+  });
+  const routes = listDto(value.routes, item => {
+    if (!record(item) || !uuid(item.externalId) || !text(item.code) || !isRoutePriority(item.priority)
+        || typeof item.active !== 'boolean') throw invalid();
+    branchDto(item.origin); branchDto(item.destination); complianceMetricsDto(item.metrics);
+    return item as unknown as ComplianceReport['routes'][number];
+  });
+  const overdueInTransit = listDto(value.overdueInTransit, item => {
+    if (!record(item) || !uuid(item.externalId) || !text(item.code) || !text(item.carrier) || !instant(item.departedAt)
+        || !instant(item.estimatedArrivalAt) || !(item.routeCode === null || text(item.routeCode))) throw invalid();
+    branchDto(item.origin); branchDto(item.destination);
+    return item as unknown as ComplianceReport['overdueInTransit'][number];
+  });
+  return { ...(value as unknown as ComplianceReport), branches, routes, overdueInTransit };
+}
 function transferDto(value: unknown): Transfer {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !isTransferStatus(value.status) ||
       !instant(value.requestedAt)) throw invalid();
@@ -539,9 +612,12 @@ function transferDto(value: unknown): Transfer {
   if (value.arrival !== null && (!record(value.arrival) || !instant(value.arrival.occurredAt))) throw invalid();
   if (value.arrival !== null) personDto((value.arrival as Record<string, unknown>).actor);
   if (value.discrepancy !== null) discrepancyDto(value.discrepancy);
+  // A response stored for an idempotent replay before RF-0040 has no timing: it reads as not computed.
+  const timing = value.timing ?? null;
+  if (timing !== null && (value.dispatch === null || !timingDto(timing))) throw invalid();
   if (value.sourceDiscrepancy !== null && (!record(value.sourceDiscrepancy) || !uuid(value.sourceDiscrepancy.externalId)
       || !uuid(value.sourceDiscrepancy.transferExternalId) || !text(value.sourceDiscrepancy.transferCode))) throw invalid();
-  return { ...(value as unknown as Transfer), lines: listDto(value.lines, transferLineDto),
+  return { ...(value as unknown as Transfer), timing: timing as DeliveryTiming | null, lines: listDto(value.lines, transferLineDto),
     events: value.events === null ? null : listDto(value.events, transferEventDto) };
 }
 
@@ -957,6 +1033,12 @@ export class ApiClient {
   }
   async updateRoute(id: string, input: RouteUpdate): Promise<Route> {
     return routeDto(await this.request(`/logistics/routes/${encodeURIComponent(id)}/update`, 'POST', input));
+  }
+  /** RF-0043: compliance by branch and route of a period of dates in America/Bogota; managers read their own branch. */
+  async complianceReport(filter: ComplianceFilter): Promise<ComplianceReport> {
+    const query = new URLSearchParams({ from: filter.from, to: filter.to });
+    if (filter.branch) query.set('branch', filter.branch);
+    return complianceDto(await this.request(`/logistics/compliance?${query}`));
   }
   async transfer(id: string): Promise<Transfer> {
     return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}`));
