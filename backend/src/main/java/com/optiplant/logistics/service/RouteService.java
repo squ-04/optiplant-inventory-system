@@ -80,15 +80,17 @@ public class RouteService {
         requireFreeCode(request.code(), null);
         Timestamp now = Timestamp.from(clock.instant());
         UUID externalId = UUID.randomUUID();
-        try {
-            jdbc.update("INSERT INTO logistics_route(external_id,code,origin_branch_id,destination_branch_id,priority,active,"
-                    + "created_at,updated_at) VALUES (?,?,?,?,?,TRUE,?,?)", externalId, request.code(), origin, destination,
-                request.priority(), now, now);
-        } catch (DuplicateKeyException error) {
-            // A concurrent registration won the same code or trajectory; the aborted transaction admits no other query.
-            throw String.valueOf(error.getMostSpecificCause().getMessage()).contains("(code)") ? codeExists()
-                : new ApiException(409, "ROUTE_EXISTS", "Ya existe una ruta con ese origen y destino: cambie su prioridad o "
-                    + "reactívela en lugar de registrarla de nuevo.");
+        // A concurrent registration of the same trajectory or code may commit between the checks above and this insert.
+        // ON CONFLICT waits for it and then inserts nothing, without raising an error, so the transaction stays usable and
+        // the same checks name the conflict; the unique constraints remain the guarantee.
+        boolean inserted = !jdbc.queryForList("""
+            INSERT INTO logistics_route(external_id,code,origin_branch_id,destination_branch_id,priority,active,created_at,updated_at)
+            VALUES (?,?,?,?,?,TRUE,?,?) ON CONFLICT DO NOTHING RETURNING id""", Long.class, externalId, request.code(), origin,
+            destination, request.priority(), now, now).isEmpty();
+        if (!inserted) {
+            List<String> raced = jdbc.queryForList("SELECT code FROM logistics_route WHERE origin_branch_id=? "
+                + "AND destination_branch_id=?", String.class, origin, destination);
+            throw raced.isEmpty() ? codeExists() : routeExists(raced.getFirst());
         }
         return find(externalId);
     }

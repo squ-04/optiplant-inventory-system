@@ -7,6 +7,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -21,6 +23,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +61,7 @@ class RouteAndDispatchHttpTest {
     }
     @LocalServerPort int port;
     @Autowired JdbcTemplate jdbc;
+    @Autowired DataSource dataSource;
     @Autowired PasswordEncoder passwords;
     @Autowired JsonMapper json;
     /** a: origin, b: destination, c: an unrelated branch. */
@@ -141,23 +146,58 @@ class RouteAndDispatchHttpTest {
         assertThat(admin.get("/logistics/routes?priority=URGENT").statusCode()).isEqualTo(400);
     }
 
-    @Test void concurrentRegistrationsOfOneTrajectoryOrCodeCreateOneRoute() throws Exception {
+    /**
+     * The collision path, made deterministic: another transaction inserts the conflicting route and keeps it uncommitted,
+     * the registration blocks on the unique index, and only then does the other transaction finish. Without that, two
+     * "simultaneous" requests are usually served one after the other and never reach this path.
+     */
+    @Test void aRegistrationBlockedByAnUncommittedConflictReportsWhichOneWon() throws Exception {
         int before = routes();
-        // Two administrators in their own sessions: one session cannot run two writes at once (its CSRF token rotates).
-        Browser admin2 = account("ADMIN", null);
-        // Same trajectory with different codes, at the same time: one route, one ROUTE_EXISTS.
-        List<HttpResponse<String>> pair = raceResponses(() -> route("P1", a, b, "HIGH"),
-            () -> route(admin2, "P2", a, b, "LOW"));
-        assertThat(pair.stream().map(HttpResponse::statusCode).toList()).containsExactlyInAnyOrder(201, 409);
-        assertThat(pair.stream().filter(r -> r.statusCode() == 409).map(r -> read(r).get("code").asText()).toList())
-            .containsExactly("ROUTE_EXISTS");
-        // Same code on different trajectories, at the same time: one route, one CODE_EXISTS.
-        List<HttpResponse<String>> code = raceResponses(() -> route("SAME", b, a, "HIGH"),
-            () -> route(admin2, "SAME", a, c, "LOW"));
-        assertThat(code.stream().map(HttpResponse::statusCode).toList()).containsExactlyInAnyOrder(201, 409);
-        assertThat(code.stream().filter(r -> r.statusCode() == 409).map(r -> read(r).get("code").asText()).toList())
-            .containsExactly("CODE_EXISTS");
-        assertThat(routes()).isEqualTo(before + 2);
+        // Same trajectory, different code: the waiting registration inserts nothing and reports the trajectory.
+        HttpResponse<String> trajectory = registerWhileHeld("HELD1", a, b, () -> route("WAIT1", a, b, "LOW"), true);
+        assertError(trajectory, 409, "ROUTE_EXISTS");
+        assertThat(read(trajectory).get("detail").asText()).contains("HELD1" + suffix);
+        // Same code, other trajectory: it reports the code.
+        assertError(registerWhileHeld("HELD2", b, a, () -> route("HELD2", a, c, "LOW"), true), 409, "CODE_EXISTS");
+        // If the other transaction rolls back, the waiting registration is created.
+        assertThat(registerWhileHeld("HELD3", c, a, () -> route("WAIT3", c, a, "MEDIUM"), false).statusCode()).isEqualTo(201);
+        assertThat(routes()).isEqualTo(before + 3);
+        assertThat(jdbc.queryForObject("SELECT code FROM logistics_route WHERE origin_branch_id=(SELECT id FROM identity_branch "
+            + "WHERE external_id=?) AND destination_branch_id=(SELECT id FROM identity_branch WHERE external_id=?)", String.class, c, a))
+            .isEqualTo("WAIT3" + suffix);
+    }
+
+    /**
+     * Inserts route {@code code} from {@code origin} to {@code destination} in a transaction of its own, starts
+     * {@code registration}, waits until it is blocked on that row's lock, then commits or rolls back and returns its response.
+     */
+    HttpResponse<String> registerWhileHeld(String code, UUID origin, UUID destination, Callable<HttpResponse<String>> registration,
+                                           boolean commit) throws Exception {
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try (Connection held = dataSource.getConnection()) {
+            held.setAutoCommit(false);
+            try (PreparedStatement insert = held.prepareStatement("INSERT INTO logistics_route(external_id,code,origin_branch_id,"
+                + "destination_branch_id,priority) SELECT ?,?,o.id,d.id,'HIGH' FROM identity_branch o, identity_branch d "
+                + "WHERE o.external_id=? AND d.external_id=?")) {
+                insert.setObject(1, UUID.randomUUID());
+                insert.setString(2, code + suffix);
+                insert.setObject(3, origin);
+                insert.setObject(4, destination);
+                assertThat(insert.executeUpdate()).isEqualTo(1);
+            }
+            Future<HttpResponse<String>> response = pool.submit(registration);
+            long deadline = System.nanoTime() + Duration.ofSeconds(15).toNanos();
+            while (jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' "
+                + "AND query LIKE '%INSERT INTO logistics_route%'", Integer.class) == 0) {
+                assertThat(response.isDone()).as("the registration finished without waiting for the held row").isFalse();
+                assertThat(System.nanoTime()).as("the registration never blocked on the held row").isLessThan(deadline);
+                Thread.sleep(20);
+            }
+            if (commit) held.commit(); else held.rollback();
+            return response.get(15, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     // ---------------------------------------------------------------- RF-0035 dispatch
@@ -537,23 +577,6 @@ class RouteAndDispatchHttpTest {
             List<Integer> statuses = new ArrayList<>();
             for (Future<Integer> future : futures) statuses.add(future.get());
             return statuses;
-        } finally {
-            pool.shutdownNow();
-        }
-    }
-
-    /** Runs the calls at the same time and returns their responses. */
-    @SafeVarargs
-    static List<HttpResponse<String>> raceResponses(Callable<HttpResponse<String>>... calls) throws Exception {
-        ExecutorService pool = Executors.newFixedThreadPool(calls.length);
-        try {
-            CountDownLatch start = new CountDownLatch(1);
-            List<Future<HttpResponse<String>>> futures = new ArrayList<>();
-            for (Callable<HttpResponse<String>> call : calls) futures.add(pool.submit(() -> { start.await(); return call.call(); }));
-            start.countDown();
-            List<HttpResponse<String>> responses = new ArrayList<>();
-            for (Future<HttpResponse<String>> future : futures) responses.add(future.get());
-            return responses;
         } finally {
             pool.shutdownNow();
         }
