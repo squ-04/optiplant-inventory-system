@@ -95,10 +95,47 @@ STAGES = {
       check(await line.getByLabel('Cantidad').inputValue() === '8', 'El borrador no se conservó tras el rechazo');
       check((await page.getByRole('region', { name: 'Comprobantes de venta' }).getByRole('row').count()) === 2,
         'El rechazo generó un comprobante');
+      // Closing or discarding never leaves the rejection message on the page once the form is gone.
+      const salesAlerts = page.locator('section[aria-labelledby="sales-title"] [role="alert"]');
+      await page.getByRole('button', { name: 'Cerrar y conservar borrador', exact: true }).click();
+      await page.getByRole('button', { name: 'Continuar venta en borrador', exact: true }).waitFor();
+      check(await salesAlerts.count() === 0, 'Quedó un aviso de error al cerrar y conservar el borrador');
+      await page.getByRole('button', { name: 'Continuar venta en borrador', exact: true }).click();
+      check(await line.getByLabel('Cantidad').inputValue() === '8', 'El borrador no se conservó al cerrar el formulario');
       await page.getByRole('button', { name: 'Descartar borrador', exact: true }).click();
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).waitFor();
+      check(await page.locator('#sale-editor').count() === 0, 'Descartar el borrador no cerró el formulario');
+      check(await salesAlerts.count() === 0, 'Quedó un aviso de error al descartar el borrador');
+      return 'una venta de 8 con 7 disponibles se rechaza sin comprobante y conserva el borrador; cerrar o descartar no deja '
+        + 'avisos';""",
+    "descarte-con-resultado-desconocido": """
+      // The confirmation never reaches the server, so its outcome is unknown to the form.
+      const salesAlerts = page.locator('section[aria-labelledby="sales-title"] [role="alert"]');
+      await page.route('**/api/v1/sales', route => route.request().method() === 'POST'
+        ? route.abort('internetdisconnected') : route.continue());
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).click();
+      const line = page.locator('#sale-editor fieldset.purchase-line').first();
+      await line.locator('select').first().selectOption({ label: config.sku + ' Helecho de prueba' });
+      await line.getByLabel('Cantidad').fill('1');
+      await page.getByText('1.000,00 COP').waitFor();
+      await page.getByRole('button', { name: 'Confirmar venta', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Confirmar venta', exact: true }).click();
+      await page.locator('#sale-error').getByText(/No se sabe si la venta quedó confirmada/).waitFor();
+      await page.unroute('**/api/v1/sales');
+      await page.getByRole('button', { name: 'Descartar borrador', exact: true }).click();
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).waitFor();
+      check(await page.locator('#sale-editor').count() === 0, 'Descartar el borrador no cerró el formulario');
+      await salesAlerts.getByText(/^Borrador descartado\\. La confirmación anterior no tiene resultado conocido/).waitFor();
+      check(await salesAlerts.count() === 1, 'Se esperaba solo el aviso de resultado desconocido');
+      check((await page.getByRole('region', { name: 'Comprobantes de venta' }).getByRole('row').count()) === 2,
+        'La confirmación interrumpida generó un comprobante');
+      // Opening another sale retires the warning.
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).click();
+      check(await salesAlerts.count() === 0, 'El aviso de resultado desconocido siguió visible al abrir otra venta');
       await page.getByRole('button', { name: 'Cerrar y conservar borrador', exact: true }).click();
       await logout();
-      return 'una venta de 8 con 7 disponibles se rechaza sin comprobante y conserva el borrador';""",
+      return 'confirmación sin respuesta y borrador descartado: el formulario se cierra, el aviso de resultado desconocido '
+        + 'queda visible fuera de él y se retira al abrir otra venta';""",
     "operador-abre-venta": """
       await login(config.operator);
       await page.getByRole('link', { name: 'Ventas', exact: true }).click();
@@ -137,7 +174,8 @@ STAGES = {
       const line = page.locator('#sale-editor fieldset.purchase-line').first();
       check(await line.getByLabel('Cantidad').inputValue() === '1', 'El borrador no se conservó');
       await page.getByRole('button', { name: 'Descartar borrador', exact: true }).click();
-      await page.getByRole('button', { name: 'Cerrar y conservar borrador', exact: true }).click();
+      await page.getByRole('button', { name: 'Nueva venta', exact: true }).waitFor();
+      check(await page.locator('#sale-editor').count() === 0, 'Descartar el borrador no cerró el formulario');
       await logout();
       return 'lista desactivada antes de confirmar: aviso de lista no disponible, retirada del selector y borrador conservado';""",
     "gerente-consulta-comprobante": """
