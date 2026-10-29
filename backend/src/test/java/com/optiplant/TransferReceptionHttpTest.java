@@ -118,7 +118,7 @@ class TransferReceptionHttpTest {
 
         // RF-0036-CA-02: repeating the confirmation replays it; another attempt is refused; nothing is applied twice.
         Snapshot after = snapshot(id);
-        HttpResponse<String> replay = destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "10"), key);
+        HttpResponse<String> replay = destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "10.000"), key);
         assertThat(replay.statusCode()).isEqualTo(200);
         assertThat(read(replay)).isEqualTo(transfer);
         HttpResponse<String> again = destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "10"));
@@ -325,7 +325,9 @@ class TransferReceptionHttpTest {
         assertThat(alertState(id)).isEqualTo(alert);
         assertThat(snapshot(id)).isEqualTo(before);
 
-        HttpResponse<String> resolved = destinationManager.post("/transfers/" + id + "/discrepancy/resolve", Map.of("treatment", "RESEND"));
+        String resolveKey = UUID.randomUUID().toString();
+        HttpResponse<String> resolved = destinationManager.post("/transfers/" + id + "/discrepancy/resolve", Map.of("treatment", "RESEND"),
+            resolveKey);
         assertThat(resolved.statusCode()).as(resolved.body()).isEqualTo(200);
         JsonNode transfer = read(resolved);
         assertThat(transfer.at("/discrepancy/status").asText()).isEqualTo("RESOLVED");
@@ -338,6 +340,10 @@ class TransferReceptionHttpTest {
         assertThat(snapshot(id)).isEqualTo(before);
         assertThat(transit(id)).containsExactly("3.000|27.000000000000000000|0.000000000000000000");
 
+        // Repeating the same key replays the resolution instead of reporting it as already resolved.
+        assertThat(destinationManager.post("/transfers/" + id + "/discrepancy/resolve", Map.of("treatment", "RESEND"), resolveKey)
+            .body()).isEqualTo(resolved.body());
+        assertError(originManager.post("/transfers/" + id + "/discrepancy/resolve", Map.of("treatment", 1)), 400, "VALIDATION_FAILED");
         // A single resolution: it is not changed afterwards.
         assertError(originManager.post("/transfers/" + id + "/discrepancy/resolve", Map.of("treatment", "CLAIM")), 409,
             "DISCREPANCY_ALREADY_RESOLVED");

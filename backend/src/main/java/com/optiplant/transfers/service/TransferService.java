@@ -177,7 +177,9 @@ public class TransferService {
         IdempotencyService.requireKey(key);
         Actor actor = actor(principal);
         Map<String, String> lines = new TreeMap<>();
-        request.quantities().forEach((lineNo, quantity) -> lines.put(String.valueOf(lineNo), quantity.toPlainString()));
+        // Equal quantities written with another scale (7 and 7.000) are the same request.
+        request.quantities().forEach((lineNo, quantity) -> lines.put(String.valueOf(lineNo),
+            quantity.stripTrailingZeros().toPlainString()));
         return idempotency.execute(actor.id(), RECEIVE, transfer.toString(), key, Map.of("transfer", transfer, "lines", lines),
             200, TransferResponse.class, () -> reader.detail(receive(active(actor), transfer, request), false));
     }
