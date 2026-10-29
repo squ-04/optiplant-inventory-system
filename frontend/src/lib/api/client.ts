@@ -333,7 +333,10 @@ export class ApiError extends Error {
   problem: ProblemDetail;
 
   constructor(status: number, problem: ProblemDetail) {
-    super(problem.detail ?? problem.title ?? `Error HTTP ${status}.`);
+    // A server failure without detail only carries a generic English title; explain what to do instead.
+    super(problem.detail ?? (status >= 500
+      ? `El servidor no pudo completar la solicitud (HTTP ${status}). Vuelva a intentarlo; si persiste, avise al administrador.`
+      : problem.title ?? `Error HTTP ${status}.`));
     this.name = 'ApiError';
     this.status = status;
     this.problem = problem;

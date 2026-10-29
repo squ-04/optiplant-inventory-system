@@ -1,6 +1,6 @@
 import type { ShortageTreatment, Transfer, TransferLine, User } from '../api/client.ts';
 import { decimal } from '../format.ts';
-import { STEP_LABEL_OVERRIDES, TRANSFER_STATUS, TRANSFER_STEPS } from './statuses.ts';
+import { CLOSED_BEFORE_DISPATCH, STEP_LABEL_OVERRIDES, STEP_OF, TRANSFER_STATUS, TRANSFER_STEPS } from './statuses.ts';
 import type { TransferStatus } from './statuses.ts';
 
 export { TRANSFER_STEPS };
@@ -12,6 +12,19 @@ export { TRANSFER_STEPS };
 
 export const transferStatusLabel = (status: TransferStatus) => TRANSFER_STATUS[status]?.label ?? status;
 export const stepLabel = (status: TransferStatus) => STEP_LABEL_OVERRIDES[status] ?? transferStatusLabel(status);
+
+export type StepState = 'done' | 'current' | 'pending' | 'skipped';
+/**
+ * The place of a transfer in its cycle. A rejected or cancelled transfer has no current step: the steps it reached are
+ * done and the others will never be carried out, so they are not presented as pending.
+ */
+export function progressSteps(transfer: Pick<Transfer, 'status' | 'events'>): { step: TransferStatus; state: StepState }[] {
+  const closed = CLOSED_BEFORE_DISPATCH.includes(transfer.status);
+  const reached = (transfer.events ?? []).map(event => event.toStatus);
+  const current = TRANSFER_STEPS.indexOf(STEP_OF[transfer.status] ?? transfer.status);
+  return TRANSFER_STEPS.map((step, index) => ({ step, state: closed ? (reached.includes(step) ? 'done' : 'skipped')
+    : index === current ? 'current' : current >= 0 && index < current ? 'done' : 'pending' }));
+}
 
 type Scope = Pick<User, 'role' | 'branchExternalId'>;
 type Sides = Pick<Transfer, 'status' | 'origin' | 'destination'>;
@@ -135,6 +148,15 @@ export const canResolve = (user: Scope, transfer: WithShortage) => user.role ===
 /** Whether something of the shortage is still pending in transit. */
 export const pendingInTransit = (transfer: Pick<Transfer, 'lines'>) => transfer.lines.some(line =>
   line.inTransitBaseQuantity !== null && compareDecimal(line.inTransitBaseQuantity, '0') !== 0);
+
+/**
+ * RF-0039: only the origin manager's transit loss settles what a shortage left in transit; a resend is a new transfer and
+ * never releases it.
+ */
+export const shortageGuidance = (transfer: Pick<Transfer, 'lines'>) => pendingInTransit(transfer)
+  ? 'La transferencia sigue «Recibida con discrepancia» aunque se resuelva la alerta. Lo pendiente sigue en tránsito hasta que '
+    + 'el gerente de origen registre su pérdida; un reenvío es una transferencia nueva y no lo libera.'
+  : 'La transferencia sigue «Recibida con discrepancia» aunque se resuelva la alerta. Ya no queda nada en tránsito de este faltante.';
 
 /** RF-0039-CA-02: the origin manager authorizes the loss of what is still in transit, once. */
 export const canWriteOff = (user: Scope, transfer: WithShortage & Pick<Transfer, 'lines'>) => user.role === 'MANAGER'

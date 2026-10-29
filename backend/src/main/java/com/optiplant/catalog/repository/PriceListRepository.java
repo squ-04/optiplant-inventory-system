@@ -10,6 +10,6 @@ public interface PriceListRepository extends JpaRepository<PriceList, Long> {
     List<PriceList> findAllByOrderByCodeAsc();
     List<PriceList> findAllByActiveTrueOrderByCodeAsc();
     Optional<PriceList> findByExternalId(UUID externalId);
-    boolean existsByCode(String code);
-    boolean existsByCodeAndIdNot(String code, Long id);
+    boolean existsByCodeIgnoreCase(String code);
+    boolean existsByCodeIgnoreCaseAndIdNot(String code, Long id);
 }

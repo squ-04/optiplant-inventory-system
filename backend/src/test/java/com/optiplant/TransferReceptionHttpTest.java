@@ -259,7 +259,8 @@ class TransferReceptionHttpTest {
         // Surpluses are rejected before confirming, and one bad line rejects the whole arrival.
         HttpResponse<String> surplus = destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "10", 2, "0", 3, "5"));
         assertError(surplus, 409, "RECEIVED_EXCEEDS_DISPATCHED");
-        assertThat(read(surplus).get("detail").asText()).startsWith("Línea 3: se despacharon 4 unidad");
+        assertThat(read(surplus).get("detail").asText())
+            .isEqualTo("Línea 3: no se puede recibir más de lo enviado: 4 unidad. No se registró la recepción.");
         assertError(destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "10", 2, "1", 3, "4")), 409,
             "RECEIVED_EXCEEDS_DISPATCHED");
         assertError(destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "10", 3, "4")), 400, "VALIDATION_FAILED");

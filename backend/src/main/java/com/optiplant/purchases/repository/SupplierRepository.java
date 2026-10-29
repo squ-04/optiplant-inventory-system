@@ -9,6 +9,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface SupplierRepository extends JpaRepository<Supplier, Long> {
     List<Supplier> findAllByOrderByCodeAsc();
     Optional<Supplier> findByExternalId(UUID externalId);
-    boolean existsByCode(String code);
-    boolean existsByCodeAndIdNot(String code, Long id);
+    boolean existsByCodeIgnoreCase(String code);
+    boolean existsByCodeIgnoreCaseAndIdNot(String code, Long id);
 }

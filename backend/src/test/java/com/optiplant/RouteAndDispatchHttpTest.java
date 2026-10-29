@@ -125,6 +125,7 @@ class RouteAndDispatchHttpTest {
 
         assertError(route("AB-bis", a, b, "HIGH"), 409, "ROUTE_EXISTS");
         assertError(route("AB", b, a, "HIGH"), 409, "CODE_EXISTS");
+        assertError(route("ab", b, a, "HIGH"), 409, "CODE_EXISTS");
         assertError(route("AA", a, a, "HIGH"), 400, "SAME_BRANCH");
         assertError(route("AX", a, b, "URGENT"), 400, "VALIDATION_FAILED");
         assertError(admin.post("/logistics/routes", Map.of("code", "AX" + suffix, "origin", a.toString())), 400, "VALIDATION_FAILED");

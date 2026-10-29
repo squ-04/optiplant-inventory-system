@@ -62,7 +62,7 @@ public class ProductService {
     @Transactional
     public ProductResponse create(ProductCreateRequest request) {
         ProductUpdateRequest attributes = request.attributes();
-        if (products.existsBySku(attributes.sku())) throw skuExists();
+        if (products.existsBySkuIgnoreCase(attributes.sku())) throw skuExists();
         List<Long> branches = request.branches().stream().map(branch -> activeBranch(branch.branchExternalId())).toList();
         Product product;
         try {
@@ -93,7 +93,7 @@ public class ProductService {
             throw new ApiException(409, "PRODUCT_IDENTITY_PROTECTED",
                 "El producto ya fue utilizado: su SKU y su unidad base no pueden modificarse.");
         }
-        if (identityChanged && products.existsBySkuAndIdNot(request.sku(), product.getId())) throw skuExists();
+        if (identityChanged && products.existsBySkuIgnoreCaseAndIdNot(request.sku(), product.getId())) throw skuExists();
         if (baseChanged) {
             if (!request.baseDivisible() && exists("SELECT EXISTS (SELECT 1 FROM catalog_branch_product WHERE product_id=? "
                 + "AND minimum_qty IS NOT NULL AND minimum_qty<>trunc(minimum_qty))", product.getId())) {

@@ -4,7 +4,7 @@ import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { ShortageTreatment, Transfer, TransferHistory, TransferHistoryFilter, User } from '../lib/api/client.ts';
 import { TREATMENT_LABEL, canResolve } from '../lib/transfers/transfers.ts';
 import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
-import { dateTime as when } from '../lib/format.ts';
+import { dateTime as when, sentence } from '../lib/format.ts';
 import { ShortageBadge, ShortageLines, ShortageResolveForm } from './TransferShortagePanel.tsx';
 import { TransferStatusBadge } from '../components/shared/TransferStatusBadge.tsx';
 import { Button } from '../components/ui/button';
@@ -94,7 +94,7 @@ export function ShortageAlerts({ client, user, onError, revision, visible }: {
         : 'No se han registrado faltantes en recepciones.'}</p>
       : <div className="table-scroll" role="region" aria-label="Alertas de faltante" tabIndex={0}>
         <Table className="purchase-history">
-          <TableCaption>Más recientes primero. Lectura del servidor: {when(alerts.readAt)}.</TableCaption>
+          <TableCaption>Más recientes primero. {sentence(`Lectura del servidor: ${when(alerts.readAt)}`)}</TableCaption>
           <TableHeader><TableRow>
             <TableHead scope="col">Transferencia</TableHead><TableHead scope="col">Origen y destino</TableHead>
             <TableHead scope="col">Faltante</TableHead><TableHead scope="col">Alerta</TableHead>

@@ -30,7 +30,7 @@ public class SupplierService {
 
     @Transactional
     public SupplierResponse create(SupplierRequest request) {
-        if (suppliers.existsByCode(request.code())) throw codeExists();
+        if (suppliers.existsByCodeIgnoreCase(request.code())) throw codeExists();
         try {
             return response(suppliers.saveAndFlush(Supplier.create(request.code(), request.name(), clock.instant())));
         } catch (DataIntegrityViolationException error) {
@@ -42,7 +42,7 @@ public class SupplierService {
     public SupplierResponse update(UUID externalId, SupplierRequest request) {
         Supplier supplier = suppliers.findByExternalId(externalId)
             .orElseThrow(() -> new ApiException(404, "SUPPLIER_NOT_FOUND", "No se encontró el proveedor."));
-        if (suppliers.existsByCodeAndIdNot(request.code(), supplier.getId())) throw codeExists();
+        if (suppliers.existsByCodeIgnoreCaseAndIdNot(request.code(), supplier.getId())) throw codeExists();
         supplier.update(request.code(), request.name(), clock.instant());
         try {
             return response(suppliers.saveAndFlush(supplier));

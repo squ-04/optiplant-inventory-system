@@ -143,7 +143,7 @@ public class RouteService {
     }
 
     private void requireFreeCode(String code, Long exceptId) {
-        Integer taken = jdbc.queryForObject("SELECT count(*) FROM logistics_route WHERE code=? AND id IS DISTINCT FROM ?",
+        Integer taken = jdbc.queryForObject("SELECT count(*) FROM logistics_route WHERE lower(code)=lower(?) AND id IS DISTINCT FROM ?",
             Integer.class, code, exceptId);
         if (taken != null && taken > 0) throw codeExists();
     }

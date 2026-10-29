@@ -3,7 +3,7 @@ import { CheckCircle2, FileWarning, Send } from 'lucide-react';
 import { SHORTAGE_TREATMENTS } from '../lib/api/client.ts';
 import type { ShortageTreatment, TransitLossInput, Transfer, User } from '../lib/api/client.ts';
 import {
-  TREATMENT_HINT, TREATMENT_LABEL, canResend, canResolve, canWriteOff, missingLines, transferStatusLabel,
+  TREATMENT_HINT, TREATMENT_LABEL, canResend, canResolve, canWriteOff, missingLines, shortageGuidance, transferStatusLabel,
 } from '../lib/transfers/transfers.ts';
 import { dateTime as when, decimal } from '../lib/format.ts';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
@@ -24,7 +24,7 @@ export function ShortageLines({ transfer }: { transfer: Transfer }) {
   return <ul className="transfer-shortage-lines" aria-label={`Faltantes de ${transfer.code}`}>
     {missingLines(transfer).map(line => <li key={line.lineNo}>
       <strong>Faltan {decimal(line.missingQuantity!)} {line.unit}</strong> de {line.sku} {line.productName}
-      <span className="cell-note">Enviado {decimal(line.dispatchedQuantity!)}, recibido {decimal(line.receivedQuantity!)} {line.unit}.
+      <span className="cell-note">Enviado {decimal(line.dispatchedQuantity!)} {line.unit}, recibido {decimal(line.receivedQuantity!)} {line.unit}.
         {' '}En tránsito: {decimal(line.inTransitBaseQuantity ?? '0')} {line.baseUnitName}.</span>
     </li>)}
   </ul>;
@@ -85,12 +85,12 @@ export function TransferShortagePanel({ transfer, user, busy, onResolve, onWrite
     </header>
     <ShortageLines transfer={transfer} />
     <dl className="purchase-facts">
-      <div><dt>Alerta abierta</dt><dd>{when(shortage.openedAt)}</dd></div>
+      <div><dt>Abierta el</dt><dd>{when(shortage.openedAt)}</dd></div>
       {shortage.status === 'RESOLVED' && <>
         <div><dt>Tratamiento</dt><dd>{TREATMENT_LABEL[shortage.treatment!]}</dd></div>
         <div><dt>Resuelta por</dt><dd>{shortage.resolvedBy!.fullName} ({shortage.resolvedBy!.code}), {when(shortage.resolvedAt!)}</dd></div>
       </>}
-      {shortage.transitLoss && <div><dt>Pérdida en tránsito</dt><dd>Autorizada por {shortage.transitLoss.authorizedBy.fullName}
+      {shortage.transitLoss && <div><dt>Pérdida en tránsito</dt><dd>Autorizada por {shortage.transitLoss.authorizedBy.fullName}{' '}
         ({shortage.transitLoss.authorizedBy.code}), {when(shortage.transitLoss.occurredAt)}
         <span className="cell-note">Motivo: {shortage.transitLoss.reason}</span>
         <span className="cell-note">Evidencia: {shortage.transitLoss.evidence}</span></dd></div>}
@@ -98,8 +98,7 @@ export function TransferShortagePanel({ transfer, user, busy, onResolve, onWrite
         {shortage.resends.map(resend => <span key={resend.externalId} className="block">
           <span className="record-code">{resend.code}</span> {transferStatusLabel(resend.status)}</span>)}</dd></div>}
     </dl>
-    <p className="text-muted-foreground">La transferencia sigue «Recibida con discrepancia» aunque se resuelva la alerta.
-      Lo pendiente sigue en tránsito hasta que el gerente de origen registre su pérdida o se reciba un reenvío.</p>
+    <p className="text-muted-foreground">{shortageGuidance(transfer)}</p>
 
     {canResolve(user, transfer) && <ShortageResolveForm transfer={transfer} busy={busy} onResolve={onResolve} idPrefix="detail" />}
 

@@ -13,7 +13,10 @@ import org.springframework.data.repository.query.Param;
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
     Optional<UserAccount> findByCode(String code);
     Optional<UserAccount> findByExternalId(UUID externalId);
-    boolean existsByCodeAndExternalIdNot(String code, UUID externalId);
+    // Codes are unique regardless of letter case (V12); login still matches the code exactly.
+    boolean existsByCodeIgnoreCase(String code);
+
+    boolean existsByCodeIgnoreCaseAndExternalIdNot(String code, UUID externalId);
     List<UserAccount> findAllByOrderByCodeAsc();
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

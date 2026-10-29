@@ -309,6 +309,8 @@ table.restock-table { min-width: 56rem; }
   .transfer-steps li[data-state="done"] { border-top-color: var(--color-text); color: var(--color-text); }
   .transfer-steps li[data-state="current"] { border-top-color: var(--color-action); color: var(--color-text); font-weight: 650; }
   .transfer-steps li[data-state="current"]::before { background: var(--color-action); border-color: var(--color-action); color: #fff; }
+  /* A rejected or cancelled transfer never reaches these steps: muted and dashed, not pending. */
+  .transfer-steps li[data-state="skipped"] { border-top-style: dashed; color: var(--color-muted); opacity: .7; }
   .transfer-lower { color: var(--color-warning); font-weight: 600; }
   form.transfer-prepare { max-width: 48rem; }
   .transfer-prepare-line { margin-bottom: var(--space-3); }

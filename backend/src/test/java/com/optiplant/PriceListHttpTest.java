@@ -152,6 +152,9 @@ class PriceListHttpTest {
         HttpResponse<String> duplicated = admin.post("/catalog/price-lists", Map.of("code", code, "name", "Otra"));
         assertThat(duplicated.statusCode()).isEqualTo(409);
         assertThat(read(duplicated).get("code").asText()).isEqualTo("PRICE_LIST_CODE_EXISTS");
+        HttpResponse<String> otherCase = admin.post("/catalog/price-lists", Map.of("code", code.toLowerCase(), "name", "Otra"));
+        assertThat(otherCase.statusCode()).isEqualTo(409);
+        assertThat(read(otherCase).get("code").asText()).isEqualTo("PRICE_LIST_CODE_EXISTS");
         String other = list("Mayorista");
         HttpResponse<String> renamed = admin.post("/catalog/price-lists/" + other + "/update",
             Map.of("code", code, "name", "Mayorista", "active", true));

@@ -98,6 +98,10 @@ class ProductHttpTest {
         admin.csrf();
         assertProblem(admin.post("/api/v1/products", product("SKU-DUP", "Copia", null, "unidad", false, List.of())), 409,
             "PRODUCT_SKU_EXISTS");
+        // A SKU that differs only in letter case names the same product.
+        admin.csrf();
+        assertProblem(admin.post("/api/v1/products", product("sku-dup", "Copia", null, "unidad", false, List.of())), 409,
+            "PRODUCT_SKU_EXISTS");
         Map<String, Object> extra = product("SKU-EXTRA", "Extra", null, "unidad", false, List.of());
         extra.put("active", false);
         for (Map<String, Object> invalid : List.of(product(" SKU-SPACE", "Nombre", null, "unidad", false, List.of()),

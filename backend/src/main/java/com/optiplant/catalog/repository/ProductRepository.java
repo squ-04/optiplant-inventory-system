@@ -13,8 +13,8 @@ import org.springframework.data.repository.query.Param;
 public interface ProductRepository extends JpaRepository<Product, Long> {
     List<Product> findAllByOrderBySkuAsc();
     Optional<Product> findByExternalId(UUID externalId);
-    boolean existsBySku(String sku);
-    boolean existsBySkuAndIdNot(String sku, Long id);
+    boolean existsBySkuIgnoreCase(String sku);
+    boolean existsBySkuIgnoreCaseAndIdNot(String sku, Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.externalId = :externalId")
