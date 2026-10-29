@@ -5,10 +5,10 @@ import type { Branch, Transfer, User } from '../api/client.ts';
  * in this order. The codes must match the backend `RoutePriority` enum and the database CHECK constraint.
  */
 export const ROUTE_PRIORITY = {
-  HIGH: { label: 'Alta', group: 'Prioridad alta', tone: 'bg-accent text-accent-foreground' },
-  MEDIUM: { label: 'Media', group: 'Prioridad media', tone: 'bg-secondary text-secondary-foreground' },
-  LOW: { label: 'Baja', group: 'Prioridad baja', tone: undefined },
-} as const satisfies Record<string, { label: string; group: string; tone: string | undefined }>;
+  HIGH: { label: 'Alta', group: 'Prioridad alta', variant: 'secondary', tone: 'bg-accent text-accent-foreground' },
+  MEDIUM: { label: 'Media', group: 'Prioridad media', variant: 'secondary', tone: 'bg-secondary text-secondary-foreground' },
+  LOW: { label: 'Baja', group: 'Prioridad baja', variant: 'outline', tone: undefined },
+} as const satisfies Record<string, { label: string; group: string; variant: 'secondary' | 'outline'; tone: string | undefined }>;
 
 export type RoutePriority = keyof typeof ROUTE_PRIORITY;
 
@@ -37,8 +37,12 @@ export const canDispatch = (user: Pick<User, 'role' | 'branchExternalId'>, trans
  * entry converts to an instant exactly.
  */
 export const BUSINESS_ZONE = 'America/Bogota';
-const OFFSET = '-05:00';
-const OFFSET_MS = 5 * 60 * 60 * 1000;
+/** The single definition of the business offset; the ISO suffix and the millisecond shift derive from it. */
+const OFFSET_HOURS = -5;
+const OFFSET = `${OFFSET_HOURS < 0 ? '-' : '+'}${String(Math.abs(OFFSET_HOURS)).padStart(2, '0')}:00`;
+const OFFSET_MS = OFFSET_HOURS * 60 * 60 * 1000;
+/** Mirrors `TransferService.DEPARTURE_CLOCK_TOLERANCE`: a device clock slightly ahead of the server is accepted. */
+export const DEPARTURE_CLOCK_TOLERANCE_MS = 5 * 60 * 1000;
 const LOCAL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
 /** A `datetime-local` value (minutes) read as Bogotá time, as an ISO-8601 instant with offset; null when invalid. */
@@ -54,7 +58,7 @@ export function bogotaInstant(local: string): string | null {
 
 /** The Bogotá wall-clock minute of an instant, in `datetime-local` format. */
 export function bogotaLocal(instant: Date): string {
-  return new Date(instant.getTime() - OFFSET_MS).toISOString().slice(0, 16);
+  return new Date(instant.getTime() + OFFSET_MS).toISOString().slice(0, 16);
 }
 
 export interface DispatchDraft { carrier: string; departedAt: string; estimatedArrivalAt: string }
@@ -62,8 +66,8 @@ export const MAX_CARRIER = 160;
 
 /**
  * The reason the server would reject the dispatch data, worded as the server words it; null when acceptable. Mirrors
- * `TransferDispatchRequest` and the time checks of `TransferService.dispatch`: the departure is not later than now nor
- * earlier than the approval's minute, and the estimated arrival is not earlier than the departure.
+ * `TransferDispatchRequest` and the time checks of `TransferService.dispatch`: the departure is not later than now (beyond
+ * the clock tolerance) nor earlier than the approval's minute, and the estimated arrival is not earlier than the departure.
  */
 export function dispatchProblem(draft: DispatchDraft, now: Date, approvedAt: string | null): string | null {
   const carrier = draft.carrier.trim();
@@ -74,7 +78,7 @@ export function dispatchProblem(draft: DispatchDraft, now: Date, approvedAt: str
   const estimated = bogotaInstant(draft.estimatedArrivalAt);
   if (!estimated) return 'Indique la fecha y hora estimada de llegada.';
   if (Date.parse(estimated) < Date.parse(departed)) return 'La llegada estimada no puede ser anterior a la salida real.';
-  if (Date.parse(departed) > now.getTime()) {
+  if (Date.parse(departed) > now.getTime() + DEPARTURE_CLOCK_TOLERANCE_MS) {
     return 'La salida real no puede ser posterior al momento actual: registre el despacho cuando la mercancía haya salido.';
   }
   if (approvedAt !== null && Date.parse(departed) < Math.floor(Date.parse(approvedAt) / 60000) * 60000) {

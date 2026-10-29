@@ -160,7 +160,9 @@ STAGES = {
       await page.getByRole('button', { name: 'Registrar despacho', exact: true }).click();
       check(await page.getByLabel('Transportista', { exact: true }).inputValue() === 'Transportes Andinos',
         'El despacho pierde el transportista al volver');
-      const arrival = new Date(Date.now() - 5 * 3600000 + 26 * 3600000).toISOString().slice(0, 16);
+      // Bogotá wall-clock time (UTC−5, no daylight saving) 26 hours from now, in datetime-local format.
+      const hour = 3600000, bogotaOffset = -5 * hour;
+      const arrival = new Date(Date.now() + bogotaOffset + 26 * hour).toISOString().slice(0, 16);
       await page.getByLabel('Llegada estimada', { exact: true }).fill(arrival);
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(300);

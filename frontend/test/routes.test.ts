@@ -76,7 +76,9 @@ test('dispatch data is checked as the server checks it', () => {
   assert.equal(dispatchProblem({ ...draft, estimatedArrivalAt: '' }, now, approved), 'Indique la fecha y hora estimada de llegada.');
   assert.equal(dispatchProblem({ ...draft, estimatedArrivalAt: '2026-10-28T13:29' }, now, approved),
     'La llegada estimada no puede ser anterior a la salida real.');
-  assert.match(dispatchProblem({ ...draft, departedAt: '2026-10-28T14:01', estimatedArrivalAt: '2026-10-28T15:00' }, now, approved)!,
+  // A device clock up to 5 minutes ahead is tolerated, as on the server; beyond it the departure is future.
+  assert.equal(dispatchProblem({ ...draft, departedAt: '2026-10-28T14:05', estimatedArrivalAt: '2026-10-28T15:00' }, now, approved), null);
+  assert.match(dispatchProblem({ ...draft, departedAt: '2026-10-28T14:06', estimatedArrivalAt: '2026-10-28T15:00' }, now, approved)!,
     /posterior al momento actual/);
   // The approval's own minute is accepted; the minute before is not.
   assert.equal(dispatchProblem({ ...draft, departedAt: '2026-10-28T13:10' }, now, approved), null);
@@ -112,4 +114,9 @@ test('routes are listed, created and updated through their endpoints', async () 
   assert.equal(h.calls[3].url, `http://localhost:8080/api/v1/logistics/routes/${route.externalId}/update`);
   assert.deepEqual(JSON.parse(String(h.calls[3].options.body)), { code: 'R-AB', priority: 'LOW', active: false });
   await assert.rejects(harness([Response.json([{ ...route, priority: 'URGENT' }])]).client.routes());
+});
+
+test('a partial arrival is named as RF-0042 names it', async () => {
+  const { TRANSFER_STATUS } = await import('../src/lib/transfers/statuses.ts');
+  assert.equal(TRANSFER_STATUS.RECEIVED_DISCREPANCY.label, 'Recibida con discrepancia');
 });
