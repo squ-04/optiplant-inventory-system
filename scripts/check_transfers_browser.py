@@ -171,6 +171,13 @@ STAGES = {
       await page.screenshot({ path: config.screenshot.replace('.png', '-despacho.png'), fullPage: true });
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.getByRole('button', { name: 'Confirmar despacho', exact: true }).click();
+      // The dispatch moves stock and cannot be undone: it asks for confirmation, and Escape sends nothing.
+      await page.getByRole('alertdialog').waitFor();
+      await page.keyboard.press('Escape');
+      check(await page.getByRole('button', { name: 'Registrar despacho' }).count() === 0
+        && await page.getByText(/despachada/).count() === 0, 'Escape despachó la transferencia');
+      await page.getByRole('button', { name: 'Confirmar despacho', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Confirmar despacho', exact: true }).click();
       await page.getByText(/^TR-000001 despachada: las cantidades salieron de Sucursal Norte/).waitFor();
       await page.getByText('Transportes Andinos').waitFor();
       await page.getByRole('columnheader', { name: 'Enviado' }).waitFor();
@@ -246,7 +253,7 @@ STAGES = {
       // RF-0042-CA-02: resolving the alert keeps the confirmed state.
       await page.locator('#transfer-detail').getByText('Recibida con discrepancia', { exact: true }).first().waitFor();
       await page.getByRole('heading', { name: 'Tiempo de entrega' }).waitFor();
-      await page.getByText(/Recibida con discrepancia: entrega parcial, no cumple/).waitFor();
+      await page.getByText(/Recibida con discrepancia: no llegó mercancía, no cumple/).waitFor();
       await page.getByText(/Hora de Bogotá \\(America\\/Bogota\\)/).waitFor();
       await page.locator('.transfer-timing-compare').getByRole('heading', { name: 'Real', exact: true }).waitFor();
       check(await page.locator('.transfer-timing-compare dt', { hasText: 'Duración' }).count() === 2, 'Falta la duración estimada o real');
@@ -294,6 +301,8 @@ STAGES = {
       await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
       await page.getByText('Reclamación', { exact: true }).waitFor();
       await page.getByText(/En tránsito: 12,000 unidad/).waitFor();
+      // A resend never releases the original transit; only the loss settles it.
+      await page.getByText(/un reenvío es una transferencia nueva y no lo libera/).waitFor();
       await page.getByRole('button', { name: 'Registrar pérdida en tránsito', exact: true }).click();
       await page.getByRole('button', { name: 'Registrar pérdida', exact: true }).click();
       await page.getByText('Indique el motivo de la pérdida.').waitFor();
@@ -304,6 +313,7 @@ STAGES = {
       await page.getByText(/^Pérdida en tránsito de TR-000001 registrada/).waitFor();
       await page.getByText(/Autorizada por Gerente Norte/).waitFor();
       await page.getByText(/En tránsito: 0,000 unidad/).waitFor();
+      await page.getByText(/Ya no queda nada en tránsito de este faltante/).waitFor();
       check(await page.getByRole('button', { name: 'Registrar pérdida en tránsito' }).count() === 0, 'Se puede registrar la pérdida dos veces');
       await logout();
       return 'el gerente de origen ve la reclamación y el tránsito pendiente; exige motivo y registra la pérdida una sola vez';""",

@@ -65,6 +65,13 @@ export interface DispatchDraft { carrier: string; departedAt: string; estimatedA
 export const MAX_CARRIER = 160;
 
 /**
+ * The draft shown when the dispatch form opens: the departure proposed is the current Bogotá time, so a detail opened long
+ * before the approval never offers a stale or pre-approval departure. A departure the operator typed is kept.
+ */
+export const freshDeparture = (draft: DispatchDraft, edited: boolean, now: Date): DispatchDraft =>
+  edited ? draft : { ...draft, departedAt: bogotaLocal(now) };
+
+/**
  * The reason the server would reject the dispatch data, worded as the server words it; null when acceptable. Mirrors
  * `TransferDispatchRequest` and the time checks of `TransferService.dispatch`: the departure is not later than now (beyond
  * the clock tolerance) nor earlier than the approval's minute, and the estimated arrival is not earlier than the departure.

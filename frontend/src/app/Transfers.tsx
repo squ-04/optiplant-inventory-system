@@ -7,11 +7,12 @@ import type {
   TransferHistoryFilter, TransferReceptionLine, TransferStatus, User,
 } from '../lib/api/client.ts';
 import {
-  TREATMENT_LABEL, TRANSFER_STEPS, blocksPreparation, canCancel, canDecide, canPrepare, canReceive, cancelReasonRequired,
-  checkPreparation, compareDecimal, missingLines, preparationMessage, side, stepLabel, transferStatusLabel,
+  TREATMENT_LABEL, blocksPreparation, canCancel, canDecide, canPrepare, canReceive, cancelReasonRequired,
+  checkPreparation, compareDecimal, missingLines, preparationMessage, progressSteps, side, stepLabel, transferStatusLabel,
 } from '../lib/transfers/transfers.ts';
-import { CLOSED_BEFORE_DISPATCH, STEP_OF, TRANSFER_STATUS, TRANSFER_STATUSES } from '../lib/transfers/statuses.ts';
-import { canDispatch, routeFor } from '../lib/logistics/routes.ts';
+import { CLOSED_BEFORE_DISPATCH, TRANSFER_STATUS, TRANSFER_STATUSES } from '../lib/transfers/statuses.ts';
+import { canDispatch, freshDeparture, routeFor } from '../lib/logistics/routes.ts';
+import { bogotaDateTime } from '../lib/logistics/compliance.ts';
 import { RoutePriorityBadge } from '../components/shared/RoutePriorityBadge.tsx';
 import { TransferDispatchForm, emptyDispatchDraft } from './TransferDispatchForm.tsx';
 import { TransferTiming } from './TransferTiming.tsx';
@@ -19,7 +20,7 @@ import { TransferReceptionForm, initialReception } from './TransferReceptionForm
 import { TransferShortagePanel } from './TransferShortagePanel.tsx';
 import type { DispatchDraft } from '../lib/logistics/routes.ts';
 import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
-import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
+import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal, sentence } from '../lib/format.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
 import { useConfirmation } from '../components/shared/ConfirmDialog.tsx';
 import { TransferStatusBadge } from '../components/shared/TransferStatusBadge.tsx';
@@ -111,13 +112,14 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setHistoryError(reason instanceof TypeError
         ? 'Sin comunicación con el servidor. El listado mostrado puede estar desactualizado.'
-        : reason instanceof Error ? reason.message : 'No se pudieron consultar las transferencias.');
+        : `${reason instanceof Error ? reason.message : 'No se pudieron consultar las transferencias.'}`
+          + (history ? ' El listado mostrado puede estar desactualizado.' : ''));
     } finally { setLoading(false); }
   }
   useEffect(() => { if (visible) void loadHistory(); }, [visible, consulted, revision]);
 
   async function openDetail(id: string) {
-    setDetailError(''); setActionError('');
+    setDetailError(''); setActionError(''); setConfirmed('');
     try {
       setSelected(await client.transfer(id));
       revealEditor('transfer-detail');
@@ -201,18 +203,42 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
       updated => `${updated.code} quedó aprobada. Queda pendiente el despacho del origen.`);
   }
 
-  const reject = (transfer: Transfer, reason: string) =>
-    act(transfer, 'reject', reason, key => client.rejectTransfer(transfer.externalId, reason, key),
+  async function reject(transfer: Transfer, reason: string) {
+    const accepted = await confirm({
+      title: `Rechazar ${transfer.code}`,
+      description: <>La transferencia quedará rechazada con el motivo indicado y no podrá aprobarse ni despacharse. Las existencias
+        no cambian y no se puede deshacer.</>,
+      confirmLabel: 'Rechazar transferencia', destructive: true,
+    });
+    if (!accepted) return false;
+    return act(transfer, 'reject', reason, key => client.rejectTransfer(transfer.externalId, reason, key),
       updated => `${updated.code} quedó rechazada con su motivo. Las cantidades y existencias no cambiaron.`);
+  }
 
-  const cancel = (transfer: Transfer, reason: string) =>
-    act(transfer, 'cancel', reason, key => client.cancelTransfer(transfer.externalId, reason || null, key),
+  async function cancel(transfer: Transfer, reason: string) {
+    const accepted = await confirm({
+      title: `Cancelar ${transfer.code}`,
+      description: <>La transferencia quedará cancelada antes de su despacho y se conservará en el histórico. Las existencias no
+        cambian y no se puede deshacer.</>,
+      confirmLabel: 'Cancelar transferencia', destructive: true,
+    });
+    if (!accepted) return false;
+    return act(transfer, 'cancel', reason, key => client.cancelTransfer(transfer.externalId, reason || null, key),
       updated => `${updated.code} quedó cancelada. Las existencias no cambiaron.`);
+  }
 
-  const dispatch = (transfer: Transfer, input: TransferDispatchInput) =>
-    act(transfer, 'dispatch', input, key => client.dispatchTransfer(transfer.externalId, input, key),
+  async function dispatch(transfer: Transfer, input: TransferDispatchInput) {
+    const accepted = await confirm({
+      title: `Despachar ${transfer.code}`,
+      description: <>Las cantidades preparadas saldrán de {transfer.origin.name} con salida real {bogotaDateTime(input.departedAt)} (hora de Bogotá) y quedarán
+        en tránsito hacia {transfer.destination.name} hasta su recepción. El despacho no se puede deshacer.</>,
+      confirmLabel: 'Confirmar despacho',
+    });
+    if (!accepted) return false;
+    return act(transfer, 'dispatch', input, key => client.dispatchTransfer(transfer.externalId, input, key),
       updated => `${updated.code} despachada: las cantidades salieron de ${updated.origin.name} y quedan en tránsito hacia `
         + `${updated.destination.name} hasta su recepción.`);
+  }
 
   async function receive(transfer: Transfer, lines: TransferReceptionLine[], shortages: number) {
     const accepted = await confirm({
@@ -279,7 +305,7 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
       <fieldset disabled={busy}>
         <legend>{draft.source ? `Reenvío del faltante de ${draft.source.transferCode}` : 'Nueva solicitud'} hacia {catalog
           ? `${catalog.branchName} (${catalog.branchCode})` : 'su sucursal'}</legend>
-        {draft.source && <p className="purchase-replacement-note">Esta solicitud quedará vinculada al faltante de {draft.source.transferCode}
+        {draft.source && <p className="purchase-replacement-note">Esta solicitud quedará vinculada al faltante de {draft.source.transferCode}{' '}
           para su trazabilidad. Se pide desde el mismo origen; no cambia la transferencia original ni su tránsito.</p>}
         <label htmlFor="transfer-origin">Sucursal origen</label>
         <select id="transfer-origin" value={draft.origin} required disabled={!!draft.source}
@@ -361,7 +387,7 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
       </Button>
     </div>
     <form className="purchase-filters" aria-label="Filtros de transferencias"
-      onSubmit={event => { event.preventDefault(); setSelected(null); setConsulted({ ...filter }); }}>
+      onSubmit={event => { event.preventDefault(); setSelected(null); setConfirmed(''); setConsulted({ ...filter }); }}>
       {admin && <div><label htmlFor="transfers-filter-branch">Sucursal</label>
         <select id="transfers-filter-branch" value={filter.branch ?? ''}
           onChange={event => setFilter({ ...filter, branch: event.target.value || undefined, direction: event.target.value ? filter.direction : undefined })}>
@@ -443,18 +469,15 @@ function HistoryTable({ history, selected, onOpen }: { history: TransferHistory;
 }
 
 /** The transfer's place in its cycle; closed states say how and why the cycle ended. */
+const STEP_NOTE = { current: ' (estado actual)', done: ' (completado)', pending: ' (pendiente)', skipped: ' (no realizado)' };
+
 function TransferProgress({ transfer }: { transfer: Transfer }) {
-  const closed = CLOSED_BEFORE_DISPATCH.includes(transfer.status);
-  const reached = (transfer.events ?? []).map(event => event.toStatus);
-  const current = TRANSFER_STEPS.indexOf(STEP_OF[transfer.status] ?? transfer.status);
   return <ol className="transfer-steps" aria-label="Avance de la transferencia">
-    {TRANSFER_STEPS.map((step, index) => {
-      const done = closed ? reached.includes(step) : current >= 0 && index <= current;
-      const here = !closed && index === current;
-      return <li key={step} data-state={here ? 'current' : done ? 'done' : 'pending'} aria-current={here ? 'step' : undefined}>
-        {stepLabel(step)}<span className="sr-only">{here ? ' (estado actual)' : done ? ' (completado)' : ' (pendiente)'}</span>
-      </li>;
-    })}
+    {progressSteps(transfer).map(({ step, state }) =>
+      <li key={step} data-state={state} aria-current={state === 'current' ? 'step' : undefined}>
+        {stepLabel(step)}<span className="sr-only">{STEP_NOTE[state]}</span>
+        {state === 'skipped' && <span className="cell-note" aria-hidden="true">No realizado</span>}
+      </li>)}
   </ol>;
 }
 
@@ -475,6 +498,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
   const [quantities, setQuantities] = useState<Record<number, string>>({});
   const [reason, setReason] = useState('');
   const [dispatchDraft, setDispatchDraft] = useState<DispatchDraft>(emptyDispatchDraft);
+  const [departureEdited, setDepartureEdited] = useState(false);
   const [dispatchTouched, setDispatchTouched] = useState(false);
   const where = side(user, transfer);
   const showAvailability = transfer.lines.some(line => line.originAvailableQuantity !== null);
@@ -511,7 +535,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
     </p>
     <TransferProgress transfer={transfer} />
     {closing && <p className="notice-warning">{transferStatusLabel(closing.toStatus)} por {closing.actor.fullName} ({closing.actor.code})
-      el {when(closing.occurredAt)}.{closing.reason ? ` Motivo: ${closing.reason}` : ''} Las existencias no cambiaron.</p>}
+      {' '}{sentence(`el ${when(closing.occurredAt)}`)}{closing.reason ? ` Motivo: ${sentence(closing.reason)}` : ''} Las existencias no cambiaron.</p>}
     <dl className="purchase-facts">
       <div><dt>Solicitada por</dt><dd>{transfer.requestedBy.fullName} ({transfer.requestedBy.code}), {when(transfer.requestedAt)}</dd></div>
       <div><dt>Aprobada por</dt><dd>{transfer.approval
@@ -526,7 +550,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
           <RoutePriorityBadge priority={transfer.dispatch.routePriority} />
           <span className="cell-note">Prioridad al momento del despacho.</span></dd></div>
       </>}
-      {transfer.arrival && <div><dt>Recepción confirmada por</dt><dd>{transfer.arrival.actor.fullName}
+      {transfer.arrival && <div><dt>Recepción confirmada por</dt><dd>{transfer.arrival.actor.fullName}{' '}
         ({transfer.arrival.actor.code}), {when(transfer.arrival.occurredAt)}</dd></div>}
       {transfer.sourceDiscrepancy && <div><dt>Reenvío de</dt><dd>Faltante de <span className="record-code">
         {transfer.sourceDiscrepancy.transferCode}</span></dd></div>}
@@ -588,7 +612,8 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
       onReceive={(lines, shortages) => onReceive(lines, shortages).then(done => { if (done) setMode(null); return done; })}
       onBack={() => setMode(null)} />
     : mode === 'dispatch' ? <TransferDispatchForm transfer={transfer} route={route} routesLoaded={routesLoaded}
-      routesError={routesError} busy={busy} draft={dispatchDraft} onChange={setDispatchDraft} touched={dispatchTouched}
+      routesError={routesError} busy={busy} draft={dispatchDraft} touched={dispatchTouched}
+      onChange={next => { if (next.departedAt !== dispatchDraft.departedAt) setDepartureEdited(true); setDispatchDraft(next); }}
       onTouched={() => setDispatchTouched(true)}
       onDispatch={input => onDispatch(input).then(done => { if (done) setMode(null); return done; })}
       onBack={() => setMode(null)} />
@@ -647,7 +672,9 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
     </form> : <div className="purchase-actions">
       {preparable && <Button disabled={busy} onClick={startPreparation}><ClipboardCheck aria-hidden="true" />
         {transfer.status === 'PREPARING' ? 'Ajustar preparación' : 'Preparar envío'}</Button>}
-      {dispatchable && <Button disabled={busy} onClick={() => setMode('dispatch')}><Truck aria-hidden="true" />Registrar despacho</Button>}
+      {dispatchable && <Button disabled={busy} onClick={() => {
+        setDispatchDraft(previous => freshDeparture(previous, departureEdited, new Date())); setMode('dispatch');
+      }}><Truck aria-hidden="true" />Registrar despacho</Button>}
       {receivable && <Button disabled={busy} onClick={() => { setReceived(previous => previous ?? initialReception(transfer)); setMode('receive'); }}><PackageCheck aria-hidden="true" />Confirmar recepción</Button>}
       {decidable && <Button disabled={busy} onClick={onApprove}><CheckCircle2 aria-hidden="true" />Aprobar transferencia</Button>}
       {decidable && <Button variant="outline" disabled={busy} onClick={() => setMode('reject')}><XCircle aria-hidden="true" />Rechazar</Button>}

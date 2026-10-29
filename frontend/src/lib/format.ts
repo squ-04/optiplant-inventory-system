@@ -7,6 +7,8 @@ const LOCALE = 'es-CO';
 export const dateTime = (value: string) => new Date(value).toLocaleString(LOCALE, {
   day: '2-digit', month: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true,
 });
+/** Ends a sentence with a period, unless it already ends with one (a time in «p. m.» or «a. m.»). */
+export const sentence = (text: string) => text.endsWith('.') ? text : `${text}.`;
 export const clockTime = (value: string) => new Date(value).toLocaleTimeString(LOCALE, { timeStyle: 'medium' });
 
 const ROLES: Record<string, string> = { ADMIN: 'Administrador', MANAGER: 'Gerente', OPERATOR: 'Operador' };

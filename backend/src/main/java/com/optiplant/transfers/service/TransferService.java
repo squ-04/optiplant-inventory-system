@@ -482,9 +482,9 @@ public class TransferService {
                     + " No se registró la recepción.");
             }
             if (base.compareTo((BigDecimal) row.get("dispatched_base_qty")) > 0) {
-                throw new ApiException(409, "RECEIVED_EXCEEDS_DISPATCHED", LineDetail.of(lineNo, "se despacharon "
-                    + plain((BigDecimal) row.get("dispatched_commercial_qty")) + " " + row.get("unit_name_snapshot")
-                    + " y no se puede recibir más de lo enviado.") + " No se registró la recepción.");
+                throw new ApiException(409, "RECEIVED_EXCEEDS_DISPATCHED", LineDetail.of(lineNo, "no se puede recibir más de lo enviado: "
+                    + plain((BigDecimal) row.get("dispatched_commercial_qty")) + " " + row.get("unit_name_snapshot") + ".")
+                    + " No se registró la recepción.");
             }
             lines.add(new ArrivalService.Line(((Number) row.get("dispatch_line_id")).longValue(),
                 ((Number) row.get("product_id")).longValue(), ((Number) row.get("product_unit_id")).longValue(),

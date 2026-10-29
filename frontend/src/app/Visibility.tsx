@@ -134,7 +134,7 @@ export function Visibility({ client, user, onError, revision, visible }: {
         { label: `Movimientos (${snapshot.movements.length})`, content: <Movements branch={snapshot.branch.name} items={snapshot.movements} /> },
       ]} />
     </div>}
-    <p>Los ingresos y retiros se registran en «Movimientos». Compras, ventas y transferencias se incorporan en sus entregas funcionales; no se simulan desde esta pantalla.</p>
+    <p>Esta consulta no modifica existencias: los ingresos y retiros se registran en «Movimientos», y las compras, ventas y transferencias en sus propias vistas.</p>
   </section>;
 }
 

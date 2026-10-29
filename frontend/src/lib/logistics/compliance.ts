@@ -28,12 +28,21 @@ export function deviation(timing: DeliveryTiming): string | null {
 /** An arrival recorded before its departure only comes from data corrected outside the application. */
 export const INCONSISTENT_TIMING = 'La llegada registrada es anterior a la salida; revise los datos del despacho. No cuenta como cumplida';
 
-/** RF-0040: a partial arrival is never presented as a complete delivery. */
-export function deliveryOutcome(timing: DeliveryTiming): string {
+/** RF-0040: a partial arrival is never presented as a complete delivery, and an arrival with nothing as a partial one. */
+export function deliveryOutcome(timing: DeliveryTiming, nothingReceived = false): string {
   if (!timing.consistent) return INCONSISTENT_TIMING;
   if (timing.delivery === null) return timing.overdue ? 'En tránsito, llegada estimada vencida' : 'En tránsito, sin llegada confirmada';
-  if (timing.delivery === 'DISCREPANCY') return 'Recibida con discrepancia: entrega parcial, no cumple';
+  if (timing.delivery === 'DISCREPANCY') {
+    return `Recibida con discrepancia: ${nothingReceived ? 'no llegó mercancía' : 'entrega parcial'}, no cumple`;
+  }
   return timing.onTime ? 'Recibida completa a tiempo: cumple' : 'Recibida completa con retraso: no cumple';
+}
+
+/** What qualifies the real duration of a reception with shortage: nothing received is not a partial arrival. */
+export function arrivalNote(timing: Pick<DeliveryTiming, 'delivery'>, transfer: { lines: { receivedQuantity: string | null }[] }): string {
+  if (timing.delivery !== 'DISCREPANCY') return '';
+  const nothing = transfer.lines.every(line => line.receivedQuantity === null || /^0+(\.0+)?$/.test(line.receivedQuantity));
+  return nothing ? ' sin mercancía recibida' : ' hasta la llegada parcial';
 }
 
 /** RF-0043: the KPI as a percentage, or «No calculable» without confirmed arrivals (never an invented 0 %). */
