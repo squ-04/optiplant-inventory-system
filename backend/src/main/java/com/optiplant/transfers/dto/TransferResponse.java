@@ -13,11 +13,17 @@ import java.util.UUID;
  * destination. {@code unitDivisible} and {@code baseDivisible} let the client apply the preparation's unit rules
  * before sending. {@code approval} is the approval event (RF-0034-CA-01), null until approved. {@code events} is null in
  * listings. {@code dispatch} (RF-0035-CA-01) holds the carrier, the actual departure, the estimated arrival and the route
- * used with its priority at dispatch time, and each line its dispatched quantity; both are null until dispatched. Costs
- * are not exposed: operators do not consult valuation (INC-003/D04).
+ * used with its priority at dispatch time, and each line its dispatched quantity; both are null until dispatched.
+ * {@code arrival} (RF-0036/RF-0037) is the single confirmed arrival, and each line its received and missing quantities;
+ * null until received. {@code inTransitBaseQuantity} is what is still pending in transit for a dispatched line.
+ * {@code discrepancy} (RF-0038/RF-0039) is the shortage alert of a received-with-discrepancy transfer, with its treatment
+ * and the transit loss registered apart; its {@code resends} (detail only) are the new transfers that reference it.
+ * {@code sourceDiscrepancy} is the shortage a resend refers to. Costs are not exposed: operators do not consult
+ * valuation (INC-003/D04).
  */
 public record TransferResponse(UUID externalId, String code, String status, Branch origin, Branch destination,
-                               Instant requestedAt, Person requestedBy, Decision approval, Dispatch dispatch, List<Line> lines,
+                               Instant requestedAt, Person requestedBy, Decision approval, Dispatch dispatch, Decision arrival,
+                               Discrepancy discrepancy, SourceDiscrepancy sourceDiscrepancy, List<Line> lines,
                                List<Event> events) {
     public record Person(String code, String fullName) {}
 
@@ -29,7 +35,20 @@ public record TransferResponse(UUID externalId, String code, String status, Bran
     public record Line(int lineNo, UUID productExternalId, String sku, String productName, String unit, String factor,
                        String baseUnitName, String requestedQuantity, String requestedBaseQuantity, String preparedQuantity,
                        String preparedBaseQuantity, String dispatchedQuantity, String dispatchedBaseQuantity,
-                       String originAvailableQuantity, boolean unitDivisible, boolean baseDivisible) {}
+                       String originAvailableQuantity, boolean unitDivisible, boolean baseDivisible, String receivedQuantity,
+                       String receivedBaseQuantity, String missingQuantity, String missingBaseQuantity,
+                       String inTransitBaseQuantity) {}
+
+    /** {@code treatment}, {@code resolvedAt} and {@code resolvedBy} are null while the alert is open. */
+    public record Discrepancy(UUID externalId, String status, Instant openedAt, String treatment, Instant resolvedAt,
+                              Person resolvedBy, TransitLoss transitLoss, List<Reference> resends) {}
+
+    /** The authorized write-off of the pending transit, registered apart from the alert. */
+    public record TransitLoss(Instant occurredAt, Person authorizedBy, String reason, String evidence) {}
+
+    public record Reference(UUID externalId, String code, String status) {}
+
+    public record SourceDiscrepancy(UUID externalId, UUID transferExternalId, String transferCode) {}
 
     public record Prepared(int lineNo, String quantity, String baseQuantity) {}
 

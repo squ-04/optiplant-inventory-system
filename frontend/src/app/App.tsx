@@ -14,6 +14,7 @@ import { Sales } from './Sales.tsx';
 import { Transfers } from './Transfers.tsx';
 import { Routes } from './Routes.tsx';
 import { ReorderAlerts, reorderAlertsQuery } from './ReorderAlerts.tsx';
+import { ShortageAlerts } from './ShortageAlerts.tsx';
 import { Visibility } from './Visibility.tsx';
 import { AppShell } from '../components/shared/AppShell.tsx';
 import { Button } from '../components/ui/button';
@@ -173,7 +174,8 @@ export function App() {
       {valuationAllowed && <div hidden={current !== 'valuation-title'}><Valuation client={client} user={user} onError={showError}
         revision={revision} visible={current === 'valuation-title'} /></div>}
       {alertsAllowed && <div hidden={current !== 'alerts-title'}><ReorderAlerts client={client} user={user} onError={showError}
-        revision={revision} visible={current === 'alerts-title'} /></div>}
+        revision={revision} visible={current === 'alerts-title'} />
+        <ShortageAlerts client={client} user={user} onError={showError} revision={revision} visible={current === 'alerts-title'} /></div>}
       <div hidden={current !== 'visibility-title'}><Visibility client={client} user={user} onError={showError} revision={revision} visible={current === 'visibility-title'} /></div>
       </>}
     </>}

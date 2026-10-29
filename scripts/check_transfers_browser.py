@@ -1,4 +1,4 @@
-"""Exercise RF-0032–RF-0035 transfers and RF-0041 routes in a real browser against an isolated, disposable Compose stack."""
+"""Exercise RF-0032–RF-0039 transfers and RF-0041 routes in a real browser against an isolated, disposable Compose stack."""
 import http.cookiejar
 import json
 import os
@@ -183,12 +183,97 @@ STAGES = {
       await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
       await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
       await page.getByText('Transportes Andinos').waitFor();
-      await page.getByText('En tránsito: su inventario no cambia hasta que se registre la recepción.').waitFor();
+      await page.getByText('En tránsito: su inventario no cambia hasta que se confirme la recepción.').waitFor();
       await page.getByRole('link', { name: 'Rutas', exact: true }).click();
       await page.getByRole('region', { name: 'Prioridad alta' }).locator('.record-code', { hasText: 'R-NORTE-SUR' }).waitFor();
       check(await page.getByRole('button', { name: 'Nueva ruta' }).count() === 0, 'El operador puede registrar rutas');
       await logout();
       return 'el destino ve transportista, llegada estimada y el tránsito sin ingreso; consulta la ruta sin poder modificarla';""",
+    "destino-recibe-cero": """
+      await login(config.destination);
+      await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
+      await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
+      await page.getByRole('button', { name: 'Confirmar recepción', exact: true }).click();
+      const received = page.getByLabel(config.sku + ' Helecho de prueba (caja)');
+      check(await received.inputValue() === '1', 'La recepción no parte de lo enviado');
+      await page.getByText('Llegó todo lo enviado: la transferencia quedará «Recibida completa».').waitFor();
+      await received.fill('2');
+      await page.getByText(/No puede superar lo enviado: 1,000 caja/).waitFor();
+      check(await page.getByRole('button', { name: 'Confirmar recepción' }).isDisabled(), 'Se puede recibir un sobrante');
+      // RF-0037-CA-04: nothing arrived. What was typed survives going back while the detail stays open.
+      await received.fill('0');
+      await page.getByText(/Faltan productos en 1 línea/).waitFor();
+      await page.getByRole('button', { name: 'Volver sin confirmar', exact: true }).click();
+      await page.getByRole('button', { name: 'Confirmar recepción', exact: true }).click();
+      check(await received.inputValue() === '0', 'La recepción pierde lo escrito al volver');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(300);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      check(overflow <= 0, 'Desplazamiento horizontal del documento en móvil: ' + overflow + ' px');
+      await page.screenshot({ path: config.screenshot.replace('.png', '-recepcion.png'), fullPage: true });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.locator('form.transfer-receive').getByRole('button', { name: 'Confirmar recepción', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Confirmar recepción', exact: true }).click();
+      await page.getByText(/^TR-000001 recibida con discrepancia/).waitFor();
+      await page.getByRole('heading', { name: 'Faltante de la recepción' }).waitFor();
+      await page.getByText('Faltan 1,000 caja').waitFor();
+      await page.getByText('Alerta abierta').first().waitFor();
+      check(await page.getByRole('button', { name: 'Confirmar recepción' }).count() === 0, 'Se puede recibir dos veces');
+      check(await page.getByRole('button', { name: 'Resuelto' }).count() === 0, 'El operador puede resolver la alerta');
+      await logout();
+      return 'el destino no puede recibir 2 de 1 caja enviada, confirma una llegada de 0 (lo escrito se conserva) y queda «Recibida con discrepancia» con alerta abierta';""",
+    "gerente-destino-resuelve": """
+      await login(config.destinationManager);
+      await page.getByRole('link', { name: /^Alertas/ }).click();
+      await page.getByRole('heading', { name: 'Faltantes de transferencias', level: 2 }).waitFor();
+      await page.getByRole('button', { name: 'Resolver la alerta de TR-000001', exact: true }).click();
+      const form = page.getByRole('form', { name: 'Resolver la alerta de TR-000001' });
+      await form.getByRole('button', { name: 'Resuelto', exact: true }).click();
+      await page.getByText('Seleccione el tratamiento para marcar la alerta como resuelta.').waitFor();
+      await form.getByRole('radio', { name: /Reclamación/ }).check();
+      await form.getByRole('button', { name: 'Resuelto', exact: true }).click();
+      await page.getByText(/^Alerta de faltante de TR-000001 resuelta con tratamiento reclamación/).waitFor();
+      await page.getByText('No hay faltantes pendientes de resolver.').waitFor();
+      await page.getByRole('radio', { name: 'Resueltas' }).check();
+      await page.getByText(/Reclamación: Gerente Sur/).waitFor();
+      await logout();
+      return 'el gerente de destino no resuelve sin tratamiento; resuelve con reclamación y la alerta pasa a resueltas con responsable';""",
+    "gerente-origen-pierde": """
+      await login(config.originManager);
+      await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
+      await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
+      await page.getByText('Reclamación', { exact: true }).waitFor();
+      await page.getByText(/En tránsito: 12,000 unidad/).waitFor();
+      await page.getByRole('button', { name: 'Registrar pérdida en tránsito', exact: true }).click();
+      await page.getByRole('button', { name: 'Registrar pérdida', exact: true }).click();
+      await page.getByText('Indique el motivo de la pérdida.').waitFor();
+      await page.getByLabel('Motivo', { exact: true }).fill('Caja extraviada en ruta');
+      await page.getByLabel('Evidencia', { exact: true }).fill('Acta 15 del transportista');
+      await page.getByRole('button', { name: 'Registrar pérdida', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Registrar pérdida', exact: true }).click();
+      await page.getByText(/^Pérdida en tránsito de TR-000001 registrada/).waitFor();
+      await page.getByText(/Autorizada por Gerente Norte/).waitFor();
+      await page.getByText(/En tránsito: 0,000 unidad/).waitFor();
+      check(await page.getByRole('button', { name: 'Registrar pérdida en tránsito' }).count() === 0, 'Se puede registrar la pérdida dos veces');
+      await logout();
+      return 'el gerente de origen ve la reclamación y el tránsito pendiente; exige motivo y registra la pérdida una sola vez';""",
+    "destino-solicita-reenvio": """
+      await login(config.destination);
+      await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
+      await page.locator('#transfers-filter-shortage').selectOption({ label: 'Alerta de faltante resuelta' });
+      await page.getByRole('button', { name: 'Consultar', exact: true }).click();
+      await page.getByText(/Faltante resuelto: reclamación/).waitFor();
+      await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
+      await page.getByRole('button', { name: 'Solicitar reenvío del faltante', exact: true }).click();
+      await page.getByText('Reenvío del faltante de TR-000001', { exact: false }).first().waitFor();
+      const line = page.locator('#transfer-editor fieldset.purchase-line').first();
+      check(await line.getByLabel('Cantidad').inputValue() === '1', 'El reenvío no propone la cantidad faltante');
+      await page.locator('#transfer-editor').getByRole('button', { name: 'Solicitar transferencia', exact: true }).click();
+      await page.getByText(/como reenvío del faltante de TR-000001/).waitFor();
+      await page.getByRole('heading', { name: 'Transferencia TR-000002' }).waitFor();
+      await page.getByText('Reenvío de', { exact: true }).waitFor();
+      await logout();
+      return 'el destino filtra la alerta resuelta y solicita el reenvío de 1 caja como TR-000002 vinculada al faltante de TR-000001';""",
 }
 
 
@@ -221,8 +306,8 @@ def main():
     backend_port, frontend_port = available_port(), available_port()
     while frontend_port == backend_port:
         frontend_port = available_port()
-    admin_password, admin_new, temporary, origin_password, manager_password, destination_password = (
-        secrets.token_urlsafe(30) for _ in range(6))
+    (admin_password, admin_new, temporary, origin_password, manager_password, destination_password,
+     destination_manager_password) = (secrets.token_urlsafe(30) for _ in range(7))
     values = {
         "POSTGRES_DB": "optiplant", "POSTGRES_USER": "optiplant_owner",
         "POSTGRES_PASSWORD": secrets.token_urlsafe(36), "APP_DB_PASSWORD": secrets.token_urlsafe(36),
@@ -249,6 +334,7 @@ def main():
               "admin": {"code": "ADMIN", "password": admin_new},
               "originManager": {"code": "GER-NORTE", "password": manager_password},
               "destination": {"code": "OP-SUR", "password": destination_password},
+              "destinationManager": {"code": "GER-SUR", "password": destination_manager_password},
               "screenshot": str(directory / "transferencias-movil.png")}
 
     def stage(name):
@@ -280,7 +366,8 @@ def main():
         clients = {}
         for code, name, role, branch, password in (("OP-NORTE", "Operador Norte", "OPERATOR", north, origin_password),
                                                    ("GER-NORTE", "Gerente Norte", "MANAGER", north, manager_password),
-                                                   ("OP-SUR", "Operador Sur", "OPERATOR", south, destination_password)):
+                                                   ("OP-SUR", "Operador Sur", "OPERATOR", south, destination_password),
+                                                   ("GER-SUR", "Gerente Sur", "MANAGER", south, destination_manager_password)):
             expect(admin.request("/users", "POST", {"code": code, "fullName": name, "role": role, "branchExternalId": branch,
                                                     "temporaryPassword": temporary}), 201, "alta " + code)
             user = Client(base)
@@ -304,7 +391,7 @@ def main():
                        text=True, check=True, timeout=60)
         for name in STAGES:
             stage(name)
-        print(f"Navegador OK: {len(STAGES)} escenarios de transferencias y rutas (RF-0032–RF-0035, RF-0041).")
+        print(f"Navegador OK: {len(STAGES)} escenarios de transferencias y rutas (RF-0032–RF-0039, RF-0041).")
         return 0
     except (AssertionError, OSError, RuntimeError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Comprobación FALLÓ: {error}", file=sys.stderr)

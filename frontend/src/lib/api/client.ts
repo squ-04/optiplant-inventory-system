@@ -190,7 +190,8 @@ export interface PurchaseHistoryFilter { branch?: string; supplier?: string; pro
 
 export type { TransferStatus };
 export interface TransferLineInput { product: string; unit: string; quantity: string }
-export interface TransferInput { origin: string; lines: TransferLineInput[] }
+/** `sourceDiscrepancy` makes the request the resend of a shortage (RF-0039-CA-02). */
+export interface TransferInput { origin: string; lines: TransferLineInput[]; sourceDiscrepancy?: string }
 /**
  * RF-0033-CA-02: requested and prepared quantities stay apart; the prepared ones are null until the origin prepares.
  * `originAvailableQuantity` (base units) is sent only to the origin branch and administrators.
@@ -203,6 +204,21 @@ export interface TransferLine {
   dispatchedQuantity: string | null; dispatchedBaseQuantity: string | null; originAvailableQuantity: string | null;
   /** Whether the requested unit and the base unit admit fractions, so preparation applies the server's rules. */
   unitDivisible: boolean; baseDivisible: boolean;
+  /** RF-0036/RF-0037: received and missing (dispatched − received) quantities, null until the arrival. */
+  receivedQuantity: string | null; receivedBaseQuantity: string | null; missingQuantity: string | null;
+  missingBaseQuantity: string | null;
+  /** Base quantity still pending in transit for a dispatched line; null before the dispatch. */
+  inTransitBaseQuantity: string | null;
+}
+export type ShortageTreatment = 'RESEND' | 'ADJUSTMENT' | 'CLAIM';
+export const SHORTAGE_TREATMENTS: ShortageTreatment[] = ['RESEND', 'ADJUSTMENT', 'CLAIM'];
+/** RF-0038/RF-0039: the shortage alert, its treatment and the transit loss registered apart. */
+export interface TransferDiscrepancy {
+  externalId: string; status: 'OPEN' | 'RESOLVED'; openedAt: string; treatment: ShortageTreatment | null;
+  resolvedAt: string | null; resolvedBy: PurchasePerson | null;
+  transitLoss: { occurredAt: string; authorizedBy: PurchasePerson; reason: string; evidence: string } | null;
+  /** New transfers that reference this shortage; null in listings. */
+  resends: { externalId: string; code: string; status: TransferStatus }[] | null;
 }
 export interface TransferPrepared { lineNo: number; quantity: string; baseQuantity: string }
 export interface TransferEvent {
@@ -213,7 +229,13 @@ export interface Transfer {
   externalId: string; code: string; status: TransferStatus; origin: Branch; destination: Branch; requestedAt: string;
   requestedBy: PurchasePerson; approval: { occurredAt: string; actor: PurchasePerson } | null;
   /** RF-0035-CA-01: carrier, actual departure, estimated arrival and the route's priority at dispatch; null until then. */
-  dispatch: TransferDispatch | null; lines: TransferLine[];
+  dispatch: TransferDispatch | null;
+  /** RF-0036/RF-0037: the single confirmed arrival; null until received. */
+  arrival: { occurredAt: string; actor: PurchasePerson } | null;
+  discrepancy: TransferDiscrepancy | null;
+  /** The shortage a resend refers to. */
+  sourceDiscrepancy: { externalId: string; transferExternalId: string; transferCode: string } | null;
+  lines: TransferLine[];
   /** State history; null in listings. */
   events: TransferEvent[] | null;
 }
@@ -228,7 +250,13 @@ export interface Route { externalId: string; code: string; origin: Branch; desti
 export interface RouteInput { code: string; origin: string; destination: string; priority: RoutePriority }
 export interface RouteUpdate { code: string; priority: RoutePriority; active: boolean }
 export interface TransferHistory { readAt: string; branch: Branch | null; items: Transfer[] }
-export interface TransferHistoryFilter { branch?: string; direction?: 'INCOMING' | 'OUTGOING'; status?: TransferStatus; limit?: number }
+export interface TransferHistoryFilter {
+  branch?: string; direction?: 'INCOMING' | 'OUTGOING'; status?: TransferStatus;
+  /** RF-0038: only transfers with a shortage alert in that state, newest alert first. */
+  discrepancy?: 'OPEN' | 'RESOLVED' | 'ALL'; limit?: number;
+}
+export interface TransferReceptionLine { lineNo: number; quantity: string }
+export interface TransitLossInput { reason: string; evidence: string }
 
 /** RF-0027/RF-0029: a sale line; the gross price comes from the chosen list, only the line discount is captured. */
 export interface SaleLineInput { product: string; unit: string; quantity: string; discountPercent: string }
@@ -459,8 +487,10 @@ function transferLineDto(value: unknown): TransferLine {
   if (!record(value) || !count(value.lineNo) || !uuid(value.productExternalId) ||
       !['sku', 'productName', 'unit', 'baseUnitName'].every(k => text(value[k])) ||
       !['factor', 'requestedQuantity', 'requestedBaseQuantity'].every(k => decimal(value[k])) ||
-      !['preparedQuantity', 'preparedBaseQuantity', 'dispatchedQuantity', 'dispatchedBaseQuantity', 'originAvailableQuantity']
+      !['preparedQuantity', 'preparedBaseQuantity', 'dispatchedQuantity', 'dispatchedBaseQuantity', 'originAvailableQuantity',
+        'receivedQuantity', 'receivedBaseQuantity', 'missingQuantity', 'missingBaseQuantity', 'inTransitBaseQuantity']
         .every(k => optionalDecimal(value[k])) ||
+      (value.receivedQuantity === null) !== (value.missingQuantity === null) ||
       typeof value.unitDivisible !== 'boolean' || typeof value.baseDivisible !== 'boolean' ||
       (value.preparedQuantity === null) !== (value.preparedBaseQuantity === null) ||
       (value.dispatchedQuantity === null) !== (value.dispatchedBaseQuantity === null)) throw invalid();
@@ -477,6 +507,23 @@ function transferEventDto(value: unknown): TransferEvent {
   });
   return { ...(value as unknown as TransferEvent), preparation };
 }
+function discrepancyDto(value: unknown): TransferDiscrepancy {
+  if (!record(value) || !uuid(value.externalId) || (value.status !== 'OPEN' && value.status !== 'RESOLVED')
+      || !instant(value.openedAt)) throw invalid();
+  // The alert is open with no resolution, or resolved with its treatment, author and date (V3 CHECK).
+  const resolved = value.status === 'RESOLVED';
+  if (resolved !== SHORTAGE_TREATMENTS.includes(value.treatment as ShortageTreatment) || (!resolved && value.treatment !== null)
+      || (resolved ? !instant(value.resolvedAt) : value.resolvedAt !== null) || (!resolved && value.resolvedBy !== null)) throw invalid();
+  if (resolved) personDto(value.resolvedBy);
+  const loss = value.transitLoss;
+  if (loss !== null && (!record(loss) || !instant(loss.occurredAt) || !text(loss.reason) || !text(loss.evidence))) throw invalid();
+  if (loss !== null) personDto((loss as Record<string, unknown>).authorizedBy);
+  const resends = value.resends === null ? null : listDto(value.resends, item => {
+    if (!record(item) || !uuid(item.externalId) || !text(item.code) || !isTransferStatus(item.status)) throw invalid();
+    return item as unknown as { externalId: string; code: string; status: TransferStatus };
+  });
+  return { ...(value as unknown as TransferDiscrepancy), resends };
+}
 function transferDto(value: unknown): Transfer {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !isTransferStatus(value.status) ||
       !instant(value.requestedAt)) throw invalid();
@@ -489,6 +536,11 @@ function transferDto(value: unknown): Transfer {
       || !instant(value.dispatch.estimatedArrivalAt) || !text(value.dispatch.routeCode)
       || !isRoutePriority(value.dispatch.routePriority))) throw invalid();
   if (value.dispatch !== null) personDto((value.dispatch as Record<string, unknown>).actor);
+  if (value.arrival !== null && (!record(value.arrival) || !instant(value.arrival.occurredAt))) throw invalid();
+  if (value.arrival !== null) personDto((value.arrival as Record<string, unknown>).actor);
+  if (value.discrepancy !== null) discrepancyDto(value.discrepancy);
+  if (value.sourceDiscrepancy !== null && (!record(value.sourceDiscrepancy) || !uuid(value.sourceDiscrepancy.externalId)
+      || !uuid(value.sourceDiscrepancy.transferExternalId) || !text(value.sourceDiscrepancy.transferCode))) throw invalid();
   return { ...(value as unknown as Transfer), lines: listDto(value.lines, transferLineDto),
     events: value.events === null ? null : listDto(value.events, transferEventDto) };
 }
@@ -878,6 +930,24 @@ export class ApiClient {
     return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/dispatch`, 'POST', input, undefined,
       { 'Idempotency-Key': idempotencyKey }));
   }
+  /**
+   * RF-0036/RF-0037: the destination operator confirms the single arrival with the quantity received per line (0 is
+   * valid); the same key replays a confirmation whose outcome is unknown without entering stock again.
+   */
+  async receiveTransfer(id: string, lines: TransferReceptionLine[], idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/receive`, 'POST', { lines }, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0038-CA-02: a manager of the origin or destination marks the shortage alert «Resuelto» with its treatment. */
+  async resolveShortage(id: string, treatment: ShortageTreatment, idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/discrepancy/resolve`, 'POST', { treatment },
+      undefined, { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0039-CA-02: the origin manager writes off the pending transit of a shortage once, with reason and evidence. */
+  async writeOffTransit(id: string, input: TransitLossInput, idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/discrepancy/transit-loss`, 'POST', input,
+      undefined, { 'Idempotency-Key': idempotencyKey }));
+  }
   /** RF-0041: routes in classification order; local profiles receive the active routes of their branch. */
   async routes(priority?: RoutePriority): Promise<Route[]> {
     return listDto(await this.request(`/logistics/routes${priority ? `?priority=${priority}` : ''}`), routeDto);
@@ -894,7 +964,7 @@ export class ApiClient {
   /** Transfers of a branch as origin, destination or both, or of the network for administrators; newest first. */
   async transfers(filter: TransferHistoryFilter = {}): Promise<TransferHistory> {
     const query = new URLSearchParams();
-    for (const key of ['branch', 'direction', 'status'] as const) if (filter[key]) query.set(key, filter[key]);
+    for (const key of ['branch', 'direction', 'status', 'discrepancy'] as const) if (filter[key]) query.set(key, filter[key]);
     if (filter.limit !== undefined) query.set('limit', String(filter.limit));
     const suffix = query.size > 0 ? `?${query}` : '';
     const value = await this.request(`/transfers${suffix}`);

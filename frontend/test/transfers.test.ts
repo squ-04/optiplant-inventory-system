@@ -5,7 +5,7 @@ import {
   canCancel, canDecide, canPrepare, cancelReasonRequired, checkPreparation, compareDecimal, multiply, preparationMessage, side,
   stepLabel, transferStatusLabel,
 } from '../src/lib/transfers/transfers.ts';
-import { TRANSFER_STATUS, TRANSFER_STATUSES, TRANSFER_STEPS } from '../src/lib/transfers/statuses.ts';
+import { STEP_OF, TRANSFER_STATUS, TRANSFER_STATUSES, TRANSFER_STEPS } from '../src/lib/transfers/statuses.ts';
 
 const origin = { externalId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', code: 'A', name: 'Medellín', active: true };
 const destination = { externalId: '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e', code: 'B', name: 'Bogotá', active: true };
@@ -14,11 +14,13 @@ const line = {
   lineNo: 1, productExternalId: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f', sku: 'MAC-1', productName: 'Maceta', unit: 'caja',
   factor: '12', baseUnitName: 'unidad', requestedQuantity: '2.000', requestedBaseQuantity: '24.000', preparedQuantity: null,
   preparedBaseQuantity: null, dispatchedQuantity: null, dispatchedBaseQuantity: null, originAvailableQuantity: null,
-  unitDivisible: false, baseDivisible: false,
+  unitDivisible: false, baseDivisible: false, receivedQuantity: null, receivedBaseQuantity: null, missingQuantity: null,
+  missingBaseQuantity: null, inTransitBaseQuantity: null,
 };
 const requested = {
   externalId: '4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a', code: 'TR-000001', status: 'REQUESTED', origin, destination,
-  requestedAt: '2026-10-28T15:00:00Z', requestedBy: person, approval: null, dispatch: null, lines: [line],
+  requestedAt: '2026-10-28T15:00:00Z', requestedBy: person, approval: null, dispatch: null, arrival: null, discrepancy: null,
+  sourceDiscrepancy: null, lines: [line],
   events: [{ fromStatus: null, toStatus: 'REQUESTED', occurredAt: '2026-10-28T15:00:00Z', actor: person, reason: null, preparation: null }],
 };
 const preparing = {
@@ -125,10 +127,12 @@ test('transfer statuses are declared once and every view derives from them', () 
     assert.ok(TRANSFER_STATUS[status].filterLabel.length > 0);
     assert.equal(transferStatusLabel(status), TRANSFER_STATUS[status].label);
   }
-  assert.deepEqual(TRANSFER_STEPS, ['REQUESTED', 'PREPARING', 'APPROVED', 'IN_TRANSIT']);
+  assert.deepEqual(TRANSFER_STEPS, ['REQUESTED', 'PREPARING', 'APPROVED', 'IN_TRANSIT', 'RECEIVED_COMPLETE']);
   assert.equal(stepLabel('PREPARING'), TRANSFER_STATUS.PREPARING.label);
-  // The fourth step is the dispatch that RF-0035 will record.
+  // The fourth step is the dispatch (RF-0035); the fifth, the single reception of both received states (RF-0036/RF-0037).
   assert.equal(stepLabel('IN_TRANSIT'), 'Despacho');
+  assert.equal(stepLabel('RECEIVED_COMPLETE'), 'Recepción');
+  assert.equal(STEP_OF.RECEIVED_DISCREPANCY, 'RECEIVED_COMPLETE');
 });
 
 function harness(responses: Response[]) {
