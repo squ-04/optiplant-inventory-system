@@ -9,7 +9,7 @@ import { ZONE_NOTE, bogotaDateTime, deliveryOutcome, deviation, duration } from 
 export function TransferTiming({ transfer }: { transfer: Transfer }) {
   const { dispatch, arrival, timing } = transfer;
   if (!dispatch || !timing) return null;
-  const late = timing.overdue || (timing.onTime === false) || !timing.consistent;
+  const needsAttention = timing.overdue || (timing.onTime === false) || !timing.consistent;
   return <section className="transfer-timing" aria-labelledby={`timing-${transfer.externalId}`}>
     <h4 id={`timing-${transfer.externalId}`}><Clock aria-hidden="true" />Tiempo de entrega</h4>
     <p>Salida real: {bogotaDateTime(dispatch.departedAt)}</p>
@@ -24,7 +24,7 @@ export function TransferTiming({ transfer }: { transfer: Transfer }) {
             : !timing.consistent ? 'No calculable: llegada anterior a la salida'
             : `${duration(timing.actualSeconds)}${timing.delivery === 'DISCREPANCY' ? ' hasta la llegada parcial' : ''}`}</dd></div></dl></div>
     </div>
-    <p className={late ? 'notice-warning' : 'text-muted-foreground'}>{deliveryOutcome(timing)}
+    <p className={needsAttention ? 'notice-warning' : 'text-muted-foreground'}>{deliveryOutcome(timing)}
       {deviation(timing) && <>. {deviation(timing)}</>}.</p>
     <p className="cell-note">{ZONE_NOTE}. La resolución de una alerta de faltante no cambia estos tiempos.</p>
   </section>;
