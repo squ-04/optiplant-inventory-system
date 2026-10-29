@@ -14,6 +14,7 @@ import { CLOSED_BEFORE_DISPATCH, STEP_OF, TRANSFER_STATUS, TRANSFER_STATUSES } f
 import { canDispatch, routeFor } from '../lib/logistics/routes.ts';
 import { RoutePriorityBadge } from '../components/shared/RoutePriorityBadge.tsx';
 import { TransferDispatchForm, emptyDispatchDraft } from './TransferDispatchForm.tsx';
+import { TransferTiming } from './TransferTiming.tsx';
 import { TransferReceptionForm, initialReception } from './TransferReceptionForm.tsx';
 import { TransferShortagePanel } from './TransferShortagePanel.tsx';
 import type { DispatchDraft } from '../lib/logistics/routes.ts';
@@ -530,6 +531,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
       {transfer.sourceDiscrepancy && <div><dt>Reenvío de</dt><dd>Faltante de <span className="record-code">
         {transfer.sourceDiscrepancy.transferCode}</span></dd></div>}
     </dl>
+    <TransferTiming transfer={transfer} />
 
     <div className="table-scroll" role="region" aria-label={`Productos de ${transfer.code}`} tabIndex={0}>
       <Table className="purchase-lines-table">

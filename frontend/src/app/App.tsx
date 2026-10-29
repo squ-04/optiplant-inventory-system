@@ -13,6 +13,7 @@ import { PriceLists } from './PriceLists.tsx';
 import { Sales } from './Sales.tsx';
 import { Transfers } from './Transfers.tsx';
 import { Routes } from './Routes.tsx';
+import { LogisticsCompliance } from './LogisticsCompliance.tsx';
 import { ReorderAlerts, reorderAlertsQuery } from './ReorderAlerts.tsx';
 import { ShortageAlerts } from './ShortageAlerts.tsx';
 import { Visibility } from './Visibility.tsx';
@@ -21,7 +22,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { PasswordField } from '../components/shared/PasswordField.tsx';
 import { alertsNavigationLabel, restockNotice } from '../lib/inventory/alerts.ts';
-import { ArrowLeftRight, BellRing, Route as RouteIcon, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
+import { ArrowLeftRight, BellRing, Gauge, Route as RouteIcon, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -95,6 +96,7 @@ export function App() {
   // the indicator of their local catalog instead.
   const alertsAllowed = user !== null && !user.mustChangePassword && user.role !== 'OPERATOR';
   const valuationAllowed = alertsAllowed;
+  const complianceAllowed = alertsAllowed;
   const alerts = useQuery(reorderAlertsQuery(client, '', false, alertsAllowed));
   const activeAlerts = alertsAllowed ? alerts.data?.activeCount ?? 0 : 0;
 
@@ -112,6 +114,8 @@ export function App() {
       { id: 'transfers-title', label: 'Transferencias', icon: Truck },
       // RF-0041 (INC-003/D06): every profile consults routes; only administrators maintain them.
       { id: 'routes-title', label: 'Rutas', icon: RouteIcon },
+      // RF-0043 (§5.2): logistics reports for managers (own branch) and administrators; operators consult each transfer.
+      ...(complianceAllowed ? [{ id: 'compliance-title', label: 'Cumplimiento', icon: Gauge }] : []),
       // RF-0030 (INC-003/D06): every profile consults price lists; only administrators maintain them.
       { id: 'prices-title', label: 'Precios', icon: Tags },
       // RF-0026 (INC-003/D04): valuation is for the branch manager and administrators, never operators.
@@ -169,6 +173,8 @@ export function App() {
         revision={revision} visible={current === 'transfers-title'} /></div>
       <div hidden={current !== 'routes-title'}><Routes client={client} user={user} onError={showError}
         revision={revision} visible={current === 'routes-title'} /></div>
+      {complianceAllowed && <div hidden={current !== 'compliance-title'}><LogisticsCompliance client={client} user={user}
+        onError={showError} revision={revision} visible={current === 'compliance-title'} /></div>}
       <div hidden={current !== 'prices-title'}><PriceLists client={client} user={user} onError={showError}
         revision={revision} visible={current === 'prices-title'} /></div>
       {valuationAllowed && <div hidden={current !== 'valuation-title'}><Valuation client={client} user={user} onError={showError}
