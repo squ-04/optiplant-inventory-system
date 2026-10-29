@@ -141,11 +141,35 @@ class RouteAndDispatchHttpTest {
         assertThat(admin.get("/logistics/routes?priority=URGENT").statusCode()).isEqualTo(400);
     }
 
+    @Test void concurrentRegistrationsOfOneTrajectoryOrCodeCreateOneRoute() throws Exception {
+        int before = routes();
+        // Two administrators in their own sessions: one session cannot run two writes at once (its CSRF token rotates).
+        Browser admin2 = account("ADMIN", null);
+        // Same trajectory with different codes, at the same time: one route, one ROUTE_EXISTS.
+        List<HttpResponse<String>> pair = raceResponses(() -> route("P1", a, b, "HIGH"),
+            () -> route(admin2, "P2", a, b, "LOW"));
+        assertThat(pair.stream().map(HttpResponse::statusCode).toList()).containsExactlyInAnyOrder(201, 409);
+        assertThat(pair.stream().filter(r -> r.statusCode() == 409).map(r -> read(r).get("code").asText()).toList())
+            .containsExactly("ROUTE_EXISTS");
+        // Same code on different trajectories, at the same time: one route, one CODE_EXISTS.
+        List<HttpResponse<String>> code = raceResponses(() -> route("SAME", b, a, "HIGH"),
+            () -> route(admin2, "SAME", a, c, "LOW"));
+        assertThat(code.stream().map(HttpResponse::statusCode).toList()).containsExactlyInAnyOrder(201, 409);
+        assertThat(code.stream().filter(r -> r.statusCode() == 409).map(r -> read(r).get("code").asText()).toList())
+            .containsExactly("CODE_EXISTS");
+        assertThat(routes()).isEqualTo(before + 2);
+    }
+
     // ---------------------------------------------------------------- RF-0035 dispatch
 
     @Test void originOperatorDispatchesIntoTransitAtTheFrozenOriginCost() throws Exception {
         created(route("AB", a, b, "HIGH"));
         String id = approved();
+        // Before the dispatch the contract sends its fields as null, never omits them.
+        JsonNode pending = read(originOperator.get("/transfers/" + id));
+        assertThat(pending.has("dispatch") && pending.get("dispatch").isNull()).isTrue();
+        assertThat(pending.at("/lines/0").has("dispatchedQuantity") && pending.at("/lines/0/dispatchedQuantity").isNull()).isTrue();
+        assertThat(pending.at("/lines/0/dispatchedBaseQuantity").isNull()).isTrue();
         // Minute precision, as the form captures it: the approval's own minute is accepted.
         OffsetDateTime departed = OffsetDateTime.now(ZoneOffset.ofHours(-5)).truncatedTo(ChronoUnit.MINUTES);
         OffsetDateTime estimated = departed.plusHours(26);
@@ -264,6 +288,9 @@ class RouteAndDispatchHttpTest {
         assertError(originOperator.post("/transfers/" + id + "/dispatch", dispatch("X", now, now.minusMinutes(1))), 400, "VALIDATION_FAILED");
         assertError(originOperator.post("/transfers/" + id + "/dispatch", dispatch("X", now.plusHours(1), now.plusHours(3))),
             400, "VALIDATION_FAILED");
+        // Beyond the clock tolerance a departure is future; the tolerance itself is checked by the valid dispatch below.
+        assertError(originOperator.post("/transfers/" + id + "/dispatch", dispatch("X", now.plusMinutes(10), now.plusHours(3))),
+            400, "VALIDATION_FAILED");
         assertError(originOperator.post("/transfers/" + id + "/dispatch", dispatch("X", now.minusDays(2), now.plusHours(3))),
             400, "VALIDATION_FAILED");
         assertError(originOperator.post("/transfers/" + id + "/dispatch", Map.of("carrier", "X", "departedAt", "mañana",
@@ -291,16 +318,17 @@ class RouteAndDispatchHttpTest {
         assertThat(originManager.post("/transfers/" + zero + "/approve", Map.of()).statusCode()).isEqualTo(200);
         assertError(originOperator.post("/transfers/" + zero + "/dispatch", dispatchNow("X")), 409, "NOTHING_TO_DISPATCH");
 
-        // The valid attempt still succeeds after every rejection.
-        assertThat(originOperator.post("/transfers/" + id + "/dispatch", dispatchNow("Transportes Andinos")).statusCode()).isEqualTo(200);
+        // The valid attempt still succeeds after every rejection, even from a device clock 3 minutes ahead of the server.
+        OffsetDateTime ahead = OffsetDateTime.now(ZoneOffset.ofHours(-5)).plusMinutes(3);
+        HttpResponse<String> done = originOperator.post("/transfers/" + id + "/dispatch", dispatch("Transportes Andinos", ahead,
+            ahead.plusHours(4)));
+        assertThat(done.statusCode()).as(done.body()).isEqualTo(200);
     }
 
     @Test void aLineAtZeroIsKeptWithoutMovementAndADepletingExitCarriesItsRoundingIntoTransit() throws Exception {
         created(route("AB", a, b, "HIGH"));
         // 3 units valued 1: average 0.333333; sending all 3 withdraws the whole value, 0.999999 + 0.000001.
-        jdbc.update("UPDATE inventory_balance SET physical_qty=3,inventory_value=1,average_base_cost=0.333333 "
-            + "WHERE branch_id=(SELECT id FROM identity_branch WHERE external_id=?) "
-            + "AND product_id=(SELECT id FROM catalog_product WHERE external_id=?)", a, other);
+        balance(other, "3", "1", "0.333333");
         String id = requestedWith(line(product, "caja", "1"), line(other, "unidad", "3"));
         assertThat(originOperator.post("/transfers/" + id + "/prepare", prepared(1, "0", 2, "3")).statusCode()).isEqualTo(200);
         assertThat(originManager.post("/transfers/" + id + "/approve", Map.of()).statusCode()).isEqualTo(200);
@@ -320,7 +348,33 @@ class RouteAndDispatchHttpTest {
             .isEqualTo("0.000|0.000000000000000000");
     }
 
+    @Test void eachDepletingLineKeepsItsOwnRoundingWhateverTheProductOrder() throws Exception {
+        created(route("AB", a, b, "HIGH"));
+        // Line 1 is the product created last: the ledger locks in product order, the lines follow the transfer.
+        balance(other, "3", "1", "0.333333");   // 3 × 0.333333 = 0.999999: rounding +0.000001
+        balance(product, "3", "2", "0.666667"); // 3 × 0.666667 = 2.000001: rounding −0.000001
+        String id = requestedWith(line(other, "unidad", "3"), line(product, "unidad", "3"));
+        assertThat(originOperator.post("/transfers/" + id + "/prepare", prepared(1, "3", 2, "3")).statusCode()).isEqualTo(200);
+        assertThat(originManager.post("/transfers/" + id + "/approve", Map.of()).statusCode()).isEqualTo(200);
+
+        HttpResponse<String> done = originOperator.post("/transfers/" + id + "/dispatch", dispatchNow("Mensajería"));
+        assertThat(done.statusCode()).as(done.body()).isEqualTo(200);
+        assertThat(jdbc.queryForList("SELECT dl.base_value||'|'||dl.rounding_value FROM logistics_dispatch_line dl "
+            + "JOIN transfers_line l ON l.id=dl.transfer_line_id JOIN transfers_transfer t ON t.id=l.transfer_id "
+            + "WHERE t.external_id=?::uuid ORDER BY l.line_no", String.class, id))
+            .containsExactly("0.999999000000000000|0.000001000000000000", "2.000001000000000000|-0.000001000000000000");
+        assertThat(transit(id)).containsExactly("3.000|0.999999000000000000|0.000001000000000000",
+            "3.000|2.000001000000000000|-0.000001000000000000");
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    /** Overwrites the origin balance of a product to set up a valuation edge case. */
+    void balance(UUID item, String quantity, String value, String average) {
+        jdbc.update("UPDATE inventory_balance SET physical_qty=?::numeric,inventory_value=?::numeric,average_base_cost=?::numeric "
+            + "WHERE branch_id=(SELECT id FROM identity_branch WHERE external_id=?) "
+            + "AND product_id=(SELECT id FROM catalog_product WHERE external_id=?)", quantity, value, average, a, item);
+    }
 
     UUID branch(String code) {
         UUID id = UUID.randomUUID();
@@ -363,7 +417,11 @@ class RouteAndDispatchHttpTest {
     }
 
     HttpResponse<String> route(String code, UUID origin, UUID destination, String priority) throws Exception {
-        return admin.post("/logistics/routes", Map.of("code", code + suffix, "origin", origin.toString(),
+        return route(admin, code, origin, destination, priority);
+    }
+
+    HttpResponse<String> route(Browser by, String code, UUID origin, UUID destination, String priority) throws Exception {
+        return by.post("/logistics/routes", Map.of("code", code + suffix, "origin", origin.toString(),
             "destination", destination.toString(), "priority", priority));
     }
 
@@ -479,6 +537,23 @@ class RouteAndDispatchHttpTest {
             List<Integer> statuses = new ArrayList<>();
             for (Future<Integer> future : futures) statuses.add(future.get());
             return statuses;
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /** Runs the calls at the same time and returns their responses. */
+    @SafeVarargs
+    static List<HttpResponse<String>> raceResponses(Callable<HttpResponse<String>>... calls) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(calls.length);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<HttpResponse<String>>> futures = new ArrayList<>();
+            for (Callable<HttpResponse<String>> call : calls) futures.add(pool.submit(() -> { start.await(); return call.call(); }));
+            start.countDown();
+            List<HttpResponse<String>> responses = new ArrayList<>();
+            for (Future<HttpResponse<String>> future : futures) responses.add(future.get());
+            return responses;
         } finally {
             pool.shutdownNow();
         }

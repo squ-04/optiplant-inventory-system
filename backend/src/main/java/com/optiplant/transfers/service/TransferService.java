@@ -17,6 +17,7 @@ import com.optiplant.transfers.dto.TransferResponse;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
@@ -48,6 +49,11 @@ public class TransferService {
     static final String REJECT = "transfers.reject.v1";
     static final String CANCEL = "transfers.cancel.v1";
     static final String DISPATCH = "transfers.dispatch.v1";
+    /**
+     * How far the captured departure may be ahead of the server clock: the operator's device converts the Bogotá entry,
+     * and a device clock running slightly ahead must not reject a dispatch registered at the moment of departure.
+     */
+    public static final Duration DEPARTURE_CLOCK_TOLERANCE = Duration.ofMinutes(5);
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
@@ -293,7 +299,7 @@ public class TransferService {
         Instant now = clock.instant();
         Instant approvedAt = jdbc.queryForObject("SELECT max(occurred_at) FROM transfers_event WHERE transfer_id=? "
             + "AND to_status='APPROVED'", OffsetDateTime.class, transfer.id()).toInstant();
-        if (request.departedAt().isAfter(now)) {
+        if (request.departedAt().isAfter(now.plus(DEPARTURE_CLOCK_TOLERANCE))) {
             throw new ApiException(400, "VALIDATION_FAILED", "La salida real no puede ser posterior al momento actual: "
                 + "registre el despacho cuando la mercancía haya salido. No se despachó la transferencia.");
         }

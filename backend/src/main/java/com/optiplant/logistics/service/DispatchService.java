@@ -73,7 +73,6 @@ public class DispatchService {
             UUID.randomUUID(), order.transferId(), order.route().id(), order.carrier(), Timestamp.from(order.departedAt()),
             Timestamp.from(order.estimatedArrivalAt()), order.actorId(), order.route().priority());
         List<InventoryLedger.Line> exits = new ArrayList<>();
-        List<Long> exitLines = new ArrayList<>();
         for (Line line : order.lines()) {
             boolean sent = line.baseQty().signum() > 0;
             // The frozen cost is the origin's average, which ordinary exits do not change until the transaction ends.
@@ -85,17 +84,16 @@ public class DispatchService {
             if (!sent) continue;
             exits.add(new InventoryLedger.Line(line.productId(), line.productUnitId(), line.factor(), line.commercialQty(),
                 line.baseQty(), Direction.OUT, new Cost.Average(), null, null, null, line.snapshot(), dispatchLineId));
-            exitLines.add(dispatchLineId);
         }
         InventoryLedger.Posted posted = ledger.post(new InventoryLedger.Operation(Kind.DISPATCH, order.originId(),
             order.actorId(), "Despacho de la transferencia " + order.transferCode() + " hacia " + order.destinationName()
                 + " por la ruta " + order.route().code(), null, null, null, exits, dispatchId));
-        // A depleting exit also withdraws the origin's final rounding difference; the transit received it apart.
-        for (int index = 0; index < exitLines.size(); index++) {
-            BigDecimal adjustment = posted.movements().get(index).adjustmentAmount();
-            if (adjustment.signum() != 0) {
-                jdbc.update("UPDATE logistics_dispatch_line SET rounding_value=? WHERE id=?", adjustment.negate(),
-                    exitLines.get(index));
+        // A depleting exit also withdraws the origin's final rounding difference; the transit received it apart. Each
+        // movement names its dispatch line, so the difference never depends on the order of the posted movements.
+        for (InventoryLedger.PostedMovement movement : posted.movements()) {
+            if (movement.adjustmentAmount().signum() != 0) {
+                jdbc.update("UPDATE logistics_dispatch_line SET rounding_value=? WHERE id=?", movement.adjustmentAmount().negate(),
+                    movement.dispatchLineId());
             }
         }
         return dispatchId;

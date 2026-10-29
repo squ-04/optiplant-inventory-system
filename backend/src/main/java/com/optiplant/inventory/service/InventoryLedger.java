@@ -98,8 +98,9 @@ public class InventoryLedger {
 
     public record Balance(BigDecimal quantity, BigDecimal value, BigDecimal average) {}
 
+    /** {@code dispatchLineId} identifies the dispatch line a movement was posted for; null outside a dispatch. */
     public record PostedMovement(UUID externalId, long id, BigDecimal appliedCost, BigDecimal baseAmount,
-                                 BigDecimal adjustmentAmount, Balance resulting) {}
+                                 BigDecimal adjustmentAmount, Balance resulting, Long dispatchLineId) {}
 
     public record Posted(UUID externalId, long id, Instant occurredAt, List<PostedMovement> movements) {}
 
@@ -179,7 +180,7 @@ public class InventoryLedger {
             }
             if (dispatch) openTransit(line, operationId, value);
             posted.add(new PostedMovement(movementExternalId, movementId, value.appliedCost(), value.baseAmount(),
-                value.adjustmentAmount(), value.resulting()));
+                value.adjustmentAmount(), value.resulting(), line.dispatchLineId()));
         }
         Timestamp updated = Timestamp.from(now);
         balances.forEach((product, balance) -> jdbc.update("UPDATE inventory_balance SET physical_qty=?,inventory_value=?,"
