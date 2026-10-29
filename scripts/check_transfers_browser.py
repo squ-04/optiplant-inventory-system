@@ -1,4 +1,4 @@
-"""Exercise RF-0032–RF-0034 transfers in a real browser against an isolated, disposable Compose stack."""
+"""Exercise RF-0032–RF-0035 transfers and RF-0041 routes in a real browser against an isolated, disposable Compose stack."""
 import http.cookiejar
 import json
 import os
@@ -118,6 +118,70 @@ STAGES = {
         'El destino puede cancelar una transferencia aprobada');
       await logout();
       return 'el destino distingue 2 cajas solicitadas de 1 caja a enviar y ve la aprobación, sin acción de cancelar';""",
+    "origen-sin-ruta": """
+      await login(config.originOperator);
+      await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
+      await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
+      await page.getByRole('button', { name: 'Registrar despacho', exact: true }).click();
+      await page.getByText(/No hay una ruta activa de Sucursal Norte a Sucursal Sur/).waitFor();
+      check(await page.getByRole('button', { name: 'Confirmar despacho' }).isDisabled(), 'Se puede despachar sin ruta');
+      await logout();
+      return 'sin ruta activa NORTE→SUR el operador de origen ve el aviso y no puede confirmar el despacho';""",
+    "admin-clasifica-ruta": """
+      await login(config.admin);
+      await page.getByRole('link', { name: 'Rutas', exact: true }).click();
+      await page.getByText(/Todavía no hay rutas/).waitFor();
+      await page.getByRole('button', { name: 'Nueva ruta', exact: true }).click();
+      await page.getByLabel('Código', { exact: true }).fill('R-NORTE-SUR');
+      await page.locator('#route-priority').selectOption({ label: 'Media' });
+      await page.locator('#route-origin').selectOption({ label: 'NORTE · Sucursal Norte' });
+      await page.locator('#route-destination').selectOption({ label: 'SUR · Sucursal Sur' });
+      await page.getByRole('button', { name: 'Registrar ruta', exact: true }).click();
+      await page.getByText('Ruta R-NORTE-SUR registrada con prioridad media.').waitFor();
+      await page.getByRole('button', { name: 'Editar R-NORTE-SUR', exact: true }).click();
+      await page.locator('#route-priority').selectOption({ label: 'Alta' });
+      await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+      await page.getByText(/^Ruta R-NORTE-SUR actualizada/).waitFor();
+      await page.getByRole('region', { name: 'Prioridad alta' }).locator('.record-code', { hasText: 'R-NORTE-SUR' }).waitFor();
+      await page.getByRole('heading', { name: /Prioridad media 0 rutas/ }).waitFor();
+      await logout();
+      return 'el administrador registra la ruta dirigida NORTE→SUR con prioridad media y la reclasifica como alta';""",
+    "origen-despacha": """
+      await login(config.originOperator);
+      await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
+      await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
+      await page.getByRole('button', { name: 'Registrar despacho', exact: true }).click();
+      await page.getByText('R-NORTE-SUR').first().waitFor();
+      await page.getByRole('button', { name: 'Confirmar despacho', exact: true }).click();
+      await page.getByText('Indique el transportista: nombre o identificador.').waitFor();
+      await page.getByLabel('Transportista', { exact: true }).fill('Transportes Andinos');
+      const arrival = new Date(Date.now() - 5 * 3600000 + 26 * 3600000).toISOString().slice(0, 16);
+      await page.getByLabel('Llegada estimada', { exact: true }).fill(arrival);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(300);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      check(overflow <= 0, 'Desplazamiento horizontal del documento en móvil: ' + overflow + ' px');
+      await page.screenshot({ path: config.screenshot.replace('.png', '-despacho.png'), fullPage: true });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.getByRole('button', { name: 'Confirmar despacho', exact: true }).click();
+      await page.getByText(/^TR-000001 despachada: las cantidades salieron de Sucursal Norte/).waitFor();
+      await page.getByText('Transportes Andinos').waitFor();
+      await page.getByRole('columnheader', { name: 'Enviado' }).waitFor();
+      await page.getByRole('cell', { name: '18,000 unidad' }).waitFor();
+      check(await page.getByRole('button', { name: 'Registrar despacho' }).count() === 0, 'Se puede despachar dos veces');
+      await logout();
+      return 'el operador de origen despacha 1 caja por R-NORTE-SUR; el origen baja de 30 a 18 unidades y sin desbordamiento a 390 px';""",
+    "destino-ve-despacho": """
+      await login(config.destination);
+      await page.getByRole('link', { name: 'Transferencias', exact: true }).click();
+      await page.getByRole('button', { name: 'Ver detalle de TR-000001', exact: true }).click();
+      await page.getByText('Transportes Andinos').waitFor();
+      await page.getByText('En tránsito: su inventario no cambia hasta que se registre la recepción.').waitFor();
+      await page.getByRole('link', { name: 'Rutas', exact: true }).click();
+      await page.getByRole('region', { name: 'Prioridad alta' }).locator('.record-code', { hasText: 'R-NORTE-SUR' }).waitFor();
+      check(await page.getByRole('button', { name: 'Nueva ruta' }).count() === 0, 'El operador puede registrar rutas');
+      await logout();
+      return 'el destino ve transportista, llegada estimada y el tránsito sin ingreso; consulta la ruta sin poder modificarla';""",
 }
 
 
@@ -175,6 +239,7 @@ def main():
                               check=check, timeout=timeout)
 
     config = {"sku": SKU, "originOperator": {"code": "OP-NORTE", "password": origin_password},
+              "admin": {"code": "ADMIN", "password": admin_new},
               "originManager": {"code": "GER-NORTE", "password": manager_password},
               "destination": {"code": "OP-SUR", "password": destination_password},
               "screenshot": str(directory / "transferencias-movil.png")}
@@ -232,7 +297,7 @@ def main():
                        text=True, check=True, timeout=60)
         for name in STAGES:
             stage(name)
-        print(f"Navegador OK: {len(STAGES)} escenarios de transferencias (RF-0032–RF-0034).")
+        print(f"Navegador OK: {len(STAGES)} escenarios de transferencias y rutas (RF-0032–RF-0035, RF-0041).")
         return 0
     except (AssertionError, OSError, RuntimeError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Comprobación FALLÓ: {error}", file=sys.stderr)
