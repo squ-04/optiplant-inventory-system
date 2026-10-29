@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/logistics/compliance")
 public class ComplianceController {
+    static final int MIN_YEAR = 1900;
+    static final int MAX_YEAR = 9999;
     private final ComplianceService compliance;
     private final ScopePolicy policy;
 
@@ -48,10 +50,17 @@ public class ComplianceController {
         if (value == null || value.isBlank()) {
             throw new ApiException(400, "VALIDATION_FAILED", "Indique la fecha " + which + " del período (AAAA-MM-DD).");
         }
+        LocalDate date;
         try {
-            return LocalDate.parse(value);
+            date = LocalDate.parse(value);
         } catch (DateTimeParseException invalid) {
             throw new ApiException(400, "VALIDATION_FAILED", "La fecha " + which + " del período no es válida: use AAAA-MM-DD.");
         }
+        // Bounded so that the period's limits always exist as PostgreSQL instants: an extreme year answers 400, not 500.
+        if (date.getYear() < MIN_YEAR || date.getYear() > MAX_YEAR) {
+            throw new ApiException(400, "VALIDATION_FAILED", "La fecha " + which + " del período debe estar entre los años "
+                + MIN_YEAR + " y " + MAX_YEAR + ".");
+        }
+        return date;
     }
 }

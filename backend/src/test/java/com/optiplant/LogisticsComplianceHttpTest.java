@@ -205,6 +205,11 @@ class LogisticsComplianceHttpTest {
         assertThat(report(bManager, day, day, null).get("summary")).isEqualTo(metrics(2, 1, 0, 1, "50.00"));
         // The next day holds only the arrival confirmed then.
         assertThat(report(bManager, day.plusDays(1), day.plusDays(1), null).get("summary")).isEqualTo(metrics(1, 1, 0, 0, "100.00"));
+        // The overdue list follows the period of its estimate and the branch scope: not the next day, not another branch.
+        assertThat(overdueIds(report(bManager, day.plusDays(1), day.plusDays(1), null))).isEmpty();
+        assertThat(overdueIds(report(aManager, day, day, null))).containsExactly(overdue);
+        assertThat(overdueIds(report(cManager, day, day, null))).isEmpty();
+        assertThat(report(cManager, day, day, null).get("summary")).isEqualTo(metrics(0, 0, 0, 0, null));
         // Without confirmed arrivals: «No calculable» (null), never an invented 0 %.
         JsonNode empty = report(bManager, day.minusDays(1), day.minusDays(1), null);
         assertThat(empty.get("summary")).isEqualTo(metrics(0, 0, 0, 0, null));
@@ -280,6 +285,11 @@ class LogisticsComplianceHttpTest {
         assertError(admin.get("/logistics/compliance?from=2025-06-01"), 400, "VALIDATION_FAILED");
         assertError(admin.get("/logistics/compliance?from=2025-06-31&to=2025-07-01"), 400, "VALIDATION_FAILED");
         assertError(admin.get("/logistics/compliance?from=2025-07-01&to=2025-06-30"), 400, "VALIDATION_FAILED");
+        // A date that parses but cannot be a business instant keeps the error contract instead of failing with 500.
+        assertError(admin.get("/logistics/compliance?from=2025-06-01&to=%2B999999999-12-31"), 400, "VALIDATION_FAILED");
+        assertError(admin.get("/logistics/compliance?from=0001-01-01&to=2025-06-30"), 400, "VALIDATION_FAILED");
+        assertThat(read(admin.get("/logistics/compliance?from=2025-06-01&to=%2B10000-01-01")).get("detail").asText())
+            .contains("9999");
         assertThat(new Browser().get("/logistics/compliance?" + period).statusCode()).isEqualTo(401);
         assertThat(admin.get("/logistics/compliance?from=2025-06-30&to=2025-06-30").statusCode()).isEqualTo(200);
     }

@@ -112,6 +112,8 @@ test('periods default to the current Bogotá month and are validated before aski
   assert.equal(periodError('2026-10-01', '2026-10-29'), null);
   assert.equal(periodError('2026-10-29', '2026-10-01'), 'La fecha final del período no puede ser anterior a la inicial.');
   assert.equal(periodError('', '2026-10-01'), 'Indique la fecha inicial y la fecha final del período.');
+  assert.equal(periodError('0001-01-01', '2026-10-01'), 'Las fechas del período deben estar entre los años 1900 y 9999.');
+  assert.equal(periodError('+10000-01-01', '+10000-01-02'), 'Indique la fecha inicial y la fecha final del período.');
 });
 
 test('durations read in hours and minutes without rounding a short delay to zero', () => {

@@ -51,9 +51,15 @@ export function currentMonth(now: Date): { from: string; to: string } {
   return { from: `${today.slice(0, 8)}01`, to: today };
 }
 
+/** Mirrors `ComplianceController.MIN_YEAR`/`MAX_YEAR`; a four-digit date never exceeds the maximum. */
+const MIN_YEAR = 1900;
+const MAX_YEAR = 9999;
+
 /** A period is valid when both dates exist and the end is not before the start. */
 export function periodError(from: string, to: string): string | null {
   const valid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`));
   if (!valid(from) || !valid(to)) return 'Indique la fecha inicial y la fecha final del período.';
+  const year = (value: string) => Number(value.slice(0, 4));
+  if ([from, to].some(value => year(value) < MIN_YEAR)) return `Las fechas del período deben estar entre los años ${MIN_YEAR} y ${MAX_YEAR}.`;
   return to < from ? 'La fecha final del período no puede ser anterior a la inicial.' : null;
 }
