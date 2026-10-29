@@ -56,6 +56,8 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [confirmed, setConfirmed] = useState('');
+  // Shown outside the form once a discard closes it: only the unknown-outcome warning outlives the form.
+  const [discardNotice, setDiscardNotice] = useState('');
   // Re-reads the chosen list each time the form opens, so a reopened draft never keeps prices read earlier (H1).
   const [listRevision, setListRevision] = useState(0);
   const { confirm, dialog } = useConfirmation();
@@ -160,7 +162,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
   }
 
   function openEditor() {
-    setEditorOpen(true); setFormError(''); setConfirmed('');
+    setEditorOpen(true); setFormError(''); setConfirmed(''); setDiscardNotice('');
     refreshLists();
     setListRevision(value => value + 1);
     revealEditor('sale-editor');
@@ -251,8 +253,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
       {operator && catalog?.branchActive && !editorOpen && <Button onClick={openEditor}>
         <Plus aria-hidden="true" />{draft.lines.some(line => line.product) ? 'Continuar venta en borrador' : 'Nueva venta'}</Button>}
       {confirmed && <p role="status">{confirmed}</p>}
-      {/* Discarding closes the form; a warning about an unknown earlier confirmation must stay visible. */}
-      {operator && !editorOpen && formError && <p role="alert" id="sale-error">{formError}</p>}
+      {discardNotice && <p role="alert">{discardNotice}</p>}
 
       {operator && editorOpen && <form id="sale-editor" className="purchase-editor" onSubmit={event => void save(event)}
         aria-describedby={formError ? 'sale-error' : undefined}>
@@ -348,8 +349,8 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
             <X aria-hidden="true" />Cerrar y conservar borrador
           </Button>
           <Button variant="ghost" type="button" onClick={() => { setDraft(previous => ({ ...emptySale(), priceList: previous.priceList }));
-            setEditorOpen(false);
-            setFormError(outcomeUnknown ? 'Borrador descartado. La confirmación anterior no tiene resultado conocido: revise los '
+            setEditorOpen(false); setFormError('');
+            setDiscardNotice(outcomeUnknown ? 'Borrador descartado. La confirmación anterior no tiene resultado conocido: revise los '
               + 'comprobantes antes de registrarla de nuevo; si la confirma con los mismos datos, no se duplicará.' : '');
             if (!outcomeUnknown) setSaleKey(newIdempotencyKey()); }}>
             <Trash2 aria-hidden="true" />Descartar borrador
