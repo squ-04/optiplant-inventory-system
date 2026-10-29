@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowRight, Ban, CheckCircle2, ClipboardCheck, Plus, RefreshCw, Search, Send, Trash2, X, XCircle } from 'lucide-react';
+import { ArrowRight, Ban, CheckCircle2, ClipboardCheck, Plus, RefreshCw, Search, Send, Trash2, Truck, X, XCircle } from 'lucide-react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
-import type { Branch, LocalCatalog, Transfer, TransferHistory, TransferHistoryFilter, TransferStatus, User } from '../lib/api/client.ts';
+import type {
+  Branch, LocalCatalog, Route, Transfer, TransferDispatchInput, TransferHistory, TransferHistoryFilter, TransferStatus, User,
+} from '../lib/api/client.ts';
 import {
   TRANSFER_STEPS, blocksPreparation, canCancel, canDecide, canPrepare, cancelReasonRequired, checkPreparation, compareDecimal,
   preparationMessage, side, stepLabel, transferStatusLabel,
 } from '../lib/transfers/transfers.ts';
 import { CLOSED_BEFORE_DISPATCH, TRANSFER_STATUS, TRANSFER_STATUSES } from '../lib/transfers/statuses.ts';
+import { canDispatch, routeFor } from '../lib/logistics/routes.ts';
+import { RoutePriorityBadge } from '../components/shared/RoutePriorityBadge.tsx';
+import { TransferDispatchForm, emptyDispatchDraft } from './TransferDispatchForm.tsx';
+import type { DispatchDraft } from '../lib/logistics/routes.ts';
 import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
 import { apiDecimal, dateTime as when, decimal, decimalInputPattern, inputDecimal } from '../lib/format.ts';
 import { revealEditor } from '../components/shared/revealEditor.ts';
@@ -49,6 +55,9 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
   const [origins, setOrigins] = useState<Branch[]>([]);
   const [catalog, setCatalog] = useState<LocalCatalog | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
+  // RF-0035: the dispatch uses the active route of the transfer's origin and destination.
+  const [routes, setRoutes] = useState<Route[] | null>(null);
+  const [routesError, setRoutesError] = useState('');
   const [filter, setFilter] = useState<TransferHistoryFilter>({});
   const [consulted, setConsulted] = useState<TransferHistoryFilter>({});
   const [history, setHistory] = useState<TransferHistory | null>(null);
@@ -75,6 +84,11 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
     if (operator) {
       client.transferOrigins().then(setOrigins).catch(onError);
       client.localCatalog().then(setCatalog).catch(onError);
+      setRoutesError('');
+      client.routes().then(setRoutes).catch(reason => {
+        if (reason instanceof ApiError && reason.status === 401) onError(reason);
+        else setRoutesError(`No se pudieron consultar las rutas (${problem(reason, 'error desconocido')}). Vuelva a abrir la vista para reintentar.`);
+      });
     }
     if (admin) client.visibleBranches().then(setBranches).catch(onError);
   }, [client, admin, operator, revision, visible]);
@@ -181,13 +195,18 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
     act(transfer, 'cancel', reason, key => client.cancelTransfer(transfer.externalId, reason || null, key),
       updated => `${updated.code} quedó cancelada. Las existencias no cambiaron.`);
 
+  const dispatch = (transfer: Transfer, input: TransferDispatchInput) =>
+    act(transfer, 'dispatch', input, key => client.dispatchTransfer(transfer.externalId, input, key),
+      updated => `${updated.code} despachada: las cantidades salieron de ${updated.origin.name} y quedan en tránsito hacia `
+        + `${updated.destination.name} hasta su recepción.`);
+
   const requestable = catalog?.items ?? [];
 
   return <section aria-labelledby="transfers-title" aria-busy={loading || busy}>
     <h2 id="transfers-title" tabIndex={-1}>{admin ? 'Transferencias de la red' : 'Transferencias'}</h2>
     {dialog}
     <p>{operator
-      ? 'Solicite productos a otra sucursal y prepare los envíos que le soliciten. Ningún paso antes del despacho reserva ni mueve existencias.'
+      ? 'Solicite productos a otra sucursal, prepare los envíos que le soliciten y registre el despacho de los aprobados. Ningún paso antes del despacho reserva ni mueve existencias.'
       : admin ? 'Consulte las transferencias de una sucursal o de toda la red. Las solicitan y preparan los operadores y las aprueba el gerente de origen.'
         : 'Apruebe o rechace las transferencias que su sucursal prepara para enviar y supervise las que recibe.'}</p>
 
@@ -309,6 +328,8 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
     {selected && <TransferDetail key={selected.externalId} transfer={selected} user={user} busy={busy} error={actionError}
       onPrepare={lines => prepare(selected, lines)} onApprove={() => void approve(selected)}
       onReject={reason => reject(selected, reason)} onCancel={reason => cancel(selected, reason)}
+      route={routes ? routeFor(routes, selected) : null} routesLoaded={routes !== null} routesError={routesError}
+      onDispatch={input => dispatch(selected, input)}
       onClose={() => setSelected(null)} />}
   </section>;
 }
@@ -316,7 +337,7 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
 function HistoryTable({ history, selected, onOpen }: { history: TransferHistory; selected?: string; onOpen: (id: string) => void }) {
   return <div className="table-scroll" role="region" aria-label="Listado de transferencias" tabIndex={0}>
     <Table className="purchase-history">
-      <TableCaption>Cantidades en la unidad solicitada. «A enviar» es lo que preparó el origen.</TableCaption>
+      <TableCaption>Cantidades en la unidad solicitada. «A enviar» es lo que preparó el origen; «Enviado», lo despachado.</TableCaption>
       <TableHeader><TableRow>
         <TableHead scope="col">Transferencia</TableHead><TableHead scope="col">Origen</TableHead>
         <TableHead scope="col">Destino</TableHead><TableHead scope="col">Estado</TableHead>
@@ -331,7 +352,8 @@ function HistoryTable({ history, selected, onOpen }: { history: TransferHistory;
         <TableCell className="cell-text">
           {transfer.lines.map(line => <span key={line.lineNo} className="block">
             {decimal(line.requestedQuantity)} {line.unit}: {line.sku} {line.productName}
-            {line.preparedQuantity !== null && <span className="cell-note">A enviar: {decimal(line.preparedQuantity)} {line.unit}</span>}
+            {line.dispatchedQuantity !== null ? <span className="cell-note">Enviado: {decimal(line.dispatchedQuantity)} {line.unit}</span>
+              : line.preparedQuantity !== null && <span className="cell-note">A enviar: {decimal(line.preparedQuantity)} {line.unit}</span>}
           </span>)}
         </TableCell>
         <TableCell><Button variant="outline" size="sm" onClick={() => onOpen(transfer.externalId)}>
@@ -357,20 +379,26 @@ function TransferProgress({ transfer }: { transfer: Transfer }) {
   </ol>;
 }
 
-function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onReject, onCancel, onClose }: {
+function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onReject, onCancel, onClose, route, routesLoaded,
+                          routesError, onDispatch }: {
   transfer: Transfer; user: User; busy: boolean; error: string;
   onPrepare: (lines: { lineNo: number; quantity: string }[]) => Promise<boolean>; onApprove: () => void;
   onReject: (reason: string) => Promise<boolean>; onCancel: (reason: string) => Promise<boolean>; onClose: () => void;
+  route: Route | null; routesLoaded: boolean; routesError: string; onDispatch: (input: TransferDispatchInput) => Promise<boolean>;
 }) {
   // Forms keep what was typed while the detail stays open (AGENTS.md §6).
-  const [mode, setMode] = useState<'prepare' | 'reject' | 'cancel' | null>(null);
+  const [mode, setMode] = useState<'prepare' | 'reject' | 'cancel' | 'dispatch' | null>(null);
   const [quantities, setQuantities] = useState<Record<number, string>>({});
   const [reason, setReason] = useState('');
+  const [dispatchDraft, setDispatchDraft] = useState<DispatchDraft>(emptyDispatchDraft);
+  const [dispatchTouched, setDispatchTouched] = useState(false);
   const where = side(user, transfer);
   const showAvailability = transfer.lines.some(line => line.originAvailableQuantity !== null);
   const preparable = canPrepare(user, transfer);
   const decidable = canDecide(user, transfer);
   const cancellable = canCancel(user, transfer);
+  const dispatchable = canDispatch(user, transfer);
+  const dispatched = transfer.lines.some(line => line.dispatchedQuantity !== null);
   const reasonRequired = mode === 'reject' || (mode === 'cancel' && cancelReasonRequired(transfer));
   const closing = [...(transfer.events ?? [])].reverse().find(event => CLOSED_BEFORE_DISPATCH.includes(event.toStatus));
 
@@ -403,6 +431,15 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
       <div><dt>Aprobada por</dt><dd>{transfer.approval
         ? `${transfer.approval.actor.fullName} (${transfer.approval.actor.code}), ${when(transfer.approval.occurredAt)}`
         : 'Sin aprobar'}</dd></div>
+      {transfer.dispatch && <>
+        <div><dt>Despachada por</dt><dd>{transfer.dispatch.actor.fullName} ({transfer.dispatch.actor.code})</dd></div>
+        <div><dt>Transportista</dt><dd>{transfer.dispatch.carrier}</dd></div>
+        <div><dt>Salida real</dt><dd>{when(transfer.dispatch.departedAt)}</dd></div>
+        <div><dt>Llegada estimada</dt><dd>{when(transfer.dispatch.estimatedArrivalAt)}</dd></div>
+        <div><dt>Ruta</dt><dd><span className="record-code">{transfer.dispatch.routeCode}</span>{' '}
+          <RoutePriorityBadge priority={transfer.dispatch.routePriority} />
+          <span className="cell-note">Prioridad al momento del despacho.</span></dd></div>
+      </>}
     </dl>
 
     <div className="table-scroll" role="region" aria-label={`Productos de ${transfer.code}`} tabIndex={0}>
@@ -412,6 +449,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
         <TableHeader><TableRow>
           <TableHead scope="col">Producto</TableHead><TableHead className="quantity" scope="col">Solicitado</TableHead>
           <TableHead className="quantity" scope="col">A enviar</TableHead>
+          {dispatched && <TableHead className="quantity" scope="col">Enviado</TableHead>}
           {showAvailability && <TableHead className="quantity" scope="col">Disponible en origen</TableHead>}
         </TableRow></TableHeader>
         <TableBody>{transfer.lines.map(line => {
@@ -424,6 +462,8 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
               ? <span className="text-muted-foreground">Sin preparar</span>
               : <>{decimal(line.preparedQuantity)} {line.unit}
                 {lower && <span className="cell-note transfer-lower">Menos de lo solicitado</span>}</>}</TableCell>
+            {dispatched && <TableCell className="quantity">{line.dispatchedQuantity === null ? '—'
+              : `${decimal(line.dispatchedQuantity)} ${line.unit}`}</TableCell>}
             {showAvailability && <TableCell className="quantity">{line.originAvailableQuantity === null ? '—'
               : `${decimal(line.originAvailableQuantity)} ${line.baseUnitName}`}</TableCell>}
           </TableRow>;
@@ -445,7 +485,12 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
     </>}
     {error && <p role="alert">{error}</p>}
 
-    {mode === 'prepare' ? <form className="purchase-cancel transfer-prepare" aria-labelledby="transfer-prepare-title" onSubmit={event => {
+    {mode === 'dispatch' ? <TransferDispatchForm transfer={transfer} route={route} routesLoaded={routesLoaded}
+      routesError={routesError} busy={busy} draft={dispatchDraft} onChange={setDispatchDraft} touched={dispatchTouched}
+      onTouched={() => setDispatchTouched(true)}
+      onDispatch={input => onDispatch(input).then(done => { if (done) setMode(null); return done; })}
+      onBack={() => setMode(null)} />
+    : mode === 'prepare' ? <form className="purchase-cancel transfer-prepare" aria-labelledby="transfer-prepare-title" onSubmit={event => {
       event.preventDefault();
       if (blocked) return;
       void onPrepare(transfer.lines.map(line => ({ lineNo: line.lineNo, quantity: apiDecimal(quantities[line.lineNo]) })))
@@ -500,6 +545,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
     </form> : <div className="purchase-actions">
       {preparable && <Button disabled={busy} onClick={startPreparation}><ClipboardCheck aria-hidden="true" />
         {transfer.status === 'PREPARING' ? 'Ajustar preparación' : 'Preparar envío'}</Button>}
+      {dispatchable && <Button disabled={busy} onClick={() => setMode('dispatch')}><Truck aria-hidden="true" />Registrar despacho</Button>}
       {decidable && <Button disabled={busy} onClick={onApprove}><CheckCircle2 aria-hidden="true" />Aprobar transferencia</Button>}
       {decidable && <Button variant="outline" disabled={busy} onClick={() => setMode('reject')}><XCircle aria-hidden="true" />Rechazar</Button>}
       {cancellable && <Button variant="outline" disabled={busy} onClick={() => setMode('cancel')}><Ban aria-hidden="true" />Cancelar transferencia</Button>}
@@ -509,5 +555,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
       Esperando que {transfer.origin.name} revise su disponibilidad y prepare el envío.</p>}
     {where === 'origin' && user.role === 'OPERATOR' && transfer.status === 'PREPARING' && <p className="text-muted-foreground">
       Puede ajustar la preparación hasta que el gerente de la sucursal la apruebe o la rechace.</p>}
+    {where === 'destination' && transfer.status === 'IN_TRANSIT' && <p className="text-muted-foreground">
+      En tránsito: su inventario no cambia hasta que se registre la recepción.</p>}
   </section>;
 }

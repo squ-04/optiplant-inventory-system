@@ -13,11 +13,12 @@ const person = { code: 'U1', fullName: 'Ana Pérez' };
 const line = {
   lineNo: 1, productExternalId: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f', sku: 'MAC-1', productName: 'Maceta', unit: 'caja',
   factor: '12', baseUnitName: 'unidad', requestedQuantity: '2.000', requestedBaseQuantity: '24.000', preparedQuantity: null,
-  preparedBaseQuantity: null, originAvailableQuantity: null, unitDivisible: false, baseDivisible: false,
+  preparedBaseQuantity: null, dispatchedQuantity: null, dispatchedBaseQuantity: null, originAvailableQuantity: null,
+  unitDivisible: false, baseDivisible: false,
 };
 const requested = {
   externalId: '4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a', code: 'TR-000001', status: 'REQUESTED', origin, destination,
-  requestedAt: '2026-10-28T15:00:00Z', requestedBy: person, approval: null, lines: [line],
+  requestedAt: '2026-10-28T15:00:00Z', requestedBy: person, approval: null, dispatch: null, lines: [line],
   events: [{ fromStatus: null, toStatus: 'REQUESTED', occurredAt: '2026-10-28T15:00:00Z', actor: person, reason: null, preparation: null }],
 };
 const preparing = {

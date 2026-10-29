@@ -9,7 +9,7 @@ export const TRANSFER_STATUS = {
   APPROVED: { label: 'Aprobada', filterLabel: 'Aprobadas', tone: 'bg-success-muted text-success' },
   IN_TRANSIT: { label: 'En tránsito', filterLabel: 'En tránsito', tone: 'bg-warning-muted text-warning' },
   RECEIVED_COMPLETE: { label: 'Recibida completa', filterLabel: 'Recibidas completas', tone: 'bg-success-muted text-success' },
-  RECEIVED_DISCREPANCY: { label: 'Recibida con faltantes', filterLabel: 'Recibidas con faltantes', tone: 'bg-warning-muted text-warning' },
+  RECEIVED_DISCREPANCY: { label: 'Recibida con discrepancia', filterLabel: 'Recibidas con discrepancia', tone: 'bg-warning-muted text-warning' },
   CANCELLED: { label: 'Cancelada', filterLabel: 'Canceladas', tone: 'line-through decoration-1' },
   REJECTED: { label: 'Rechazada', filterLabel: 'Rechazadas', tone: 'line-through decoration-1' },
 } as const satisfies Record<string, { label: string; filterLabel: string; tone: string | undefined }>;

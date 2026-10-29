@@ -4,6 +4,7 @@ import com.optiplant.common.exception.ApiException;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
+import com.optiplant.transfers.dto.TransferDispatchRequest;
 import com.optiplant.transfers.dto.TransferHistoryResponse;
 import com.optiplant.transfers.dto.TransferPreparationRequest;
 import com.optiplant.transfers.dto.TransferReasonRequest;
@@ -27,8 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Transfers between branches (RF-0032–RF-0034). Transfers are never deleted. Writes take an {@code Idempotency-Key}:
- * repeating a request with the same key returns the original result without new effects. No step here moves stock.
+ * Transfers between branches (RF-0032–RF-0035). Transfers are never deleted. Writes take an {@code Idempotency-Key}:
+ * repeating a request with the same key returns the original result without new effects. Only the dispatch moves stock:
+ * out of the origin and into transit, never into the destination.
  */
 @RestController
 @RequestMapping("/api/v1/transfers")
@@ -37,6 +39,8 @@ public class TransferController {
         + "el gerente las supervisa y el administrador las consulta.";
     private static final String OPERATOR_ONLY_PREPARE = "La preparación corresponde al operador de la sucursal origen.";
     private static final String MANAGER_ONLY_APPROVE = "La aprobación corresponde al gerente de la sucursal origen.";
+    private static final String OPERATOR_ONLY_DISPATCH = "El despacho lo registra el operador de la sucursal origen. "
+        + "No se modificó la transferencia ni el inventario.";
     private static final String MANAGER_ONLY_REJECT = "Solo el gerente de la sucursal origen rechaza una transferencia. "
         + "No se modificó la transferencia.";
 
@@ -91,6 +95,16 @@ public class TransferController {
         transfers.requireRole(principal, "MANAGER", MANAGER_ONLY_REJECT);
         policy.requirePublicReference(transfer);
         return transfers.reject(principal, transfer, key, TransferReasonRequest.from(body));
+    }
+
+    /** RF-0035: the origin operator dispatches an approved transfer with its carrier, departure and estimated arrival. */
+    @PostMapping("/{transfer}/dispatch")
+    public TransferResponse dispatch(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID transfer,
+                                     @RequestHeader(value = "Idempotency-Key", required = false) String key,
+                                     @RequestBody(required = false) JsonNode body) {
+        transfers.requireRole(principal, "OPERATOR", OPERATOR_ONLY_DISPATCH);
+        policy.requirePublicReference(transfer);
+        return transfers.dispatch(principal, transfer, key, TransferDispatchRequest.from(body));
     }
 
     /** RF-0034-CA-02: cancellation before dispatch by the actor the transfer's state allows. */

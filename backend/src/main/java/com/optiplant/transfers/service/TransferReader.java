@@ -3,6 +3,7 @@ package com.optiplant.transfers.service;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
 import com.optiplant.transfers.dto.TransferResponse;
 import com.optiplant.transfers.dto.TransferResponse.Decision;
+import com.optiplant.transfers.dto.TransferResponse.Dispatch;
 import com.optiplant.transfers.dto.TransferResponse.Event;
 import com.optiplant.transfers.dto.TransferResponse.Line;
 import com.optiplant.transfers.dto.TransferResponse.Person;
@@ -31,11 +32,15 @@ public class TransferReader {
             o.external_id AS origin,o.code AS origin_code,o.name AS origin_name,o.active AS origin_active,
             d.external_id AS destination,d.code AS destination_code,d.name AS destination_name,d.active AS destination_active,
             r.code AS requester_code,r.full_name AS requester_name,
-            ae.occurred_at AS approved_at,au.code AS approver_code,au.full_name AS approver_name
+            ae.occurred_at AS approved_at,au.code AS approver_code,au.full_name AS approver_name,
+            ld.carrier_text,ld.dispatched_at,ld.estimated_arrival_at,ld.route_priority_snapshot,lr.code AS route_code,
+            du.code AS dispatcher_code,du.full_name AS dispatcher_name
         FROM transfers_transfer t JOIN identity_branch o ON o.id=t.origin_branch_id
         JOIN identity_branch d ON d.id=t.destination_branch_id JOIN identity_user_account r ON r.id=t.requested_by
         LEFT JOIN transfers_event ae ON ae.transfer_id=t.id AND ae.to_status='APPROVED'
         LEFT JOIN identity_user_account au ON au.id=ae.actor_id
+        LEFT JOIN logistics_dispatch ld ON ld.transfer_id=t.id LEFT JOIN logistics_route lr ON lr.id=ld.route_id
+        LEFT JOIN identity_user_account du ON du.id=ld.dispatched_by
         """;
 
     private final JdbcTemplate jdbc;
@@ -55,7 +60,8 @@ public class TransferReader {
             (r, i) -> new Event(r.getString(1), r.getString(2), r.getObject(3, OffsetDateTime.class).toInstant(),
                 new Person(r.getString(4), r.getString(5)), r.getString(6), preparation(r.getString(7))), transferId);
         return new TransferResponse(transfer.externalId(), transfer.code(), transfer.status(), transfer.origin(),
-            transfer.destination(), transfer.requestedAt(), transfer.requestedBy(), transfer.approval(), transfer.lines(), events);
+            transfer.destination(), transfer.requestedAt(), transfer.requestedBy(), transfer.approval(), transfer.dispatch(),
+            transfer.lines(), events);
     }
 
     /** Transfers selected by {@code where} (appended to the base query), each with its lines and without events. */
@@ -64,7 +70,7 @@ public class TransferReader {
     }
 
     private record Row(long id, UUID externalId, String code, String status, OffsetDateTime requestedAt, Branch origin,
-                       Branch destination, Person requester, Decision approval) {}
+                       Branch destination, Person requester, Decision approval, Dispatch dispatch) {}
 
     private List<TransferResponse> transfers(String sql, List<Object> arguments, boolean availability) {
         List<Row> rows = jdbc.query(sql, (r, i) -> new Row(r.getLong("id"), r.getObject("external_id", UUID.class),
@@ -75,7 +81,12 @@ public class TransferReader {
                 r.getBoolean("destination_active")),
             new Person(r.getString("requester_code"), r.getString("requester_name")),
             r.getString("approver_code") == null ? null : new Decision(r.getObject("approved_at", OffsetDateTime.class).toInstant(),
-                new Person(r.getString("approver_code"), r.getString("approver_name")))), arguments.toArray());
+                new Person(r.getString("approver_code"), r.getString("approver_name"))),
+            r.getString("carrier_text") == null ? null : new Dispatch(r.getString("carrier_text"),
+                r.getObject("dispatched_at", OffsetDateTime.class).toInstant(),
+                r.getObject("estimated_arrival_at", OffsetDateTime.class).toInstant(),
+                new Person(r.getString("dispatcher_code"), r.getString("dispatcher_name")), r.getString("route_code"),
+                r.getString("route_priority_snapshot"))), arguments.toArray());
         if (rows.isEmpty()) return List.of();
         Map<Long, List<Line>> lines = new LinkedHashMap<>();
         rows.forEach(row -> lines.put(row.id(), new ArrayList<>()));
@@ -83,9 +94,9 @@ public class TransferReader {
         jdbc.query("""
             SELECT l.transfer_id,l.line_no,p.external_id,l.sku_snapshot,l.product_name_snapshot,l.unit_name_snapshot,
                 l.factor_snapshot,p.base_unit_name,l.requested_commercial_qty,l.requested_base_qty,l.prepared_commercial_qty,
-                l.prepared_base_qty,u.divisible,p.base_divisible,%s AS available
+                l.prepared_base_qty,dl.dispatched_commercial_qty,dl.dispatched_base_qty,u.divisible,p.base_divisible,%s AS available
             FROM transfers_line l JOIN catalog_product p ON p.id=l.product_id JOIN transfers_transfer t ON t.id=l.transfer_id
-            JOIN catalog_product_unit u ON u.id=l.product_unit_id
+            JOIN catalog_product_unit u ON u.id=l.product_unit_id LEFT JOIN logistics_dispatch_line dl ON dl.transfer_line_id=l.id
             WHERE l.transfer_id IN (%s) ORDER BY l.transfer_id,l.line_no""".formatted(availability
                 ? "(SELECT coalesce(sum(ib.physical_qty),0) FROM inventory_balance ib WHERE ib.branch_id=t.origin_branch_id "
                     + "AND ib.product_id=l.product_id)" : "NULL::numeric", ids),
@@ -95,10 +106,12 @@ public class TransferReader {
                     plain(r.getBigDecimal("factor_snapshot")), r.getString("base_unit_name"),
                     quantity(r.getBigDecimal("requested_commercial_qty")), quantity(r.getBigDecimal("requested_base_qty")),
                     quantity(r.getBigDecimal("prepared_commercial_qty")), quantity(r.getBigDecimal("prepared_base_qty")),
+                    quantity(r.getBigDecimal("dispatched_commercial_qty")), quantity(r.getBigDecimal("dispatched_base_qty")),
                     quantity(r.getBigDecimal("available")), r.getBoolean("divisible"), r.getBoolean("base_divisible")));
             }, rows.stream().map(Row::id).toArray());
         return rows.stream().map(row -> new TransferResponse(row.externalId(), row.code(), row.status(), row.origin(),
-            row.destination(), row.requestedAt().toInstant(), row.requester(), row.approval(), List.copyOf(lines.get(row.id())),
+            row.destination(), row.requestedAt().toInstant(), row.requester(), row.approval(), row.dispatch(),
+            List.copyOf(lines.get(row.id())),
             null)).toList();
     }
 

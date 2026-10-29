@@ -6,6 +6,10 @@ import com.optiplant.common.exception.ApiException;
 import com.optiplant.common.idempotency.IdempotencyService;
 import com.optiplant.common.text.LineDetail;
 import com.optiplant.identity.service.SessionPrincipal;
+import com.optiplant.inventory.service.InventoryLedger;
+import com.optiplant.logistics.service.DispatchService;
+import com.optiplant.logistics.service.RouteService;
+import com.optiplant.transfers.dto.TransferDispatchRequest;
 import com.optiplant.transfers.dto.TransferPreparationRequest;
 import com.optiplant.transfers.dto.TransferReasonRequest;
 import com.optiplant.transfers.dto.TransferRequest;
@@ -13,6 +17,10 @@ import com.optiplant.transfers.dto.TransferResponse;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,7 +35,9 @@ import tools.jackson.databind.json.JsonMapper;
  * Transfer request, preparation and origin decision (RF-0032–RF-0034, INC-015). The destination operator requests;
  * the origin operator prepares, confirming or lowering each quantity; the origin manager approves, rejects with a reason
  * while preparing, or cancels with a reason once approved and before dispatch; the destination operator cancels before
- * approval. None of these steps reserves or moves stock (INC-015/D05): only the dispatch (RF-0035) will. Every write
+ * approval. None of these steps reserves or moves stock (INC-015/D05): only the dispatch (RF-0035), registered by the
+ * origin operator, takes the prepared quantities out of the origin into transit, through the logistics and inventory
+ * contracts and in this same transaction, so the state change, the dispatch and its movements commit together. Every write
  * locks the transfer row, validates the transition and the actor under that lock, and records one append-only event, so
  * concurrent or repeated requests cannot apply a transition twice; an {@code Idempotency-Key} replays a committed result.
  */
@@ -38,6 +48,12 @@ public class TransferService {
     static final String APPROVE = "transfers.approve.v1";
     static final String REJECT = "transfers.reject.v1";
     static final String CANCEL = "transfers.cancel.v1";
+    static final String DISPATCH = "transfers.dispatch.v1";
+    /**
+     * How far the captured departure may be ahead of the server clock: the operator's device converts the Bogotá entry,
+     * and a device clock running slightly ahead must not reject a dispatch registered at the moment of departure.
+     */
+    public static final Duration DEPARTURE_CLOCK_TOLERANCE = Duration.ofMinutes(5);
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
@@ -45,15 +61,19 @@ public class TransferService {
     private final OperableUnits units;
     private final TransferReader reader;
     private final JsonMapper json;
+    private final RouteService routes;
+    private final DispatchService dispatches;
 
     public TransferService(JdbcTemplate jdbc, Clock clock, IdempotencyService idempotency, OperableUnits units,
-                           TransferReader reader, JsonMapper json) {
+                           TransferReader reader, JsonMapper json, RouteService routes, DispatchService dispatches) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.idempotency = idempotency;
         this.units = units;
         this.reader = reader;
         this.json = json;
+        this.routes = routes;
+        this.dispatches = dispatches;
     }
 
     /** The actor's identity and branch; the branch must be active for new effects (ARQ-007), checked inside the action. */
@@ -112,6 +132,20 @@ public class TransferService {
                 long id = cancel(active(actor), transfer, request);
                 return reader.detail(id, actor.branchId() == originOf(id));
             });
+    }
+
+    /**
+     * RF-0035: the origin operator dispatches an approved transfer. Every line is revalidated and the whole dispatch is
+     * confirmed or rejected at once; a repeated key replays the result and any other attempt finds it in transit.
+     */
+    @Transactional
+    public TransferResponse dispatch(SessionPrincipal principal, UUID transfer, String key, TransferDispatchRequest request) {
+        IdempotencyService.requireKey(key);
+        Actor actor = actor(principal);
+        return idempotency.execute(actor.id(), DISPATCH, transfer.toString(), key, Map.of("transfer", transfer,
+                "carrier", request.carrier(), "departedAt", request.departedAt().toString(),
+                "estimatedArrivalAt", request.estimatedArrivalAt().toString()), 200, TransferResponse.class,
+            () -> reader.detail(dispatch(active(actor), transfer, request), true));
     }
 
     private record Resolved(OperableUnits.Unit unit, TransferRequest.Line line, BigDecimal base) {}
@@ -244,6 +278,74 @@ public class TransferService {
         Timestamp now = Timestamp.from(clock.instant());
         jdbc.update("UPDATE transfers_transfer SET status=?,updated_at=? WHERE id=?", to, now, transfer.id());
         event(transfer.id(), "PREPARING", to, actor.id(), now, reason, null);
+        return transfer.id();
+    }
+
+    private long dispatch(Actor actor, UUID externalId, TransferDispatchRequest request) {
+        Locked transfer = lock(actor, externalId);
+        if (actor.branchId() != transfer.originId()) {
+            throw forbidden("El despacho lo registra el operador de la sucursal origen; el destino registra la recepción. "
+                + "No se modificó la transferencia ni el inventario.");
+        }
+        if (!transfer.status().equals("APPROVED")) {
+            throw conflict(transfer, "Solo se despacha una transferencia aprobada por el gerente de origen");
+        }
+        Map<String, Object> destination = jdbc.queryForMap("SELECT name,active FROM identity_branch WHERE id=?",
+            transfer.destinationId());
+        if (!(Boolean) destination.get("active")) {
+            throw new ApiException(409, "BRANCH_INACTIVE", "La sucursal destino está inactiva y no admite nuevos despachos. "
+                + "No se despachó la transferencia " + transfer.code() + ".");
+        }
+        Instant now = clock.instant();
+        Instant approvedAt = jdbc.queryForObject("SELECT max(occurred_at) FROM transfers_event WHERE transfer_id=? "
+            + "AND to_status='APPROVED'", OffsetDateTime.class, transfer.id()).toInstant();
+        if (request.departedAt().isAfter(now.plus(DEPARTURE_CLOCK_TOLERANCE))) {
+            throw new ApiException(400, "VALIDATION_FAILED", "La salida real no puede ser posterior al momento actual: "
+                + "registre el despacho cuando la mercancía haya salido. No se despachó la transferencia.");
+        }
+        // Departure is captured to the minute: the approval's own minute is accepted.
+        if (request.departedAt().isBefore(approvedAt.truncatedTo(ChronoUnit.MINUTES))) {
+            throw new ApiException(400, "VALIDATION_FAILED", "La salida real no puede ser anterior a la aprobación de la "
+                + "transferencia. No se despachó la transferencia.");
+        }
+        RouteService.ActiveRoute route = routes.activeRoute(transfer.originId(), transfer.destinationId())
+            .orElseThrow(() -> new ApiException(409, "ROUTE_REQUIRED", "No hay una ruta activa desde su sucursal hacia "
+                + destination.get("name") + ". El administrador debe registrarla o reactivarla antes del despacho. "
+                + "No se despachó la transferencia " + transfer.code() + "."));
+        List<DispatchService.Line> lines = jdbc.query("""
+            SELECT l.id,l.line_no,l.product_id,l.product_unit_id,l.factor_snapshot,l.prepared_commercial_qty,l.prepared_base_qty,
+                l.sku_snapshot,l.product_name_snapshot,l.unit_name_snapshot,p.base_unit_name
+            FROM transfers_line l JOIN catalog_product p ON p.id=l.product_id WHERE l.transfer_id=? ORDER BY l.line_no""",
+            (r, i) -> new DispatchService.Line(r.getInt("line_no"), r.getLong("id"), r.getLong("product_id"),
+                r.getLong("product_unit_id"), r.getBigDecimal("factor_snapshot"), r.getBigDecimal("prepared_commercial_qty"),
+                r.getBigDecimal("prepared_base_qty"), r.getString("unit_name_snapshot"), r.getString("base_unit_name"),
+                new InventoryLedger.Snapshot(r.getString("sku_snapshot"), r.getString("product_name_snapshot"),
+                    r.getString("unit_name_snapshot"))), transfer.id());
+        if (lines.stream().allMatch(line -> line.baseQty().signum() == 0)) {
+            throw new ApiException(409, "NOTHING_TO_DISPATCH", "Todas las cantidades preparadas de " + transfer.code()
+                + " son 0: no se despacha. El gerente de origen puede cancelarla con su motivo.");
+        }
+        // INC-015/D09: products and units are revalidated in both branches immediately before the dispatch.
+        for (DispatchService.Line line : lines) {
+            if (line.baseQty().signum() == 0) continue;
+            try {
+                units.find(transfer.originId(), line.productId(), line.productUnitId());
+                try {
+                    units.requireOperable(transfer.destinationId(), line.productId());
+                } catch (ApiException error) {
+                    throw new ApiException(error.status(), error.code(),
+                        "El producto ya no está activo y habilitado en el catálogo de la sucursal destino.");
+                }
+            } catch (ApiException error) {
+                throw new ApiException(error.status(), error.code(), LineDetail.of(line.lineNo(), error.getMessage())
+                    + " No se despachó la transferencia: no hubo salida ni tránsito.");
+            }
+        }
+        dispatches.record(new DispatchService.Order(transfer.code(), transfer.originId(), (String) destination.get("name"),
+            route, request.carrier(), request.departedAt(), request.estimatedArrivalAt(), actor.id(), transfer.id(), lines));
+        Timestamp at = Timestamp.from(now);
+        jdbc.update("UPDATE transfers_transfer SET status='IN_TRANSIT',updated_at=? WHERE id=?", at, transfer.id());
+        event(transfer.id(), "APPROVED", "IN_TRANSIT", actor.id(), at, null, null);
         return transfer.id();
     }
 

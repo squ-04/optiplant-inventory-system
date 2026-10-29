@@ -316,6 +316,14 @@ table.restock-table { min-width: 56rem; }
   .transfer-prepare-line p { margin: var(--space-1) 0 0; font-size: .875rem; }
   .transfer-prepare-line .field-error { color: var(--color-danger); font-weight: 600; }
   .transfer-prepare-line .transfer-warning { color: var(--color-warning); font-weight: 600; }
+  /* RF-0035: dispatch form; the hint turns into the blocking message after a submit attempt. */
+  form.transfer-dispatch { max-width: 56rem; }
+  .transfer-dispatch-lines { margin: 0 0 var(--space-3); padding-left: var(--space-4); }
+  .transfer-dispatch-route { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  form.transfer-dispatch .field-error { color: var(--color-danger); font-weight: 600; }
+  /* RF-0041: one group per priority, high to low. */
+  .route-group { margin-top: var(--space-6, 1.5rem); }
+  .route-group h4 { display: flex; align-items: baseline; gap: var(--space-2); }
 
   @media (min-width: 40rem) {
     ol.transfer-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }

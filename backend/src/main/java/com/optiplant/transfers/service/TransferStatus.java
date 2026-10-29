@@ -14,7 +14,7 @@ public enum TransferStatus {
     APPROVED("aprobada"),
     IN_TRANSIT("en tránsito"),
     RECEIVED_COMPLETE("recibida completa"),
-    RECEIVED_DISCREPANCY("recibida con faltantes"),
+    RECEIVED_DISCREPANCY("recibida con discrepancia"),
     CANCELLED("cancelada"),
     REJECTED("rechazada");
 

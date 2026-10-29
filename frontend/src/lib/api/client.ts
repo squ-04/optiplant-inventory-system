@@ -1,4 +1,6 @@
 import { isTransferStatus } from '../transfers/statuses.ts';
+import { isRoutePriority } from '../logistics/routes.ts';
+import type { RoutePriority } from '../logistics/routes.ts';
 import type { TransferStatus } from '../transfers/statuses.ts';
 
 export interface User {
@@ -177,6 +179,13 @@ export interface ValuationItem {
   averageCost: string; value: string; exactValue: string;
 }
 export interface InventoryValuation { branch: Branch; readAt: string; totalValue: string; exactTotalValue: string; items: ValuationItem[] }
+function routeDto(value: unknown): Route {
+  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !isRoutePriority(value.priority) ||
+      typeof value.active !== 'boolean') throw invalid();
+  branchDto(value.origin);
+  branchDto(value.destination);
+  return value as unknown as Route;
+}
 export interface PurchaseHistoryFilter { branch?: string; supplier?: string; product?: string; status?: PurchaseStatus; limit?: number }
 
 export type { TransferStatus };
@@ -189,7 +198,9 @@ export interface TransferInput { origin: string; lines: TransferLineInput[] }
 export interface TransferLine {
   lineNo: number; productExternalId: string; sku: string; productName: string; unit: string; factor: string;
   baseUnitName: string; requestedQuantity: string; requestedBaseQuantity: string; preparedQuantity: string | null;
-  preparedBaseQuantity: string | null; originAvailableQuantity: string | null;
+  preparedBaseQuantity: string | null;
+  /** RF-0035-CA-01: the quantity sent, null until dispatched; 0 for a line prepared at zero. */
+  dispatchedQuantity: string | null; dispatchedBaseQuantity: string | null; originAvailableQuantity: string | null;
   /** Whether the requested unit and the base unit admit fractions, so preparation applies the server's rules. */
   unitDivisible: boolean; baseDivisible: boolean;
 }
@@ -200,10 +211,22 @@ export interface TransferEvent {
 }
 export interface Transfer {
   externalId: string; code: string; status: TransferStatus; origin: Branch; destination: Branch; requestedAt: string;
-  requestedBy: PurchasePerson; approval: { occurredAt: string; actor: PurchasePerson } | null; lines: TransferLine[];
+  requestedBy: PurchasePerson; approval: { occurredAt: string; actor: PurchasePerson } | null;
+  /** RF-0035-CA-01: carrier, actual departure, estimated arrival and the route's priority at dispatch; null until then. */
+  dispatch: TransferDispatch | null; lines: TransferLine[];
   /** State history; null in listings. */
   events: TransferEvent[] | null;
 }
+export interface TransferDispatch {
+  carrier: string; departedAt: string; estimatedArrivalAt: string; actor: PurchasePerson; routeCode: string;
+  routePriority: RoutePriority;
+}
+export interface TransferDispatchInput { carrier: string; departedAt: string; estimatedArrivalAt: string }
+export type { RoutePriority };
+/** RF-0041: a directed route with its manual priority. */
+export interface Route { externalId: string; code: string; origin: Branch; destination: Branch; priority: RoutePriority; active: boolean }
+export interface RouteInput { code: string; origin: string; destination: string; priority: RoutePriority }
+export interface RouteUpdate { code: string; priority: RoutePriority; active: boolean }
 export interface TransferHistory { readAt: string; branch: Branch | null; items: Transfer[] }
 export interface TransferHistoryFilter { branch?: string; direction?: 'INCOMING' | 'OUTGOING'; status?: TransferStatus; limit?: number }
 
@@ -436,9 +459,11 @@ function transferLineDto(value: unknown): TransferLine {
   if (!record(value) || !count(value.lineNo) || !uuid(value.productExternalId) ||
       !['sku', 'productName', 'unit', 'baseUnitName'].every(k => text(value[k])) ||
       !['factor', 'requestedQuantity', 'requestedBaseQuantity'].every(k => decimal(value[k])) ||
-      !['preparedQuantity', 'preparedBaseQuantity', 'originAvailableQuantity'].every(k => optionalDecimal(value[k])) ||
+      !['preparedQuantity', 'preparedBaseQuantity', 'dispatchedQuantity', 'dispatchedBaseQuantity', 'originAvailableQuantity']
+        .every(k => optionalDecimal(value[k])) ||
       typeof value.unitDivisible !== 'boolean' || typeof value.baseDivisible !== 'boolean' ||
-      (value.preparedQuantity === null) !== (value.preparedBaseQuantity === null)) throw invalid();
+      (value.preparedQuantity === null) !== (value.preparedBaseQuantity === null) ||
+      (value.dispatchedQuantity === null) !== (value.dispatchedBaseQuantity === null)) throw invalid();
   return value as unknown as TransferLine;
 }
 function transferEventDto(value: unknown): TransferEvent {
@@ -460,6 +485,10 @@ function transferDto(value: unknown): Transfer {
   personDto(value.requestedBy);
   if (value.approval !== null && (!record(value.approval) || !instant(value.approval.occurredAt))) throw invalid();
   if (value.approval !== null) personDto((value.approval as Record<string, unknown>).actor);
+  if (value.dispatch !== null && (!record(value.dispatch) || !text(value.dispatch.carrier) || !instant(value.dispatch.departedAt)
+      || !instant(value.dispatch.estimatedArrivalAt) || !text(value.dispatch.routeCode)
+      || !isRoutePriority(value.dispatch.routePriority))) throw invalid();
+  if (value.dispatch !== null) personDto((value.dispatch as Record<string, unknown>).actor);
   return { ...(value as unknown as Transfer), lines: listDto(value.lines, transferLineDto),
     events: value.events === null ? null : listDto(value.events, transferEventDto) };
 }
@@ -840,6 +869,24 @@ export class ApiClient {
   async cancelTransfer(id: string, reason: string | null, idempotencyKey: string): Promise<Transfer> {
     return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/cancel`, 'POST', reason ? { reason } : {},
       undefined, { 'Idempotency-Key': idempotencyKey }));
+  }
+  /**
+   * RF-0035: the origin operator dispatches an approved transfer; the same key replays a dispatch whose outcome is
+   * unknown without moving stock again.
+   */
+  async dispatchTransfer(id: string, input: TransferDispatchInput, idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/dispatch`, 'POST', input, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0041: routes in classification order; local profiles receive the active routes of their branch. */
+  async routes(priority?: RoutePriority): Promise<Route[]> {
+    return listDto(await this.request(`/logistics/routes${priority ? `?priority=${priority}` : ''}`), routeDto);
+  }
+  async createRoute(input: RouteInput): Promise<Route> {
+    return routeDto(await this.request('/logistics/routes', 'POST', input));
+  }
+  async updateRoute(id: string, input: RouteUpdate): Promise<Route> {
+    return routeDto(await this.request(`/logistics/routes/${encodeURIComponent(id)}/update`, 'POST', input));
   }
   async transfer(id: string): Promise<Transfer> {
     return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}`));
