@@ -11,6 +11,7 @@ import { Valuation } from './Valuation.tsx';
 import { Purchases } from './Purchases.tsx';
 import { PriceLists } from './PriceLists.tsx';
 import { Sales } from './Sales.tsx';
+import { Transfers } from './Transfers.tsx';
 import { ReorderAlerts, reorderAlertsQuery } from './ReorderAlerts.tsx';
 import { Visibility } from './Visibility.tsx';
 import { AppShell } from '../components/shared/AppShell.tsx';
@@ -18,7 +19,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { PasswordField } from '../components/shared/PasswordField.tsx';
 import { alertsNavigationLabel, restockNotice } from '../lib/inventory/alerts.ts';
-import { ArrowLeftRight, BellRing, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, UserRound } from 'lucide-react';
+import { ArrowLeftRight, BellRing, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -105,6 +106,8 @@ export function App() {
       { id: 'purchases-title', label: 'Compras', icon: ShoppingCart },
       // RF-0027/RF-0031: operators confirm sales of their branch; managers and administrators consult the records.
       { id: 'sales-title', label: 'Ventas', icon: ReceiptText },
+      // RF-0032–RF-0034: the destination operator requests, the origin operator prepares, the origin manager decides.
+      { id: 'transfers-title', label: 'Transferencias', icon: Truck },
       // RF-0030 (INC-003/D06): every profile consults price lists; only administrators maintain them.
       { id: 'prices-title', label: 'Precios', icon: Tags },
       // RF-0026 (INC-003/D04): valuation is for the branch manager and administrators, never operators.
@@ -158,6 +161,8 @@ export function App() {
         onChanged={() => setRevision(value => value + 1)} revision={revision} visible={current === 'purchases-title'} /></div>
       <div hidden={current !== 'sales-title'}><Sales client={client} user={user} onError={showError}
         onChanged={() => setRevision(value => value + 1)} revision={revision} visible={current === 'sales-title'} /></div>
+      <div hidden={current !== 'transfers-title'}><Transfers client={client} user={user} onError={showError}
+        revision={revision} visible={current === 'transfers-title'} /></div>
       <div hidden={current !== 'prices-title'}><PriceLists client={client} user={user} onError={showError}
         revision={revision} visible={current === 'prices-title'} /></div>
       {valuationAllowed && <div hidden={current !== 'valuation-title'}><Valuation client={client} user={user} onError={showError}

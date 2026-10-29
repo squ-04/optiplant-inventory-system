@@ -176,6 +176,33 @@ export interface ValuationItem {
 export interface InventoryValuation { branch: Branch; readAt: string; totalValue: string; exactTotalValue: string; items: ValuationItem[] }
 export interface PurchaseHistoryFilter { branch?: string; supplier?: string; product?: string; status?: PurchaseStatus; limit?: number }
 
+export type TransferStatus = 'REQUESTED' | 'PREPARING' | 'APPROVED' | 'IN_TRANSIT' | 'RECEIVED_COMPLETE' | 'RECEIVED_DISCREPANCY'
+  | 'CANCELLED' | 'REJECTED';
+export interface TransferLineInput { product: string; unit: string; quantity: string }
+export interface TransferInput { origin: string; lines: TransferLineInput[] }
+/**
+ * RF-0033-CA-02: requested and prepared quantities stay apart; the prepared ones are null until the origin prepares.
+ * `originAvailableQuantity` (base units) is sent only to the origin branch and administrators.
+ */
+export interface TransferLine {
+  lineNo: number; productExternalId: string; sku: string; productName: string; unit: string; factor: string;
+  baseUnitName: string; requestedQuantity: string; requestedBaseQuantity: string; preparedQuantity: string | null;
+  preparedBaseQuantity: string | null; originAvailableQuantity: string | null;
+}
+export interface TransferPrepared { lineNo: number; quantity: string; baseQuantity: string }
+export interface TransferEvent {
+  fromStatus: TransferStatus | null; toStatus: TransferStatus; occurredAt: string; actor: PurchasePerson; reason: string | null;
+  preparation: TransferPrepared[] | null;
+}
+export interface Transfer {
+  externalId: string; code: string; status: TransferStatus; origin: Branch; destination: Branch; requestedAt: string;
+  requestedBy: PurchasePerson; approval: { occurredAt: string; actor: PurchasePerson } | null; lines: TransferLine[];
+  /** State history; null in listings. */
+  events: TransferEvent[] | null;
+}
+export interface TransferHistory { readAt: string; branch: Branch | null; items: Transfer[] }
+export interface TransferHistoryFilter { branch?: string; direction?: 'INCOMING' | 'OUTGOING'; status?: TransferStatus; limit?: number }
+
 /** RF-0027/RF-0029: a sale line; the gross price comes from the chosen list, only the line discount is captured. */
 export interface SaleLineInput { product: string; unit: string; quantity: string; discountPercent: string }
 export interface SaleInput { priceList: string; lines: SaleLineInput[] }
@@ -400,6 +427,40 @@ function valuationItemDto(value: unknown): ValuationItem {
       !['physicalQuantity', 'averageCost', 'value', 'exactValue'].every(k => decimal(value[k]))) throw invalid();
   return value as unknown as ValuationItem;
 }
+const TRANSFER_STATUSES = ['REQUESTED', 'PREPARING', 'APPROVED', 'IN_TRANSIT', 'RECEIVED_COMPLETE', 'RECEIVED_DISCREPANCY',
+  'CANCELLED', 'REJECTED'];
+const optionalDecimal = (value: unknown) => value === null || decimal(value);
+function transferLineDto(value: unknown): TransferLine {
+  if (!record(value) || !count(value.lineNo) || !uuid(value.productExternalId) ||
+      !['sku', 'productName', 'unit', 'baseUnitName'].every(k => text(value[k])) ||
+      !['factor', 'requestedQuantity', 'requestedBaseQuantity'].every(k => decimal(value[k])) ||
+      !['preparedQuantity', 'preparedBaseQuantity', 'originAvailableQuantity'].every(k => optionalDecimal(value[k])) ||
+      (value.preparedQuantity === null) !== (value.preparedBaseQuantity === null)) throw invalid();
+  return value as unknown as TransferLine;
+}
+function transferEventDto(value: unknown): TransferEvent {
+  if (!record(value) || !(value.fromStatus === null || TRANSFER_STATUSES.includes(String(value.fromStatus))) ||
+      !TRANSFER_STATUSES.includes(String(value.toStatus)) || !instant(value.occurredAt) ||
+      !(value.reason === null || text(value.reason))) throw invalid();
+  personDto(value.actor);
+  const preparation = value.preparation === null ? null : listDto(value.preparation, item => {
+    if (!record(item) || !count(item.lineNo) || !decimal(item.quantity) || !decimal(item.baseQuantity)) throw invalid();
+    return item as unknown as TransferPrepared;
+  });
+  return { ...(value as unknown as TransferEvent), preparation };
+}
+function transferDto(value: unknown): Transfer {
+  if (!record(value) || !uuid(value.externalId) || !text(value.code) || !TRANSFER_STATUSES.includes(String(value.status)) ||
+      !instant(value.requestedAt)) throw invalid();
+  branchDto(value.origin);
+  branchDto(value.destination);
+  personDto(value.requestedBy);
+  if (value.approval !== null && (!record(value.approval) || !instant(value.approval.occurredAt))) throw invalid();
+  if (value.approval !== null) personDto((value.approval as Record<string, unknown>).actor);
+  return { ...(value as unknown as Transfer), lines: listDto(value.lines, transferLineDto),
+    events: value.events === null ? null : listDto(value.events, transferEventDto) };
+}
+
 function purchaseDto(value: unknown): PurchaseOrder {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !PURCHASE_STATUSES.includes(String(value.status)) ||
       !record(value.supplier) || !uuid(value.supplier.externalId) || !text(value.supplier.code) || !text(value.supplier.name) ||
@@ -744,5 +805,51 @@ export class ApiClient {
   }
   async sale(id: string): Promise<Sale> {
     return saleDto(await this.request(`/sales/${encodeURIComponent(id)}`));
+  }
+
+  /** RF-0032: active branches, other than the operator's, that may be chosen as origin of a transfer request. */
+  async transferOrigins(): Promise<Branch[]> {
+    return listDto(await this.request('/transfers/origins'), branchDto);
+  }
+  /**
+   * RF-0032: the destination operator requests products from another branch; nothing is reserved. Reuse the same key to
+   * retry a request whose outcome is unknown: the server returns the original transfer without creating another.
+   */
+  async requestTransfer(input: TransferInput, idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request('/transfers', 'POST', input, undefined, { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0033: the origin operator records the quantity to send of every line, at most the requested one. */
+  async prepareTransfer(id: string, lines: { lineNo: number; quantity: string }[], idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/prepare`, 'POST', { lines }, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0034-CA-01: the origin manager approves a transfer in preparation. */
+  async approveTransfer(id: string, idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/approve`, 'POST', {}, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0034-CA-03: the origin manager rejects a transfer in preparation; the reason is mandatory. */
+  async rejectTransfer(id: string, reason: string, idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/reject`, 'POST', { reason }, undefined,
+      { 'Idempotency-Key': idempotencyKey }));
+  }
+  /** RF-0034-CA-02: cancellation before dispatch; the reason is mandatory once the transfer is approved. */
+  async cancelTransfer(id: string, reason: string | null, idempotencyKey: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}/cancel`, 'POST', reason ? { reason } : {},
+      undefined, { 'Idempotency-Key': idempotencyKey }));
+  }
+  async transfer(id: string): Promise<Transfer> {
+    return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}`));
+  }
+  /** Transfers of a branch as origin, destination or both, or of the network for administrators; newest first. */
+  async transfers(filter: TransferHistoryFilter = {}): Promise<TransferHistory> {
+    const query = new URLSearchParams();
+    for (const key of ['branch', 'direction', 'status'] as const) if (filter[key]) query.set(key, filter[key]);
+    if (filter.limit !== undefined) query.set('limit', String(filter.limit));
+    const suffix = query.size > 0 ? `?${query}` : '';
+    const value = await this.request(`/transfers${suffix}`);
+    if (!record(value) || !instant(value.readAt)) throw invalid();
+    return { readAt: value.readAt as string, branch: value.branch === null ? null : branchDto(value.branch),
+      items: listDto(value.items, transferDto) };
   }
 }
