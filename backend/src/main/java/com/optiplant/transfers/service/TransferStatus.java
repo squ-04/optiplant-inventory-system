@@ -37,8 +37,8 @@ public enum TransferStatus {
         return isCode(code) ? valueOf(code).label : code;
     }
 
-    /** «REQUESTED (solicitada), PREPARING (en preparación), …», in the order of the cycle. */
+    /** Every code in alphabetical order, as the history filter has always listed them. */
     public static String codes() {
-        return Arrays.stream(values()).map(status -> status.name() + " (" + status.label + ")").collect(Collectors.joining(", "));
+        return Arrays.stream(values()).map(Enum::name).sorted().collect(Collectors.joining(", "));
     }
 }

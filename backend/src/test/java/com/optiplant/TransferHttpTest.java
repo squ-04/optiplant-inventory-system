@@ -528,7 +528,8 @@ class TransferHttpTest {
         assertThat(otherManager.get("/transfers/" + id).statusCode()).isEqualTo(404);
         HttpResponse<String> unknown = destinationOperator.get("/transfers?status=CLOSED");
         assertThat(unknown.statusCode()).isEqualTo(400);
-        assertThat(read(unknown).get("detail").asText()).contains("REQUESTED (solicitada)", "REJECTED (rechazada)");
+        assertThat(read(unknown).get("detail").asText()).isEqualTo("Estado no admitido: use APPROVED, CANCELLED, IN_TRANSIT, "
+            + "PREPARING, RECEIVED_COMPLETE, RECEIVED_DISCREPANCY, REJECTED, REQUESTED.");
         assertThat(admin.get("/transfers/origins").statusCode()).isEqualTo(403);
     }
 
