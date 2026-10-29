@@ -10,6 +10,7 @@ import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 
+// The server's limits (TransitLossRequest.MAX_REASON and MAX_EVIDENCE).
 const MAX_REASON = 500;
 const MAX_EVIDENCE = 1000;
 

@@ -469,7 +469,8 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
 }) {
   // Forms keep what was typed while the detail stays open (AGENTS.md §6).
   const [mode, setMode] = useState<'prepare' | 'reject' | 'cancel' | 'dispatch' | 'receive' | null>(null);
-  const [received, setReceived] = useState<Record<number, string>>(() => initialReception(transfer));
+  // Seeded from what was sent when the form is first opened (the detail may have been open before the dispatch), then kept.
+  const [received, setReceived] = useState<Record<number, string> | null>(null);
   const [quantities, setQuantities] = useState<Record<number, string>>({});
   const [reason, setReason] = useState('');
   const [dispatchDraft, setDispatchDraft] = useState<DispatchDraft>(emptyDispatchDraft);
@@ -581,7 +582,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
       onWriteOff={onWriteOff} onResend={onResend} />}
     {error && <p role="alert">{error}</p>}
 
-    {mode === 'receive' ? <TransferReceptionForm transfer={transfer} busy={busy} quantities={received} onChange={setReceived}
+    {mode === 'receive' && received ? <TransferReceptionForm transfer={transfer} busy={busy} quantities={received} onChange={setReceived}
       onReceive={(lines, shortages) => onReceive(lines, shortages).then(done => { if (done) setMode(null); return done; })}
       onBack={() => setMode(null)} />
     : mode === 'dispatch' ? <TransferDispatchForm transfer={transfer} route={route} routesLoaded={routesLoaded}
@@ -645,7 +646,7 @@ function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onR
       {preparable && <Button disabled={busy} onClick={startPreparation}><ClipboardCheck aria-hidden="true" />
         {transfer.status === 'PREPARING' ? 'Ajustar preparación' : 'Preparar envío'}</Button>}
       {dispatchable && <Button disabled={busy} onClick={() => setMode('dispatch')}><Truck aria-hidden="true" />Registrar despacho</Button>}
-      {receivable && <Button disabled={busy} onClick={() => setMode('receive')}><PackageCheck aria-hidden="true" />Confirmar recepción</Button>}
+      {receivable && <Button disabled={busy} onClick={() => { setReceived(previous => previous ?? initialReception(transfer)); setMode('receive'); }}><PackageCheck aria-hidden="true" />Confirmar recepción</Button>}
       {decidable && <Button disabled={busy} onClick={onApprove}><CheckCircle2 aria-hidden="true" />Aprobar transferencia</Button>}
       {decidable && <Button variant="outline" disabled={busy} onClick={() => setMode('reject')}><XCircle aria-hidden="true" />Rechazar</Button>}
       {cancellable && <Button variant="outline" disabled={busy} onClick={() => setMode('cancel')}><Ban aria-hidden="true" />Cancelar transferencia</Button>}
