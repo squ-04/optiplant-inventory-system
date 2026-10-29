@@ -1,3 +1,5 @@
+> Estado: realizada. El responsable completó los 25 pasos en su entorno local (confirmado el 29/10/2026). Ese mismo día se contrastó en solo lectura la base local con el estado que deja el [recorrido de compras y ventas](recorrido-manual-compras-ventas.md), que parte de este: sucursales, usuarios y existencias coinciden. La guía conserva su texto original; los mensajes marcados «aproximadamente» se redactaron antes de la ejecución.
+
 Esta es la guía de recorrido manual en un solo flujo, basada en las cinco guías y en las etiquetas reales de la interfaz (`App.tsx`, `Administration.tsx`, `Catalog.tsx`, `Movements.tsx`, `lib/inventory/movements.ts`). No recorrí la aplicación en el navegador, así que los mensajes que no pude confirmar en el código aparecen como «aproximadamente».
 
 ## Preparación
