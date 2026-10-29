@@ -7,13 +7,18 @@ import com.optiplant.common.idempotency.IdempotencyService;
 import com.optiplant.common.text.LineDetail;
 import com.optiplant.identity.service.SessionPrincipal;
 import com.optiplant.inventory.service.InventoryLedger;
+import com.optiplant.logistics.service.ArrivalService;
+import com.optiplant.logistics.service.DiscrepancyService;
 import com.optiplant.logistics.service.DispatchService;
 import com.optiplant.logistics.service.RouteService;
 import com.optiplant.transfers.dto.TransferDispatchRequest;
 import com.optiplant.transfers.dto.TransferPreparationRequest;
 import com.optiplant.transfers.dto.TransferReasonRequest;
+import com.optiplant.transfers.dto.TransferReceptionRequest;
 import com.optiplant.transfers.dto.TransferRequest;
 import com.optiplant.transfers.dto.TransferResponse;
+import com.optiplant.transfers.dto.TransferTreatmentRequest;
+import com.optiplant.transfers.dto.TransitLossRequest;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Clock;
@@ -25,6 +30,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -49,6 +55,9 @@ public class TransferService {
     static final String REJECT = "transfers.reject.v1";
     static final String CANCEL = "transfers.cancel.v1";
     static final String DISPATCH = "transfers.dispatch.v1";
+    static final String RECEIVE = "transfers.receive.v1";
+    static final String RESOLVE = "transfers.discrepancy.resolve.v1";
+    static final String TRANSIT_LOSS = "transfers.discrepancy.transit-loss.v1";
     /**
      * How far the captured departure may be ahead of the server clock: the operator's device converts the Bogotá entry,
      * and a device clock running slightly ahead must not reject a dispatch registered at the moment of departure.
@@ -63,9 +72,12 @@ public class TransferService {
     private final JsonMapper json;
     private final RouteService routes;
     private final DispatchService dispatches;
+    private final ArrivalService arrivals;
+    private final DiscrepancyService discrepancies;
 
     public TransferService(JdbcTemplate jdbc, Clock clock, IdempotencyService idempotency, OperableUnits units,
-                           TransferReader reader, JsonMapper json, RouteService routes, DispatchService dispatches) {
+                           TransferReader reader, JsonMapper json, RouteService routes, DispatchService dispatches,
+                           ArrivalService arrivals, DiscrepancyService discrepancies) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.idempotency = idempotency;
@@ -74,6 +86,8 @@ public class TransferService {
         this.json = json;
         this.routes = routes;
         this.dispatches = dispatches;
+        this.arrivals = arrivals;
+        this.discrepancies = discrepancies;
     }
 
     /** The actor's identity and branch; the branch must be active for new effects (ARQ-007), checked inside the action. */
@@ -148,6 +162,62 @@ public class TransferService {
             () -> reader.detail(dispatch(active(actor), transfer, request), true));
     }
 
+    /**
+     * RF-0036/RF-0037: the destination operator confirms the single arrival of a dispatched transfer with the quantity
+     * received in every line. Complete when every line matches the dispatch; otherwise received with discrepancy and a
+     * linked shortage alert. A repeated key replays the result; any other attempt finds the arrival already confirmed.
+     */
+    @Transactional
+    public TransferResponse receive(SessionPrincipal principal, UUID transfer, String key, TransferReceptionRequest request) {
+        IdempotencyService.requireKey(key);
+        Actor actor = actor(principal);
+        Map<String, String> lines = new TreeMap<>();
+        request.quantities().forEach((lineNo, quantity) -> lines.put(String.valueOf(lineNo), quantity.toPlainString()));
+        return idempotency.execute(actor.id(), RECEIVE, transfer.toString(), key, Map.of("transfer", transfer, "lines", lines),
+            200, TransferResponse.class, () -> reader.detail(receive(active(actor), transfer, request), false));
+    }
+
+    /**
+     * RF-0038-CA-02, RF-0039-CA-01: a manager of the origin or the destination marks the shortage alert as resolved with
+     * the selected treatment. Quantities, value, movements, transit and the transfer state stay as they were.
+     */
+    @Transactional
+    public TransferResponse resolve(SessionPrincipal principal, UUID transfer, String key, TransferTreatmentRequest request) {
+        IdempotencyService.requireKey(key);
+        Actor actor = actor(principal);
+        return idempotency.execute(actor.id(), RESOLVE, transfer.toString(), key, Map.of("transfer", transfer,
+            "treatment", request.treatment()), 200, TransferResponse.class, () -> {
+                Locked locked = lock(active(actor), transfer);
+                discrepancies.resolve(discrepancy(locked), request.treatment(), actor.id());
+                return reader.detail(locked.id(), actor.branchId() == locked.originId());
+            });
+    }
+
+    /**
+     * RF-0039-CA-02: the origin manager authorizes, with reason and evidence, the loss of what is still in transit for a
+     * shortage. The transit and its value are written off once; no physical balance or transfer state changes.
+     */
+    @Transactional
+    public TransferResponse writeOff(SessionPrincipal principal, UUID transfer, String key, TransitLossRequest request) {
+        IdempotencyService.requireKey(key);
+        Actor actor = actor(principal);
+        return idempotency.execute(actor.id(), TRANSIT_LOSS, transfer.toString(), key, Map.of("transfer", transfer,
+            "reason", request.reason(), "evidence", request.evidence()), 200, TransferResponse.class, () -> {
+                Locked locked = lock(active(actor), transfer);
+                if (actor.branchId() != locked.originId()) {
+                    throw forbidden("La pérdida en tránsito la autoriza el gerente de la sucursal origen; el destino valida lo "
+                        + "recibido. No se modificó el inventario.");
+                }
+                discrepancies.writeOff(discrepancy(locked), actor.id(), request.reason(), request.evidence());
+                return reader.detail(locked.id(), true);
+            });
+    }
+
+    private DiscrepancyService.Locked discrepancy(Locked transfer) {
+        return discrepancies.lock(transfer.id()).orElseThrow(() -> new ApiException(409, "NO_DISCREPANCY", "La transferencia "
+            + transfer.code() + " no tiene faltantes registrados; está " + label(transfer.status()) + ". No se modificó nada."));
+    }
+
     private record Resolved(OperableUnits.Unit unit, TransferRequest.Line line, BigDecimal base) {}
 
     private long insert(Actor actor, TransferRequest request) {
@@ -162,6 +232,17 @@ public class TransferService {
         if (!(Boolean) origin.get("active")) {
             throw new ApiException(409, "BRANCH_INACTIVE", "La sucursal origen está inactiva y no admite nuevas transferencias. "
                 + "No se creó la transferencia.");
+        }
+        Long sourceDiscrepancy = null;
+        if (request.sourceDiscrepancy() != null) {
+            DiscrepancyService.Source source = discrepancies.source(request.sourceDiscrepancy())
+                .orElseThrow(() -> new ApiException(404, "DISCREPANCY_NOT_FOUND", "No se encontró el faltante de referencia. "
+                    + "No se creó la transferencia."));
+            if (source.destinationId() != actor.branchId() || source.originId() != originId) {
+                throw new ApiException(409, "SOURCE_DISCREPANCY_MISMATCH", "El reenvío de un faltante se solicita desde la misma "
+                    + "sucursal origen hacia la misma sucursal destino de la transferencia original. No se creó la transferencia.");
+            }
+            sourceDiscrepancy = source.id();
         }
         // Every line is resolved before the first write: a rejected line leaves no transfer behind (RF-0032-CA-02).
         List<Resolved> lines = new ArrayList<>();
@@ -187,8 +268,8 @@ public class TransferService {
         // The business code derives from the internal id, so it is written once the id exists.
         long transferId = jdbc.queryForObject("""
             INSERT INTO transfers_transfer(external_id,code,origin_branch_id,destination_branch_id,requested_by,requested_at,
-                status,created_at,updated_at) VALUES (?,?,?,?,?,?,'REQUESTED',?,?) RETURNING id""",
-            Long.class, externalId, externalId.toString(), originId, actor.branchId(), actor.id(), now, now, now);
+                status,source_discrepancy_id,created_at,updated_at) VALUES (?,?,?,?,?,?,'REQUESTED',?,?,?) RETURNING id""",
+            Long.class, externalId, externalId.toString(), originId, actor.branchId(), actor.id(), now, sourceDiscrepancy, now, now);
         jdbc.update("UPDATE transfers_transfer SET code=? WHERE id=?", "TR-%06d".formatted(transferId), transferId);
         for (int index = 0; index < lines.size(); index++) {
             Resolved resolved = lines.get(index);
@@ -346,6 +427,71 @@ public class TransferService {
         Timestamp at = Timestamp.from(now);
         jdbc.update("UPDATE transfers_transfer SET status='IN_TRANSIT',updated_at=? WHERE id=?", at, transfer.id());
         event(transfer.id(), "APPROVED", "IN_TRANSIT", actor.id(), at, null, null);
+        return transfer.id();
+    }
+
+    private long receive(Actor actor, UUID externalId, TransferReceptionRequest request) {
+        Locked transfer = lock(actor, externalId);
+        if (actor.branchId() != transfer.destinationId()) {
+            throw forbidden("La recepción la confirma el operador de la sucursal destino; el origen consulta su resultado. "
+                + "No se modificó la transferencia ni el inventario.");
+        }
+        if (transfer.status().equals("RECEIVED_COMPLETE") || transfer.status().equals("RECEIVED_DISCREPANCY")) {
+            throw new ApiException(409, "ARRIVAL_ALREADY_CONFIRMED", "La llegada de " + transfer.code() + " ya se confirmó ("
+                + label(transfer.status()) + "): cada despacho tiene una sola recepción. Otra entrega exige una nueva transferencia "
+                + "y su despacho. No se modificó la transferencia ni el inventario.");
+        }
+        if (!transfer.status().equals("IN_TRANSIT")) {
+            throw conflict(transfer, "Solo se recibe una transferencia en tránsito");
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+            SELECT l.line_no,l.product_id,l.product_unit_id,l.factor_snapshot,l.unit_name_snapshot,l.sku_snapshot,
+                l.product_name_snapshot,u.divisible,p.base_divisible,dl.id AS dispatch_line_id,dl.dispatch_id,
+                dl.dispatched_commercial_qty,dl.dispatched_base_qty
+            FROM transfers_line l JOIN catalog_product_unit u ON u.id=l.product_unit_id JOIN catalog_product p ON p.id=l.product_id
+            JOIN logistics_dispatch_line dl ON dl.transfer_line_id=l.id WHERE l.transfer_id=? ORDER BY l.line_no""", transfer.id());
+        Map<Integer, BigDecimal> quantities = request.quantities();
+        for (Integer lineNo : quantities.keySet()) {
+            if (rows.stream().noneMatch(row -> ((Number) row.get("line_no")).intValue() == lineNo)) {
+                throw new ApiException(400, "VALIDATION_FAILED", "Línea " + lineNo + ": no existe en la transferencia "
+                    + transfer.code() + ". No se registró la recepción.");
+            }
+        }
+        // Every line is validated before the first write: a surplus or an invalid quantity rejects the whole arrival.
+        List<ArrivalService.Line> lines = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            int lineNo = ((Number) row.get("line_no")).intValue();
+            BigDecimal quantity = quantities.get(lineNo);
+            if (quantity == null) {
+                throw new ApiException(400, "VALIDATION_FAILED", "Línea " + lineNo + ": indique la cantidad recibida, aunque sea 0. "
+                    + "Se reciben todas las líneas a la vez. No se registró la recepción.");
+            }
+            BigDecimal base;
+            try {
+                base = quantity.signum() == 0 ? BigDecimal.ZERO.setScale(3) : UnitConversion.toBase(quantity,
+                    (BigDecimal) row.get("factor_snapshot"), (Boolean) row.get("divisible"), (Boolean) row.get("base_divisible"));
+            } catch (ApiException error) {
+                throw new ApiException(error.status(), error.code(), LineDetail.of(lineNo, error.getMessage())
+                    + " No se registró la recepción.");
+            }
+            if (base.compareTo((BigDecimal) row.get("dispatched_base_qty")) > 0) {
+                throw new ApiException(409, "RECEIVED_EXCEEDS_DISPATCHED", LineDetail.of(lineNo, "se despacharon "
+                    + plain((BigDecimal) row.get("dispatched_commercial_qty")) + " " + row.get("unit_name_snapshot")
+                    + " y no se puede recibir más de lo enviado.") + " No se registró la recepción.");
+            }
+            lines.add(new ArrivalService.Line(((Number) row.get("dispatch_line_id")).longValue(),
+                ((Number) row.get("product_id")).longValue(), ((Number) row.get("product_unit_id")).longValue(),
+                (BigDecimal) row.get("factor_snapshot"), (BigDecimal) row.get("dispatched_base_qty"), quantity.setScale(3), base,
+                new InventoryLedger.Snapshot((String) row.get("sku_snapshot"), (String) row.get("product_name_snapshot"),
+                    (String) row.get("unit_name_snapshot"))));
+        }
+        String origin = jdbc.queryForObject("SELECT name FROM identity_branch WHERE id=?", String.class, transfer.originId());
+        boolean complete = arrivals.record(new ArrivalService.Order(transfer.code(), origin, transfer.destinationId(),
+            ((Number) rows.getFirst().get("dispatch_id")).longValue(), actor.id(), lines));
+        String to = complete ? "RECEIVED_COMPLETE" : "RECEIVED_DISCREPANCY";
+        Timestamp at = Timestamp.from(clock.instant());
+        jdbc.update("UPDATE transfers_transfer SET status=?,updated_at=? WHERE id=?", to, at, transfer.id());
+        event(transfer.id(), "IN_TRANSIT", to, actor.id(), at, null, null);
         return transfer.id();
     }
 

@@ -12,11 +12,12 @@ import tools.jackson.databind.JsonNode;
 /**
  * A transfer request of the session's own branch, the destination, from another branch, the origin (RF-0032). Each line
  * names a product, one of its commercial units and a positive quantity with up to 3 decimals; a product/unit appears
- * once (INC-015/D02). There is no urgency or priority field (INC-019/D03).
+ * once (INC-015/D02). There is no urgency or priority field (INC-019/D03). {@code sourceDiscrepancy}, optional, makes it the
+ * resend of a shortage (RF-0039-CA-02): a new transfer that references the shortage, never another arrival of the original.
  */
-public record TransferRequest(UUID origin, List<Line> lines) {
+public record TransferRequest(UUID origin, List<Line> lines, UUID sourceDiscrepancy) {
     public static final int MAX_LINES = 100;
-    private static final Set<String> FIELDS = Set.of("origin", "lines");
+    private static final Set<String> FIELDS = Set.of("origin", "lines", "sourceDiscrepancy");
     private static final Set<String> LINE_FIELDS = Set.of("product", "unit", "quantity");
 
     public record Line(UUID product, String unit, BigDecimal quantity) {}
@@ -24,7 +25,7 @@ public record TransferRequest(UUID origin, List<Line> lines) {
     public static TransferRequest from(JsonNode body) {
         if (body == null || !body.isObject()) throw invalid("La solicitud no es válida.");
         body.propertyNames().forEach(name -> {
-            if (!FIELDS.contains(name)) throw invalid("Campo no admitido: " + name + ". La solicitud solo indica el origen y los productos.");
+            if (!FIELDS.contains(name)) throw invalid("Campo no admitido: " + name + ". La solicitud solo indica el origen, los productos y, en un reenvío, el faltante.");
         });
         UUID origin = TransferText.uuid(body.path("origin"), "Seleccione la sucursal origen.");
         JsonNode lines = body.path("lines");
@@ -41,7 +42,10 @@ public record TransferRequest(UUID origin, List<Line> lines) {
             }
             parsed.add(line);
         }
-        return new TransferRequest(origin, List.copyOf(parsed));
+        JsonNode source = body.path("sourceDiscrepancy");
+        UUID discrepancy = source.isMissingNode() || source.isNull() ? null
+            : TransferText.uuid(source, "El faltante de referencia del reenvío no es válido.");
+        return new TransferRequest(origin, List.copyOf(parsed), discrepancy);
     }
 
     private static Line line(JsonNode line, int number) {

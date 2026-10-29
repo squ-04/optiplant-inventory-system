@@ -8,8 +8,11 @@ import com.optiplant.transfers.dto.TransferDispatchRequest;
 import com.optiplant.transfers.dto.TransferHistoryResponse;
 import com.optiplant.transfers.dto.TransferPreparationRequest;
 import com.optiplant.transfers.dto.TransferReasonRequest;
+import com.optiplant.transfers.dto.TransferReceptionRequest;
 import com.optiplant.transfers.dto.TransferRequest;
 import com.optiplant.transfers.dto.TransferResponse;
+import com.optiplant.transfers.dto.TransferTreatmentRequest;
+import com.optiplant.transfers.dto.TransitLossRequest;
 import com.optiplant.transfers.service.TransferQueryService;
 import com.optiplant.transfers.service.TransferService;
 import java.util.List;
@@ -28,9 +31,10 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Transfers between branches (RF-0032–RF-0035). Transfers are never deleted. Writes take an {@code Idempotency-Key}:
- * repeating a request with the same key returns the original result without new effects. Only the dispatch moves stock:
- * out of the origin and into transit, never into the destination.
+ * Transfers between branches (RF-0032–RF-0039). Transfers are never deleted. Writes take an {@code Idempotency-Key}:
+ * repeating a request with the same key returns the original result without new effects. The dispatch moves stock out of
+ * the origin into transit; the single arrival moves what was received from transit into the destination. Resolving a
+ * shortage alert moves nothing; the authorized transit loss only writes off the pending transit.
  */
 @RestController
 @RequestMapping("/api/v1/transfers")
@@ -41,6 +45,12 @@ public class TransferController {
     private static final String MANAGER_ONLY_APPROVE = "La aprobación corresponde al gerente de la sucursal origen.";
     private static final String OPERATOR_ONLY_DISPATCH = "El despacho lo registra el operador de la sucursal origen. "
         + "No se modificó la transferencia ni el inventario.";
+    private static final String OPERATOR_ONLY_RECEIVE = "La recepción la confirma el operador de la sucursal destino; "
+        + "el gerente de destino la supervisa. No se modificó la transferencia ni el inventario.";
+    private static final String MANAGER_ONLY_RESOLVE = "La alerta de faltante la resuelven los gerentes de la sucursal origen "
+        + "o destino; el administrador la supervisa y el operador la consulta. No se modificó la alerta.";
+    private static final String MANAGER_ONLY_LOSS = "La pérdida en tránsito la autoriza el gerente de la sucursal origen. "
+        + "No se modificó el inventario.";
     private static final String MANAGER_ONLY_REJECT = "Solo el gerente de la sucursal origen rechaza una transferencia. "
         + "No se modificó la transferencia.";
 
@@ -107,6 +117,36 @@ public class TransferController {
         return transfers.dispatch(principal, transfer, key, TransferDispatchRequest.from(body));
     }
 
+    /** RF-0036/RF-0037: the destination operator confirms the single arrival with the quantity received per line. */
+    @PostMapping("/{transfer}/receive")
+    public TransferResponse receive(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID transfer,
+                                    @RequestHeader(value = "Idempotency-Key", required = false) String key,
+                                    @RequestBody(required = false) JsonNode body) {
+        transfers.requireRole(principal, "OPERATOR", OPERATOR_ONLY_RECEIVE);
+        policy.requirePublicReference(transfer);
+        return transfers.receive(principal, transfer, key, TransferReceptionRequest.from(body));
+    }
+
+    /** RF-0038-CA-02: a manager of the origin or destination resolves the shortage alert with its treatment. */
+    @PostMapping("/{transfer}/discrepancy/resolve")
+    public TransferResponse resolve(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID transfer,
+                                    @RequestHeader(value = "Idempotency-Key", required = false) String key,
+                                    @RequestBody(required = false) JsonNode body) {
+        transfers.requireRole(principal, "MANAGER", MANAGER_ONLY_RESOLVE);
+        policy.requirePublicReference(transfer);
+        return transfers.resolve(principal, transfer, key, TransferTreatmentRequest.from(body));
+    }
+
+    /** RF-0039-CA-02: the origin manager writes off the pending transit of a shortage, with reason and evidence. */
+    @PostMapping("/{transfer}/discrepancy/transit-loss")
+    public TransferResponse transitLoss(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID transfer,
+                                        @RequestHeader(value = "Idempotency-Key", required = false) String key,
+                                        @RequestBody(required = false) JsonNode body) {
+        transfers.requireRole(principal, "MANAGER", MANAGER_ONLY_LOSS);
+        policy.requirePublicReference(transfer);
+        return transfers.writeOff(principal, transfer, key, TransitLossRequest.from(body));
+    }
+
     /** RF-0034-CA-02: cancellation before dispatch by the actor the transfer's state allows. */
     @PostMapping("/{transfer}/cancel")
     public TransferResponse cancel(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable UUID transfer,
@@ -117,14 +157,19 @@ public class TransferController {
         return transfers.cancel(principal, transfer, key, TransferReasonRequest.from(body));
     }
 
-    /** Transfers of a branch as origin or destination, or of the network for administrators; newest first. */
+    /**
+     * Transfers of a branch as origin or destination, or of the network for administrators; newest first. With
+     * {@code discrepancy} (OPEN, RESOLVED or ALL) only those with a shortage alert in that state, newest alert first
+     * (RF-0038: the alerts section, including resolved alerts).
+     */
     @GetMapping
     public TransferHistoryResponse history(@AuthenticationPrincipal SessionPrincipal principal,
                                            @RequestParam(required = false) UUID branch,
                                            @RequestParam(required = false) String direction,
                                            @RequestParam(required = false) String status,
+                                           @RequestParam(required = false) String discrepancy,
                                            @RequestParam(required = false) Integer limit) {
-        return queries.history(principal, branch, direction, status, limit);
+        return queries.history(principal, branch, direction, status, discrepancy, limit);
     }
 
     /** The active branches a destination operator may request from. */

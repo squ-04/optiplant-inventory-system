@@ -27,6 +27,7 @@ public class TransferQueryService {
     public static final int DEFAULT_LIMIT = 100;
     public static final int MAX_LIMIT = 500;
     private static final Set<String> DIRECTIONS = Set.of("INCOMING", "OUTGOING");
+    private static final Set<String> DISCREPANCIES = Set.of("OPEN", "RESOLVED", "ALL");
 
     private final JdbcTemplate jdbc;
     private final ScopePolicy policy;
@@ -38,7 +39,11 @@ public class TransferQueryService {
         this.reader = reader;
     }
 
-    public TransferHistoryResponse history(SessionPrincipal principal, UUID branch, String direction, String status, Integer limit) {
+    public TransferHistoryResponse history(SessionPrincipal principal, UUID branch, String direction, String status,
+                                           String discrepancy, Integer limit) {
+        if (discrepancy != null && !DISCREPANCIES.contains(discrepancy)) {
+            throw new ApiException(400, "VALIDATION_FAILED", "Estado de alerta no admitido: use OPEN, RESOLVED o ALL.");
+        }
         if (branch != null) policy.requirePublicReference(branch);
         if (status != null && !TransferStatus.isCode(status)) {
             throw new ApiException(400, "VALIDATION_FAILED", "Estado no admitido: use " + TransferStatus.codes() + ".");
@@ -71,8 +76,13 @@ public class TransferQueryService {
             if (direction == null) arguments.add(scope);
         }
         if (status != null) { where.append(" AND t.status=?"); arguments.add(status); }
+        if (discrepancy != null) {
+            where.append(discrepancy.equals("ALL") ? " AND x.id IS NOT NULL" : " AND x.status=?");
+            if (!discrepancy.equals("ALL")) arguments.add(discrepancy);
+        }
         arguments.add(rows);
-        List<TransferResponse> items = reader.list(where + " ORDER BY t.requested_at DESC,t.id DESC LIMIT ?", arguments);
+        String order = discrepancy == null ? " ORDER BY t.requested_at DESC,t.id DESC LIMIT ?" : " ORDER BY x.opened_at DESC,x.id DESC LIMIT ?";
+        List<TransferResponse> items = reader.list(where + order, arguments);
         OffsetDateTime readAt = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP", OffsetDateTime.class);
         return new TransferHistoryResponse(readAt.toInstant(), consulted, items);
     }
