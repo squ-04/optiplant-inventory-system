@@ -147,6 +147,44 @@ class TransferReceptionHttpTest {
             .isEqualByComparingTo("10");
     }
 
+    @Test void anArrivalIsNeverEarlierThanTheRecordedDeparture() throws Exception {
+        // The dispatch accepts a departure up to 5 minutes ahead of the server clock (device clock skew).
+        String id = approved(line(product, "unidad", "10"));
+        OffsetDateTime ahead = OffsetDateTime.now(ZoneOffset.ofHours(-5)).plusMinutes(4);
+        assertThat(originOperator.post("/transfers/" + id + "/dispatch", Map.of("carrier", "Transportes Andinos", "departedAt",
+            ahead.toString(), "estimatedArrivalAt", ahead.plusHours(4).toString())).statusCode()).isEqualTo(200);
+        Snapshot before = snapshot(id);
+        HttpResponse<String> early = destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "10"));
+        assertError(early, 409, "ARRIVAL_BEFORE_DEPARTURE");
+        assertThat(read(early).get("detail").asText()).contains("No se registró la recepción");
+        assertThat(snapshot(id)).isEqualTo(before);
+        // Once the departure is in the past, the same reception is confirmed.
+        jdbc.update("UPDATE logistics_dispatch SET dispatched_at=dispatched_at-interval '10 minutes' WHERE transfer_id="
+            + "(SELECT id FROM transfers_transfer WHERE external_id=?::uuid)", id);
+        assertThat(destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "10")).statusCode()).isEqualTo(200);
+    }
+
+    @Test void aRequestWithoutResendKeepsItsPreviousIdempotencyFingerprint() throws Exception {
+        // A key stored before the resend field existed hashed {"origin","lines"} only; replaying it must not conflict.
+        String key = UUID.randomUUID().toString();
+        Map<String, Object> body = Map.of("origin", a.toString(), "lines", List.of(line(product, "unidad", "1")));
+        HttpResponse<String> first = destinationOperator.post("/transfers", body, key);
+        assertThat(first.statusCode()).isEqualTo(201);
+        byte[] stored = jdbc.queryForObject("SELECT request_hash FROM app_idempotency WHERE idempotency_key=?", byte[].class, key);
+        java.security.MessageDigest sha = java.security.MessageDigest.getInstance("SHA-256");
+        // Field order as the former TransferRequest record serialized it: origin, lines; product, unit, quantity.
+        Map<String, Object> previousLine = new java.util.LinkedHashMap<>();
+        previousLine.put("product", product);
+        previousLine.put("unit", "unidad");
+        previousLine.put("quantity", new java.math.BigDecimal("1"));
+        Map<String, Object> previousRequest = new java.util.LinkedHashMap<>();
+        previousRequest.put("origin", a);
+        previousRequest.put("lines", List.of(previousLine));
+        byte[] previous = sha.digest(json.writeValueAsBytes(previousRequest));
+        assertThat(stored).isEqualTo(previous);
+        assertThat(read(destinationOperator.post("/transfers", body, key))).isEqualTo(read(first));
+    }
+
     // ---------------------------------------------------------------- RF-0037 partial and zero receptions
 
     @Test void aPartialReceptionKeepsTheShortageInTransitWithALinkedAlert() throws Exception {

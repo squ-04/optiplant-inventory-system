@@ -100,7 +100,12 @@ public class TransferService {
     public TransferResponse request(SessionPrincipal principal, String key, TransferRequest request) {
         IdempotencyService.requireKey(key);
         Actor actor = actor(principal);
-        return idempotency.execute(actor.id(), CREATE, principal.branchExternalId().toString(), key, request, 201,
+        // A request without a resend fingerprints as it did before the field existed, so stored keys keep replaying.
+        Map<String, Object> fingerprint = new LinkedHashMap<>();
+        fingerprint.put("origin", request.origin());
+        fingerprint.put("lines", request.lines());
+        if (request.sourceDiscrepancy() != null) fingerprint.put("sourceDiscrepancy", request.sourceDiscrepancy());
+        return idempotency.execute(actor.id(), CREATE, principal.branchExternalId().toString(), key, fingerprint, 201,
             TransferResponse.class, () -> reader.detail(insert(active(actor), request), false));
     }
 
@@ -485,9 +490,18 @@ public class TransferService {
                 new InventoryLedger.Snapshot((String) row.get("sku_snapshot"), (String) row.get("product_name_snapshot"),
                     (String) row.get("unit_name_snapshot"))));
         }
+        // Data model §6.6: the arrival is never earlier than the departure, which may be up to the clock tolerance ahead.
+        long dispatchId = ((Number) rows.getFirst().get("dispatch_id")).longValue();
+        Instant departedAt = jdbc.queryForObject("SELECT dispatched_at FROM logistics_dispatch WHERE id=?", OffsetDateTime.class,
+            dispatchId).toInstant();
+        if (clock.instant().isBefore(departedAt)) {
+            throw new ApiException(409, "ARRIVAL_BEFORE_DEPARTURE", "La salida real registrada en el despacho es posterior a la "
+                + "hora actual del servidor: la llegada no puede ser anterior a la salida. Confirme la recepción en unos minutos. "
+                + "No se registró la recepción.");
+        }
         String origin = jdbc.queryForObject("SELECT name FROM identity_branch WHERE id=?", String.class, transfer.originId());
         boolean complete = arrivals.record(new ArrivalService.Order(transfer.code(), origin, transfer.destinationId(),
-            ((Number) rows.getFirst().get("dispatch_id")).longValue(), actor.id(), lines));
+            dispatchId, actor.id(), lines));
         String to = complete ? "RECEIVED_COMPLETE" : "RECEIVED_DISCREPANCY";
         Timestamp at = Timestamp.from(clock.instant());
         jdbc.update("UPDATE transfers_transfer SET status=?,updated_at=? WHERE id=?", to, at, transfer.id());
