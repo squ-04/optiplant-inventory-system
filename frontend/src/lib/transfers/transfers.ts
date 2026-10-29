@@ -1,4 +1,4 @@
-import type { Transfer, TransferLine, User } from '../api/client.ts';
+import type { ShortageTreatment, Transfer, TransferLine, User } from '../api/client.ts';
 import { decimal } from '../format.ts';
 import { STEP_LABEL_OVERRIDES, TRANSFER_STATUS, TRANSFER_STEPS } from './statuses.ts';
 import type { TransferStatus } from './statuses.ts';
@@ -6,7 +6,7 @@ import type { TransferStatus } from './statuses.ts';
 export { TRANSFER_STEPS };
 
 /**
- * Presentation rules for transfers (RF-0032–RF-0034). The server validates every quantity and decides who may act under
+ * Presentation rules for transfers (RF-0032–RF-0039). The server validates every quantity and decides who may act under
  * a lock; these rules only choose which actions to offer. Decimal strings are never converted to JavaScript numbers.
  */
 
@@ -122,3 +122,58 @@ export function preparationMessage(check: PreparationCheck, line: PreparedLine):
 
 /** Blocking checks stop the save, as the server would reject them; the availability warning does not. */
 export const blocksPreparation = (check: PreparationCheck) => check !== 'ok' && check !== 'exceedsAvailable';
+
+/** RF-0036/RF-0037: only the destination operator confirms the arrival, once, while the transfer is in transit. */
+export const canReceive = (user: Scope, transfer: Sides) => user.role === 'OPERATOR' && atDestination(user, transfer)
+  && transfer.status === 'IN_TRANSIT';
+
+type WithShortage = Sides & Pick<Transfer, 'discrepancy'>;
+/** RF-0038-CA-02: managers of the origin or the destination mark an open shortage alert «Resuelto». */
+export const canResolve = (user: Scope, transfer: WithShortage) => user.role === 'MANAGER'
+  && (atOrigin(user, transfer) || atDestination(user, transfer)) && transfer.discrepancy?.status === 'OPEN';
+
+/** Whether something of the shortage is still pending in transit. */
+export const pendingInTransit = (transfer: Pick<Transfer, 'lines'>) => transfer.lines.some(line =>
+  line.inTransitBaseQuantity !== null && compareDecimal(line.inTransitBaseQuantity, '0') !== 0);
+
+/** RF-0039-CA-02: the origin manager authorizes the loss of what is still in transit, once. */
+export const canWriteOff = (user: Scope, transfer: WithShortage & Pick<Transfer, 'lines'>) => user.role === 'MANAGER'
+  && atOrigin(user, transfer) && transfer.discrepancy !== null && transfer.discrepancy.transitLoss === null
+  && pendingInTransit(transfer);
+
+/** RF-0039-CA-02: a resend is a new request of the destination operator from the same origin. */
+export const canResend = (user: Scope, transfer: WithShortage) => user.role === 'OPERATOR' && atDestination(user, transfer)
+  && transfer.discrepancy !== null;
+
+/** The selection offered by «Resuelto»; it documents the decision and moves nothing. */
+export const TREATMENT_LABEL: Record<ShortageTreatment, string> = {
+  RESEND: 'Reenvío', ADJUSTMENT: 'Ajuste', CLAIM: 'Reclamación',
+};
+export const TREATMENT_HINT: Record<ShortageTreatment, string> = {
+  RESEND: 'La reposición se pide con una nueva transferencia que referencia este faltante.',
+  ADJUSTMENT: 'Los movimientos que correspondan se registran aparte, con su motivo.',
+  CLAIM: 'Solo documenta la reclamación: no ingresa mercancía ni da de baja el tránsito.',
+};
+
+/** Lines with a shortage, in the requested unit. */
+export const missingLines = (transfer: Pick<Transfer, 'lines'>) => transfer.lines.filter(line =>
+  line.missingQuantity !== null && compareDecimal(line.missingQuantity, '0')! > 0);
+
+export type ReceptionCheck = PreparationCheck;
+type ReceivedLine = Pick<TransferLine, 'dispatchedQuantity' | 'factor' | 'unitDivisible' | 'baseDivisible' | 'unit' | 'baseUnitName'>;
+
+/**
+ * Checks a typed received quantity with the server's rules: the same decimal and unit rules as the preparation, and
+ * never more than was dispatched (surpluses are rejected before confirming, RF-0037).
+ */
+export function checkReception(quantity: string, line: ReceivedLine): ReceptionCheck {
+  return checkPreparation(quantity, { ...line, requestedQuantity: line.dispatchedQuantity ?? '0', originAvailableQuantity: null });
+}
+
+export function receptionMessage(check: ReceptionCheck, line: ReceivedLine): string | null {
+  if (check === 'exceeds') return `No puede superar lo enviado: ${decimal(line.dispatchedQuantity ?? '0')} ${line.unit}. `
+    + 'Un sobrante no se recibe en esta transferencia.';
+  if (check === 'invalid') return 'Indique la cantidad recibida, con coma decimal; use 0 si no llegó nada.';
+  if (check === 'decimals') return 'La cantidad recibida debe ser un decimal de 0 o más con hasta 3 decimales.';
+  return preparationMessage(check, { ...line, requestedQuantity: line.dispatchedQuantity ?? '0', originAvailableQuantity: null });
+}

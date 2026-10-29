@@ -25,8 +25,14 @@ export const isTransferStatus = (value: unknown): value is TransferStatus =>
 /** States that close the cycle before dispatch; they are shown struck through and explained with their reason. */
 export const CLOSED_BEFORE_DISPATCH: TransferStatus[] = ['CANCELLED', 'REJECTED'];
 
-/** The steps of this cycle in order; cancellation and rejection close it before dispatch. */
-export const TRANSFER_STEPS: TransferStatus[] = ['REQUESTED', 'PREPARING', 'APPROVED', 'IN_TRANSIT'];
+/**
+ * The steps of this cycle in order; cancellation and rejection close it before dispatch. The last step is the single
+ * arrival (RF-0036/RF-0037), reached by both received states.
+ */
+export const TRANSFER_STEPS: TransferStatus[] = ['REQUESTED', 'PREPARING', 'APPROVED', 'IN_TRANSIT', 'RECEIVED_COMPLETE'];
 
-/** The progress step names the dispatch (RF-0035) instead of the state it leads to. */
-export const STEP_LABEL_OVERRIDES: Partial<Record<TransferStatus, string>> = { IN_TRANSIT: 'Despacho' };
+/** The step a state belongs to: a reception with discrepancy is still the reception step. */
+export const STEP_OF: Partial<Record<TransferStatus, TransferStatus>> = { RECEIVED_DISCREPANCY: 'RECEIVED_COMPLETE' };
+
+/** The progress steps name the dispatch (RF-0035) and the reception instead of the states they lead to. */
+export const STEP_LABEL_OVERRIDES: Partial<Record<TransferStatus, string>> = { IN_TRANSIT: 'Despacho', RECEIVED_COMPLETE: 'Recepción' };

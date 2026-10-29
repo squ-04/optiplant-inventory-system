@@ -13,13 +13,15 @@ const line = {
   lineNo: 1, productExternalId: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f', sku: 'MAC-1', productName: 'Maceta', unit: 'caja',
   factor: '12', baseUnitName: 'unidad', requestedQuantity: '2.000', requestedBaseQuantity: '24.000', preparedQuantity: '1.000',
   preparedBaseQuantity: '12.000', dispatchedQuantity: '1.000', dispatchedBaseQuantity: '12.000', originAvailableQuantity: '18.000',
-  unitDivisible: false, baseDivisible: false,
+  unitDivisible: false, baseDivisible: false, receivedQuantity: null, receivedBaseQuantity: null, missingQuantity: null,
+  missingBaseQuantity: null, inTransitBaseQuantity: '12.000',
 };
 const dispatched = {
   externalId: '4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a', code: 'TR-000001', status: 'IN_TRANSIT', origin, destination,
   requestedAt: '2026-10-28T15:00:00Z', requestedBy: person, approval: { occurredAt: '2026-10-28T17:00:00Z', actor: person },
   dispatch: { carrier: 'Transportes Andinos', departedAt: '2026-10-28T18:00:00Z', estimatedArrivalAt: '2026-10-29T20:00:00Z',
-    actor: person, routeCode: 'R-AB', routePriority: 'HIGH' }, lines: [line], events: null,
+    actor: person, routeCode: 'R-AB', routePriority: 'HIGH' }, arrival: null, discrepancy: null, sourceDiscrepancy: null,
+  lines: [line], events: null,
 };
 
 function harness(responses: Response[]) {
