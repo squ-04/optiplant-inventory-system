@@ -121,6 +121,8 @@ test('durations read in hours and minutes without rounding a short delay to zero
   assert.equal(duration(600), '10 min');
   assert.equal(deviation({ ...partialTiming, deviationSeconds: -1800 }), '30 min antes de lo estimado');
   assert.equal(deviation({ ...partialTiming, deviationSeconds: 0 }), 'A la hora estimada');
+  // The server rounds lateness up, so half a second late reads as late, never as the estimated instant.
+  assert.equal(deviation({ ...partialTiming, delivery: 'COMPLETE', deviationSeconds: 1 }), 'menos de 1 min después de lo estimado');
 });
 
 test('RF-0042: every view names the received-with-discrepancy state the same way', () => {

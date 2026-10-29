@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, RefreshCw, Search } from 'lucide-react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { Branch, ComplianceFilter, ComplianceMetrics, ComplianceReport, User } from '../lib/api/client.ts';
@@ -30,14 +30,22 @@ export function LogisticsCompliance({ client, user, onError, revision, visible }
     if (admin && visible) client.visibleBranches().then(setBranches).catch(onError);
   }, [client, admin, visible, revision]);
 
+  // Only the latest report request may update the view: a slower earlier response (another period) is discarded.
+  const reportRequest = useRef(0);
   async function load(target = consulted) {
+    const request = ++reportRequest.current;
+    const current = () => request === reportRequest.current;
     setLoading(true); setError('');
-    try { setReport(await client.complianceReport(target)); } catch (reason) {
+    try {
+      const value = await client.complianceReport(target);
+      if (current()) setReport(value);
+    } catch (reason) {
+      if (!current()) return;
       if (reason instanceof ApiError && reason.status === 401) onError(reason);
       else setError(reason instanceof TypeError
         ? 'Sin comunicación con el servidor. El reporte mostrado puede estar desactualizado.'
         : reason instanceof Error ? reason.message : 'No se pudo generar el reporte de cumplimiento.');
-    } finally { setLoading(false); }
+    } finally { if (current()) setLoading(false); }
   }
   useEffect(() => { if (visible) void load(); }, [visible, consulted, revision]);
 
