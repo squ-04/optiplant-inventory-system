@@ -82,7 +82,7 @@ public class RouteService {
         UUID externalId = UUID.randomUUID();
         // A concurrent registration of the same trajectory or code may commit between the checks above and this insert.
         // ON CONFLICT waits for it and then inserts nothing, without raising an error, so the transaction stays usable and
-        // the same checks name the conflict; the unique constraints remain the guarantee.
+        // each business conflict is checked by name; the unique constraints remain the guarantee.
         boolean inserted = !jdbc.queryForList("""
             INSERT INTO logistics_route(external_id,code,origin_branch_id,destination_branch_id,priority,active,created_at,updated_at)
             VALUES (?,?,?,?,?,TRUE,?,?) ON CONFLICT DO NOTHING RETURNING id""", Long.class, externalId, request.code(), origin,
@@ -90,7 +90,12 @@ public class RouteService {
         if (!inserted) {
             List<String> raced = jdbc.queryForList("SELECT code FROM logistics_route WHERE origin_branch_id=? "
                 + "AND destination_branch_id=?", String.class, origin, destination);
-            throw raced.isEmpty() ? codeExists() : routeExists(raced.getFirst());
+            if (!raced.isEmpty()) throw routeExists(raced.getFirst());
+            requireFreeCode(request.code(), null);
+            // Neither conflict is visible any more (the winner changed its code meanwhile): nothing was registered and
+            // the same request can simply be repeated, instead of naming a conflict that no longer exists.
+            throw new ApiException(409, "ROUTE_CONFLICT", "Otra ruta se registró o modificó al mismo tiempo. No se registró "
+                + "la ruta: repita la operación.");
         }
         return find(externalId);
     }

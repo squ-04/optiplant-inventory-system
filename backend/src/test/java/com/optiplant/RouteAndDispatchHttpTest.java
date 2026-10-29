@@ -176,6 +176,11 @@ class RouteAndDispatchHttpTest {
         ExecutorService pool = Executors.newSingleThreadExecutor();
         try (Connection held = dataSource.getConnection()) {
             held.setAutoCommit(false);
+            int holder;
+            try (var pid = held.createStatement().executeQuery("SELECT pg_backend_pid()")) {
+                pid.next();
+                holder = pid.getInt(1);
+            }
             try (PreparedStatement insert = held.prepareStatement("INSERT INTO logistics_route(external_id,code,origin_branch_id,"
                 + "destination_branch_id,priority) SELECT ?,?,o.id,d.id,'HIGH' FROM identity_branch o, identity_branch d "
                 + "WHERE o.external_id=? AND d.external_id=?")) {
@@ -187,8 +192,9 @@ class RouteAndDispatchHttpTest {
             }
             Future<HttpResponse<String>> response = pool.submit(registration);
             long deadline = System.nanoTime() + Duration.ofSeconds(15).toNanos();
-            while (jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' "
-                + "AND query LIKE '%INSERT INTO logistics_route%'", Integer.class) == 0) {
+            // Only a session blocked by this very transaction counts as the registration waiting on the held row.
+            while (jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE ?=ANY(pg_blocking_pids(pid)) "
+                + "AND query LIKE '%INSERT INTO logistics_route%'", Integer.class, holder) == 0) {
                 assertThat(response.isDone()).as("the registration finished without waiting for the held row").isFalse();
                 assertThat(System.nanoTime()).as("the registration never blocked on the held row").isLessThan(deadline);
                 Thread.sleep(20);
