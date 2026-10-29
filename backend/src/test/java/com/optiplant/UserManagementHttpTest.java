@@ -122,11 +122,16 @@ class UserManagementHttpTest {
         UUID inactiveId = UUID.fromString(json.readTree(created.body()).path("externalId").asText());
         assertThat(admin.post("/api/v1/users/" + inactiveId + "/deactivate", Map.of()).statusCode()).isEqualTo(204);
         assertProblem(admin.post("/api/v1/users", valid), 409, "USER_CODE_CONFLICT");
+        Map<String, Object> otherCase = new java.util.HashMap<>(valid);
+        otherCase.put("code", ("inactive-" + suffix).toUpperCase());
+        assertProblem(admin.post("/api/v1/users", otherCase), 409, "USER_CODE_CONFLICT");
 
         var other = admin.post("/api/v1/users", Map.of("code", "other-" + suffix, "fullName", "Other " + suffix,
             "role", "ADMIN", "temporaryPassword", "another individual password " + suffix));
         UUID otherId = UUID.fromString(json.readTree(other.body()).path("externalId").asText());
         assertProblem(admin.post("/api/v1/users/" + otherId + "/update", Map.of("code", "inactive-" + suffix,
+            "fullName", "Changed", "role", "ADMIN")), 409, "USER_CODE_CONFLICT");
+        assertProblem(admin.post("/api/v1/users/" + otherId + "/update", Map.of("code", ("inactive-" + suffix).toUpperCase(),
             "fullName", "Changed", "role", "ADMIN")), 409, "USER_CODE_CONFLICT");
         assertThat(json.readTree(admin.get("/api/v1/users/" + otherId).body()).path("code").asText())
             .isEqualTo("other-" + suffix);

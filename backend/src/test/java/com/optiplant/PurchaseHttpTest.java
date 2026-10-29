@@ -176,6 +176,9 @@ class PurchaseHttpTest {
         HttpResponse<String> duplicate = admin.post("/purchases/suppliers", Map.of("code", code, "name", "Otro"), null);
         assertThat(duplicate.statusCode()).isEqualTo(409);
         assertThat(read(duplicate).get("code").asText()).isEqualTo("SUPPLIER_CODE_EXISTS");
+        HttpResponse<String> otherCase = admin.post("/purchases/suppliers", Map.of("code", code.toLowerCase(), "name", "Otro"), null);
+        assertThat(otherCase.statusCode()).isEqualTo(409);
+        assertThat(read(otherCase).get("code").asText()).isEqualTo("SUPPLIER_CODE_EXISTS");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM purchases_supplier", Integer.class)).isEqualTo(before);
 
         String second = supplier("Abonos SAS");

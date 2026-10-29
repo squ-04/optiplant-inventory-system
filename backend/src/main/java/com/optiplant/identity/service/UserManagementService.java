@@ -101,8 +101,8 @@ public class UserManagementService {
     }
 
     private void rejectDuplicate(String code, UUID externalId) {
-        boolean duplicate = externalId == null ? users.findByCode(code).isPresent()
-            : users.existsByCodeAndExternalIdNot(code, externalId);
+        boolean duplicate = externalId == null ? users.existsByCodeIgnoreCase(code)
+            : users.existsByCodeIgnoreCaseAndExternalIdNot(code, externalId);
         if (duplicate) throw new ApiException(409, "USER_CODE_CONFLICT", "El código de usuario ya está registrado.");
     }
 

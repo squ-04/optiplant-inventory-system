@@ -52,7 +52,7 @@ public class PriceListService {
 
     @Transactional
     public PriceListResponse create(PriceListRequest request) {
-        if (lists.existsByCode(request.code())) throw codeExists();
+        if (lists.existsByCodeIgnoreCase(request.code())) throw codeExists();
         try {
             return response(lists.saveAndFlush(PriceList.create(request.code(), request.name(), clock.instant())), List.of());
         } catch (DataIntegrityViolationException error) {
@@ -63,7 +63,7 @@ public class PriceListService {
     @Transactional
     public PriceListResponse update(UUID externalId, PriceListRequest request) {
         PriceList list = lists.findByExternalId(externalId).orElseThrow(PriceListService::notFound);
-        if (lists.existsByCodeAndIdNot(request.code(), list.getId())) throw codeExists();
+        if (lists.existsByCodeIgnoreCaseAndIdNot(request.code(), list.getId())) throw codeExists();
         list.update(request.code(), request.name(), request.active(), clock.instant());
         try {
             lists.saveAndFlush(list);

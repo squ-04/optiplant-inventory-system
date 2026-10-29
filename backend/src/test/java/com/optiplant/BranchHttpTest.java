@@ -107,6 +107,10 @@ class BranchHttpTest {
         admin.csrf();
         assertProblem(admin.post("/api/v1/branches", Map.of("code", "BRANCH-UNIQUE", "name", "Duplicada")), 409,
             "BRANCH_CODE_EXISTS");
+        // A code that differs only in letter case names the same branch.
+        admin.csrf();
+        assertProblem(admin.post("/api/v1/branches", Map.of("code", "branch-unique", "name", "Duplicada")), 409,
+            "BRANCH_CODE_EXISTS");
         admin.csrf();
         assertProblem(admin.post("/api/v1/branches", Map.of("code", " ", "name", "Válida")), 400, "VALIDATION_FAILED");
         admin.csrf();

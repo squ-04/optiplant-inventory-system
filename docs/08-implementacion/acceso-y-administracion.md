@@ -6,7 +6,7 @@ Implementación sobre el esquema PostgreSQL y la sesión JDBC existentes, sin nu
 
 1. Preparar el entorno local con `python3 scripts/init_environment.py` si todavía no existe `.env`. No sobrescribir secretos existentes. Ejecutar `docker compose up --build --wait` y abrir `http://localhost:5173` (o los puertos de `.env`). Usar siempre `localhost` en ambos servicios.
 2. Autenticarse con el código y la contraseña individuales provisionados en `.env`. El primer ingreso exige cambiar la contraseña (15–128 caracteres, incluidos espacios); volver a iniciar sesión con la nueva. También se puede cambiar voluntariamente acreditando la contraseña vigente.
-3. Como administrador, crear dos sucursales con códigos diferentes. Consultarlas, cambiar sus nombres y comprobar que el identificador público y código de sucursal no cambian. Repetir un código debe mostrar un error sin crear otro registro.
+3. Como administrador, crear dos sucursales con códigos diferentes. Consultarlas, cambiar sus nombres y comprobar que el identificador público y código de sucursal no cambian. Repetir un código, aunque solo cambien mayúsculas y minúsculas (`NORTE` y `norte`), debe mostrar un error sin crear otro registro.
 4. Crear un gerente y un operador con sucursal activa, y otro administrador sin sucursal obligatoria. Entregar cada contraseña temporal individual por un canal privado: no se podrá consultar posteriormente. Una contraseña temporal igual al código se rechaza con «La contraseña temporal debe ser distinta del código de usuario.»; una de menos de 15 o más de 128 caracteres, con «La contraseña temporal debe tener entre 15 y 128 caracteres.». Un rechazo se muestra una sola vez, en la propia vista; el aviso general queda reservado a problemas de sesión y se descarta al cambiar de vista. Comprobar edición de nombre/código/perfil/asignación. No existe eliminación física ni formulario de claves internas.
 5. En otra ventana privada, iniciar sesión con el operador, completar su cambio inicial y consultar su sucursal. La selección de otra sucursal solo permite consultar existencias; no concede escritura ni acceso al historial comercial ajeno. Gerente y operador no ven formularios de administración.
 6. Manteniendo una sesión del operador abierta, cambiar su perfil o sucursal desde el administrador. La siguiente solicitud de esa sesión debe exigir autenticación. Desactivar su cuenta debe conservar el registro, impedir el acceso y dejar su código reservado.
@@ -41,7 +41,27 @@ Errores: `400` solicitud inválida; `401` sin sesión/vencida/revocada; `403` si
 - Los comandos de ingresos/retiros, compras, ventas, ajustes, etapas de transferencias y exportación todavía no existen. Por ello los criterios de RF-0005/RF-0007 que exigen ejecutar esos comandos y verificar sus efectos no pueden declararse cumplidos por esta entrega. Se aplicarán y probarán con sus módulos dependientes; aquí no se sustituyen por endpoints ficticios ni se amplía el alcance para implementarlos.
 - Desde RF-0014/RF-0015 la tabla de existencias de **Consultas** se actualiza por polling cada dos segundos y advierte datos potencialmente desactualizados; el historial operativo sigue requiriendo consulta explícita. Ver [inventario entre sucursales](inventario-entre-sucursales.md).
 
+## Códigos sin distinguir mayúsculas (V12)
+
+Desde la migración `V12__case_insensitive_codes.sql`, los códigos que identifican datos maestros son únicos sin distinguir mayúsculas y minúsculas: sucursales, usuarios, SKU de productos, listas de precios, proveedores y rutas. Cada código conserva la forma en que se escribió; un duplicado que solo difiere en mayúsculas recibe el mismo `409` que un duplicado exacto. El inicio de sesión sigue comparando el código de usuario exactamente. Los códigos generados (`OC-`, `VT-`, `TR-`) no cambian.
+
+La migración nunca renombra, fusiona ni elimina datos. Si una base existente ya tiene códigos que chocan, se detiene antes de cambiar nada, la aplicación no arranca y el registro del backend los indica, por ejemplo: «Hay códigos que solo difieren en mayúsculas y minúsculas: identity_branch: E2E-NORTE, e2e-norte. No se modificó ningún dato: renombre uno de cada grupo y vuelva a iniciar la aplicación.». Para comprobarlo antes de actualizar, con la pila en marcha:
+
+```sh
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
+  SELECT '"'"'sucursal'"'"' AS tipo, string_agg(code, '"'"', '"'"') FROM identity_branch GROUP BY lower(code) HAVING count(*) > 1
+  UNION ALL SELECT '"'"'usuario'"'"', string_agg(code, '"'"', '"'"') FROM identity_user_account GROUP BY lower(code) HAVING count(*) > 1
+  UNION ALL SELECT '"'"'producto'"'"', string_agg(sku, '"'"', '"'"') FROM catalog_product GROUP BY lower(sku) HAVING count(*) > 1
+  UNION ALL SELECT '"'"'lista'"'"', string_agg(code, '"'"', '"'"') FROM catalog_price_list GROUP BY lower(code) HAVING count(*) > 1
+  UNION ALL SELECT '"'"'proveedor'"'"', string_agg(code, '"'"', '"'"') FROM purchases_supplier GROUP BY lower(code) HAVING count(*) > 1
+  UNION ALL SELECT '"'"'ruta'"'"', string_agg(code, '"'"', '"'"') FROM logistics_route GROUP BY lower(code) HAVING count(*) > 1"'
+```
+
+Sin filas, la actualización se aplica sola al arrancar. Con filas, el responsable decide qué registro renombrar: usuarios, productos, listas, proveedores y rutas se renombran desde la aplicación antes de actualizar; el código de una sucursal no se edita desde la aplicación (es inmutable), así que su renombre requiere una sentencia `UPDATE identity_branch SET code=… WHERE code=…` autorizada y ejecutada por el propietario de la base. Los documentos ya registrados conservan sus propias copias del código.
+
 ## Verificaciones
+
+- Backend: `CaseInsensitiveCodeMigrationTest` aplica V12 sobre una base con datos: con códigos que chocan, la migración se detiene, los nombra y no cambia datos ni crea índices; tras renombrarlos, se aplica y rechaza la variante en minúsculas. Las pruebas HTTP de sucursales, usuarios, productos, listas, proveedores y rutas comprueban el `409` de esa variante.
 
 Backend: pruebas HTTP con PostgreSQL efímero/Testcontainers, más pruebas de política de cuenta; ejecutar el runner Maven Docker descrito en `backend/README.md`. Frontend: `pnpm test` y `pnpm build`, o `docker build --target build -t optiplant-frontend:check frontend`. Las pruebas del cliente con transportes controlados no sustituyen una comprobación de navegador con servicios reales. Los resultados observados se registran en `odd/tasks/rf-0002-0007.md`.
 
