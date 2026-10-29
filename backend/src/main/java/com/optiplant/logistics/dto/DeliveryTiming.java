@@ -32,7 +32,8 @@ public record DeliveryTiming(long estimatedSeconds, Long actualSeconds, Long dev
         }
         boolean late = arrivedAt.isAfter(estimatedArrivalAt);
         boolean consistent = !arrivedAt.isBefore(departedAt);
-        return new DeliveryTiming(estimated, Duration.between(departedAt, arrivedAt).toSeconds(),
+        // Both durations round up like the deviation, so deviation = actual − estimated (departures and estimates are whole minutes).
+        return new DeliveryTiming(estimated, ceilingSeconds(Duration.between(departedAt, arrivedAt)),
             ceilingSeconds(Duration.between(estimatedArrivalAt, arrivedAt)), complete ? COMPLETE : DISCREPANCY,
             complete && consistent && !late, false, consistent);
     }

@@ -33,6 +33,12 @@ class DeliveryTimingTest {
         DeliveryTiming barely = DeliveryTiming.of(bogota(10, 0), bogota(12, 0), bogota(12, 0).plusMillis(500), true, bogota(13, 0));
         assertThat(barely.onTime()).isFalse();
         assertThat(barely.deviationSeconds()).isEqualTo(1L);
+        // Both durations round up the same way, so the deviation always equals real minus estimated.
+        assertThat(barely.actualSeconds()).isEqualTo(7201L);
+        assertThat(barely.actualSeconds() - barely.estimatedSeconds()).isEqualTo(barely.deviationSeconds());
+        DeliveryTiming early43 = DeliveryTiming.of(bogota(10, 0), bogota(10, 0), bogota(10, 0).plusMillis(43_700), true, bogota(13, 0));
+        assertThat(early43.actualSeconds()).isEqualTo(44L);
+        assertThat(early43.deviationSeconds()).isEqualTo(44L);
         // Half a second early is on time and reads as the estimated instant.
         DeliveryTiming early = DeliveryTiming.of(bogota(10, 0), bogota(12, 0), bogota(12, 0).minusMillis(500), true, bogota(13, 0));
         assertThat(early.onTime()).isTrue();
