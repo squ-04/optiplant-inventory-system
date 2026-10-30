@@ -1,15 +1,20 @@
 package com.optiplant.dashboard.service;
 
 import com.optiplant.common.exception.ApiException;
+import com.optiplant.dashboard.dto.DemandResponse;
+import com.optiplant.dashboard.dto.RestockIndicatorResponse;
 import com.optiplant.dashboard.dto.RotationResponse;
 import com.optiplant.dashboard.dto.SalesComparisonResponse;
 import com.optiplant.dashboard.dto.SalesComparisonResponse.Month;
 import com.optiplant.dashboard.dto.SalesComparisonResponse.ProductSales;
+import com.optiplant.dashboard.dto.TransferImpactResponse;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
+import com.optiplant.dashboard.service.DemandRanking.Sold;
 import com.optiplant.dashboard.service.RotationCalculator.Ledger;
 import com.optiplant.dashboard.service.RotationCalculator.Result;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
+import com.optiplant.inventory.service.ReorderAlertService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
@@ -30,7 +35,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Branch dashboard indicators (RF-0044, RF-0045; INC-018/D01–D03,D07). Administrators choose the branch; managers and
+ * Branch dashboard indicators (RF-0044–RF-0048; INC-018/D01–D05,D07). Administrators choose the branch; managers and
  * operators read only their own (§5.2, UC-019). Read-only: every figure is computed from the confirmed sales and the
  * inventory ledger, without dashboard tables, and nothing missing is filled with invented zeros.
  */
@@ -43,11 +48,13 @@ public class DashboardService {
     private final JdbcTemplate jdbc;
     private final ScopePolicy policy;
     private final Clock clock;
+    private final TransferImpactReader transfers;
 
-    public DashboardService(JdbcTemplate jdbc, ScopePolicy policy, Clock clock) {
+    public DashboardService(JdbcTemplate jdbc, ScopePolicy policy, Clock clock, TransferImpactReader transfers) {
         this.jdbc = jdbc;
         this.policy = policy;
         this.clock = clock;
+        this.transfers = transfers;
     }
 
     private record Scope(long id, Branch branch, Instant registeredAt) {}
@@ -58,17 +65,15 @@ public class DashboardService {
         YearMonth current = YearMonth.from(now.atZone(BUSINESS_ZONE));
         List<Month> months = new ArrayList<>();
         for (int back = PREVIOUS_MONTHS; back >= 0; back--) {
-            YearMonth month = current.minusMonths(back);
-            Instant start = month.atDay(1).atStartOfDay(BUSINESS_ZONE).toInstant();
-            boolean inProgress = back == 0;
-            Instant end = inProgress ? now : month.plusMonths(1).atDay(1).atStartOfDay(BUSINESS_ZONE).toInstant();
-            LocalDate to = inProgress ? LocalDate.ofInstant(now, BUSINESS_ZONE) : month.atEndOfMonth();
-            boolean available = scope.registeredAt().isBefore(end);
-            if (!available) {
-                months.add(new Month(month.toString(), month.atDay(1), to, inProgress, false, false, null, null, null, List.of()));
+            MonthPeriod period = MonthPeriod.of(current.minusMonths(back), now);
+            YearMonth month = period.month();
+            if (!scope.registeredAt().isBefore(period.end())) {
+                months.add(new Month(month.toString(), month.atDay(1), period.to(), period.inProgress(), false, false, null, null,
+                    null, List.of()));
                 continue;
             }
-            months.add(month(scope.id(), month, to, inProgress, scope.registeredAt().isAfter(start), start, end));
+            months.add(month(scope.id(), month, period.to(), period.inProgress(), scope.registeredAt().isAfter(period.start()),
+                period.start(), period.end()));
         }
         return new SalesComparisonResponse(BUSINESS_ZONE.getId(), now, scope.branch(),
             LocalDate.ofInstant(scope.registeredAt(), BUSINESS_ZONE), months);
@@ -155,6 +160,63 @@ public class DashboardService {
         return new RotationResponse(BUSINESS_ZONE.getId(), from, to, end, now, scope.branch(), items);
     }
 
+    /** RF-0046: products ranked by the base units sold in the month; price and returns play no part. */
+    public DemandResponse demand(SessionPrincipal principal, UUID branch, YearMonth month) {
+        Instant now = clock.instant();
+        MonthPeriod period = MonthPeriod.consulted(month, now);
+        Scope scope = scope(principal, branch);
+        String name = period.month().toString();
+        LocalDate from = period.month().atDay(1);
+        if (!scope.registeredAt().isBefore(period.end())) {
+            return new DemandResponse(BUSINESS_ZONE.getId(), name, from, period.to(), period.inProgress(), false, false, now,
+                scope.branch(), List.of(), List.of());
+        }
+        Timestamp start = Timestamp.from(period.start());
+        Timestamp end = Timestamp.from(period.end());
+        List<Sold> sold = jdbc.query("""
+            SELECT p.external_id,p.sku,p.name,p.base_unit_name,sum(l.base_qty) AS sold
+            FROM sales_line l JOIN sales_sale s ON s.id=l.sale_id JOIN catalog_product p ON p.id=l.product_id
+            WHERE s.branch_id=? AND s.confirmed_at>=? AND s.confirmed_at<?
+            GROUP BY p.id,p.external_id,p.sku,p.name,p.base_unit_name""", (r, i) -> new Sold(r.getObject("external_id", UUID.class),
+            r.getString("sku"), r.getString("name"), r.getString("base_unit_name"), r.getBigDecimal("sold")),
+            scope.id(), start, end);
+        List<DemandResponse.Product> withoutSales = jdbc.query("""
+            SELECT p.external_id,p.sku,p.name,p.base_unit_name
+            FROM catalog_branch_product bp JOIN catalog_product p ON p.id=bp.product_id
+            WHERE bp.branch_id=? AND bp.enabled AND p.active AND NOT EXISTS (
+              SELECT 1 FROM sales_line l JOIN sales_sale s ON s.id=l.sale_id
+              WHERE l.product_id=p.id AND s.branch_id=bp.branch_id AND s.confirmed_at>=? AND s.confirmed_at<?)
+            ORDER BY p.sku""", (r, i) -> new DemandResponse.Product(r.getObject("external_id", UUID.class), r.getString("sku"),
+            r.getString("name"), r.getString("base_unit_name")), scope.id(), start, end);
+        return new DemandResponse(BUSINESS_ZONE.getId(), name, from, period.to(), period.inProgress(), true,
+            scope.registeredAt().isAfter(period.start()), now, scope.branch(), DemandRanking.rank(sold), withoutSales);
+    }
+
+    /** RF-0047: the active transfers of the branch, as origin or destination, with their effect on inventory. */
+    public TransferImpactResponse transfers(SessionPrincipal principal, UUID branch) {
+        Scope scope = scope(principal, branch);
+        return new TransferImpactResponse(clock.instant(), scope.branch(), transfers.read(scope.id()));
+    }
+
+    /** RF-0048: the single condition of the restock alerts, evaluated with the current minimum and stock. */
+    public RestockIndicatorResponse restock(SessionPrincipal principal, UUID branch) {
+        Scope scope = scope(principal, branch);
+        List<RestockIndicatorResponse.Item> items = new ArrayList<>();
+        jdbc.query("""
+            SELECT p.external_id,p.sku,p.name,p.base_unit_name,bp.minimum_qty,coalesce(ib.physical_qty,0) AS quantity
+            FROM catalog_branch_product bp JOIN catalog_product p ON p.id=bp.product_id JOIN identity_branch b ON b.id=bp.branch_id
+            LEFT JOIN inventory_balance ib ON ib.branch_id=bp.branch_id AND ib.product_id=bp.product_id
+            WHERE bp.branch_id=? AND bp.enabled AND p.active AND b.active ORDER BY p.sku""", (java.sql.ResultSet r) -> {
+            BigDecimal available = r.getBigDecimal("quantity");
+            BigDecimal minimum = r.getBigDecimal("minimum_qty");
+            if (ReorderAlertService.requiresRestock(available, minimum)) {
+                items.add(new RestockIndicatorResponse.Item(r.getObject("external_id", UUID.class), r.getString("sku"),
+                    r.getString("name"), r.getString("base_unit_name"), quantity(available), quantity(minimum)));
+            }
+        }, scope.id());
+        return new RestockIndicatorResponse(clock.instant(), scope.branch(), items);
+    }
+
     /** The consulted branch: the one chosen by the administrator, the assigned one for everybody else. */
     private Scope scope(SessionPrincipal principal, UUID branch) {
         UUID target = branch != null ? branch : principal.branchExternalId();
@@ -166,7 +228,7 @@ public class DashboardService {
             .stream().findFirst().orElseThrow(() -> new ApiException(404, "BRANCH_NOT_FOUND", "No se encontró la sucursal."));
     }
 
-    private static String quantity(BigDecimal value) {
+    static String quantity(BigDecimal value) {
         return value.setScale(3, RoundingMode.UNNECESSARY).toPlainString();
     }
 }

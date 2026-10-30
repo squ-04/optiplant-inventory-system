@@ -1,8 +1,12 @@
 package com.optiplant.dashboard.controller;
 
 import com.optiplant.common.web.PeriodDate;
+import com.optiplant.common.web.PeriodMonth;
+import com.optiplant.dashboard.dto.DemandResponse;
+import com.optiplant.dashboard.dto.RestockIndicatorResponse;
 import com.optiplant.dashboard.dto.RotationResponse;
 import com.optiplant.dashboard.dto.SalesComparisonResponse;
+import com.optiplant.dashboard.dto.TransferImpactResponse;
 import com.optiplant.dashboard.service.DashboardService;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
@@ -14,8 +18,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Branch dashboard (UC-019): monthly sales comparison (RF-0044) and inventory rotation (RF-0045). Every profile reads its
- * own branch; only the administrator chooses another one (§5.2). The network comparison is not part of these indicators.
+ * Branch dashboard (UC-019): monthly sales comparison (RF-0044), inventory rotation (RF-0045), high and low demand
+ * (RF-0046), active transfers (RF-0047) and products about to run out (RF-0048). Every profile reads its own branch; only
+ * the administrator chooses another one (§5.2).
  */
 @RestController
 @RequestMapping("/api/v1/dashboard")
@@ -42,5 +47,27 @@ public class DashboardController {
                                      @RequestParam(required = false) UUID branch) {
         if (branch != null) policy.requirePublicReference(branch);
         return dashboard.rotation(principal, branch, PeriodDate.parse(from, "inicial"), PeriodDate.parse(to, "final"));
+    }
+
+    @GetMapping("/demand")
+    public DemandResponse demand(@AuthenticationPrincipal SessionPrincipal principal,
+                                 @RequestParam(required = false) String month,
+                                 @RequestParam(required = false) UUID branch) {
+        if (branch != null) policy.requirePublicReference(branch);
+        return dashboard.demand(principal, branch, PeriodMonth.parse(month));
+    }
+
+    @GetMapping("/transfers")
+    public TransferImpactResponse transfers(@AuthenticationPrincipal SessionPrincipal principal,
+                                            @RequestParam(required = false) UUID branch) {
+        if (branch != null) policy.requirePublicReference(branch);
+        return dashboard.transfers(principal, branch);
+    }
+
+    @GetMapping("/restock")
+    public RestockIndicatorResponse restock(@AuthenticationPrincipal SessionPrincipal principal,
+                                            @RequestParam(required = false) UUID branch) {
+        if (branch != null) policy.requirePublicReference(branch);
+        return dashboard.restock(principal, branch);
     }
 }
