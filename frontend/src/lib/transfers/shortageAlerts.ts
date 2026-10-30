@@ -16,6 +16,17 @@ export function shortageNotice(openCount: number, network: boolean): string | nu
     : `${openCount} faltantes de transferencias ${scope} están pendientes de resolver.`;
 }
 
+/**
+ * The counts behind the navigation badge: active restock alerts plus every open shortage. Shortages are counted by
+ * the listing's `total`, never by its rows, because the listing stops at its limit.
+ */
+export function alertCounts(allowed: boolean, restock: { activeCount: number } | undefined,
+                            shortages: { total: number } | undefined) {
+  const active = allowed ? restock?.activeCount ?? 0 : 0;
+  const open = allowed ? shortages?.total ?? 0 : 0;
+  return { restock: active, shortages: open, badge: active + open };
+}
+
 /** How long a resolution by the other manager is announced, measured from the server reading. */
 export const RESOLUTION_NOTICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 

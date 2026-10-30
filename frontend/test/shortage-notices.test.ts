@@ -4,7 +4,7 @@ import type { Transfer, TransferHistory } from '../src/lib/api/client.ts';
 import { ApiClient } from '../src/lib/api/client.ts';
 import { alertsNavigationLabel } from '../src/lib/inventory/alerts.ts';
 import {
-  dismissResolution, dismissedResolutions, recentResolutions, resolutionNotice, shortageNotice,
+  alertCounts, dismissResolution, dismissedResolutions, recentResolutions, resolutionNotice, shortageNotice,
 } from '../src/lib/transfers/shortageAlerts.ts';
 
 const origin = { externalId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', code: 'MED', name: 'Medellín', active: true };
@@ -97,4 +97,15 @@ test('the listing exposes every match as total, beyond the listed rows, and reje
   for (const bad of [undefined, -1, 1.5, '2', null]) {
     await assert.rejects(listing(bad).transfers({ discrepancy: 'OPEN' }), /inválida/);
   }
+});
+
+test('the sidebar counter adds active restock alerts and every open shortage, not the listed rows', () => {
+  const restock = { activeCount: 2 };
+  // 150 open shortages while the listing returned only its first rows.
+  const shortages = { total: 150, items: [recent] };
+  assert.deepEqual(alertCounts(true, restock, shortages), { restock: 2, shortages: 150, badge: 152 });
+  // Before the first reading, nothing is counted.
+  assert.deepEqual(alertCounts(true, undefined, undefined), { restock: 0, shortages: 0, badge: 0 });
+  // Operators and profiles that must change their password have no alerts entry.
+  assert.deepEqual(alertCounts(false, restock, shortages), { restock: 0, shortages: 0, badge: 0 });
 });

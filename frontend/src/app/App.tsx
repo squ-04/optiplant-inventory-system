@@ -23,7 +23,7 @@ import { Input } from '../components/ui/input';
 import { PasswordField } from '../components/shared/PasswordField.tsx';
 import { alertsNavigationLabel, restockNotice } from '../lib/inventory/alerts.ts';
 import {
-  dismissResolution, dismissedResolutions, recentResolutions, resolutionNotice, shortageNotice,
+  alertCounts, dismissResolution, dismissedResolutions, recentResolutions, resolutionNotice, shortageNotice,
 } from '../lib/transfers/shortageAlerts.ts';
 import { ArrowLeftRight, BellRing, Gauge, Route as RouteIcon, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
 
@@ -106,12 +106,12 @@ export function App() {
   const valuationAllowed = alertsAllowed;
   const complianceAllowed = alertsAllowed;
   const alerts = useQuery(reorderAlertsQuery(client, '', false, alertsAllowed));
-  const activeAlerts = alertsAllowed ? alerts.data?.activeCount ?? 0 : 0;
   // RF-0038: open shortage alerts add to the counter with their own notice; a manager is told, in this browser, when the
   // other branch's manager resolved one in the last 24 h.
   const shortages = useQuery(shortageAlertsQuery(client, 'OPEN', alertsAllowed));
-  // The total, not the listed rows: the listing stops at its limit, the counter never does.
-  const openShortages = alertsAllowed ? shortages.data?.total ?? 0 : 0;
+  const counts = alertCounts(alertsAllowed, alerts.data, shortages.data);
+  const activeAlerts = counts.restock;
+  const openShortages = counts.shortages;
   const manager = alertsAllowed && user?.role === 'MANAGER';
   const resolutions = useQuery(shortageAlertsQuery(client, 'RESOLVED', manager));
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -138,7 +138,7 @@ export function App() {
       { id: 'prices-title', label: 'Precios', icon: Tags },
       // RF-0026 (INC-003/D04): valuation is for the branch manager and administrators, never operators.
       ...(valuationAllowed ? [{ id: 'valuation-title', label: 'Valoración', icon: Coins }] : []),
-      ...(alertsAllowed ? [{ id: 'alerts-title', label: 'Alertas', icon: BellRing, count: activeAlerts + openShortages,
+      ...(alertsAllowed ? [{ id: 'alerts-title', label: 'Alertas', icon: BellRing, count: counts.badge,
         accessibleLabel: alertsNavigationLabel(activeAlerts, openShortages) }] : []),
     ] : []),
     { id: 'account-title', label: 'Mi sesión', icon: UserRound },
