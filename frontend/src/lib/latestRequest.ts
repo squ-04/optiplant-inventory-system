@@ -3,6 +3,11 @@ export interface RequestGate { latest: number }
 
 export const requestGate = (): RequestGate => ({ latest: 0 });
 
+/** Invalidates every pending request of the gate: none of them may update the view any more. */
+export function discardPending(gate: RequestGate): void {
+  gate.latest++;
+}
+
 /** What a load does with its outcome; each callback runs only while the request is still the latest one. */
 export interface LatestHandlers<T> {
   start: () => void;

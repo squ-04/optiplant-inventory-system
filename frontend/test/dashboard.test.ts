@@ -90,6 +90,9 @@ test('RF-0045: the rotation is requested for the period and shows «No calculabl
   assert.equal(rotationNote(zeroAverage), 'Sin existencias físicas durante el período');
   assert.equal(rotation(zeroSales), '0,00');
   assert.equal(rotationNote(zeroSales), 'Sin ventas en el período, con existencias');
+  const inconsistent = item({ status: 'INCONSISTENT_HISTORY', averageQuantity: null, rotation: null }) as Parameters<typeof rotationNote>[0];
+  assert.equal(rotation(inconsistent), 'No calculable');
+  assert.match(rotationNote(inconsistent), /no coincide con el saldo/);
   // Real sales that round to a rotation of 0,00 are never announced as no sales.
   const small = item({ soldQuantity: '1.000', averageQuantity: '1000.000', rotation: '0.00' }) as Parameters<typeof rotationNote>[0];
   assert.equal(rotation(small), '0,00');

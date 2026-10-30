@@ -15,8 +15,9 @@ public record RotationResponse(String timeZone, LocalDate from, LocalDate to, In
                                Branch branch, List<Item> items) {
     /**
      * {@code status}: CALCULATED, INSUFFICIENT_HISTORY when the ledger of the product in the branch starts after the
-     * period's start ({@code historyStartedAt}), or ZERO_AVERAGE when the average is zero. {@code averageQuantity} has
-     * three decimals and is null without enough history; {@code rotation} has two decimals and is null («No calculable»)
+     * period's start ({@code historyStartedAt}), ZERO_AVERAGE when the average is zero, or INCONSISTENT_HISTORY when the
+     * rebuilt quantity would be negative (a ledger that does not match the balance). {@code averageQuantity} has
+     * three decimals and is null without enough history or with an inconsistent one; {@code rotation} has two decimals and is null («No calculable»)
      * unless CALCULATED. Quantities are in the product's base unit.
      */
     public record Item(UUID productExternalId, String sku, String name, String baseUnitName, Instant historyStartedAt,

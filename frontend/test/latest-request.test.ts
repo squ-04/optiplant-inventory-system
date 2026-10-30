@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadLatest, requestGate } from '../src/lib/latestRequest.ts';
+import { discardPending, loadLatest, requestGate } from '../src/lib/latestRequest.ts';
 
 /** A promise resolved or rejected by the test, to decide which response arrives first. */
 function deferred<T>() {
@@ -65,4 +65,16 @@ test('separate views keep separate gates', async () => {
   slow.resolve('reporte');
   await first;
   assert.deepEqual(events, ['start', 'start', 'value:otra vista', 'done', 'value:reporte', 'done']);
+});
+
+test('a request discarded without a replacement never updates the view', async () => {
+  const gate = requestGate();
+  const { events, handlers } = recorder();
+  const previous = deferred<string>();
+  const pending = loadLatest(gate, () => previous.promise, handlers);
+  // The administrator went back to «Seleccione una sucursal»: nothing new is requested.
+  discardPending(gate);
+  previous.resolve('Medellín');
+  await pending;
+  assert.deepEqual(events, ['start']);
 });

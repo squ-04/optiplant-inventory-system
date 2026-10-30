@@ -8,7 +8,7 @@ import {
   chartPoints, day, monthCoverage, monthName, netAmount, productRows, rotation, rotationNote, rotationPeriodError, salesCount,
 } from '../lib/dashboard/dashboard.ts';
 import { ZONE_NOTE, bogotaDateTime, currentMonth } from '../lib/logistics/compliance.ts';
-import { loadLatest, requestGate } from '../lib/latestRequest.ts';
+import { discardPending, loadLatest, requestGate } from '../lib/latestRequest.ts';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -91,8 +91,11 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
     {admin && <form className="purchase-filters" aria-label="Sucursal del dashboard" onSubmit={event => event.preventDefault()}>
       <div><label htmlFor="dashboard-branch">Sucursal</label>
         <select id="dashboard-branch" value={branch} onChange={event => {
-          // The figures of the previous branch never stay next to the new selection, nor next to its error.
+          // The figures of the previous branch never stay next to the new selection, nor next to its error, and a late
+          // answer for it is discarded even when no new branch is consulted.
+          discardPending(salesGate.current); discardPending(turnoverGate.current);
           setSales(null); setTurnover(null); setSalesError(''); setTurnoverError('');
+          setSalesLoading(false); setTurnoverLoading(false);
           setBranch(event.target.value);
         }}>
           <option value="">Seleccione una sucursal</option>

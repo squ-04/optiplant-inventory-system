@@ -289,8 +289,8 @@ export interface SalesMonth {
   salesCount: number | null; netAmount: string | null; returnsCount: number | null; products: ProductSales[];
 }
 export interface SalesComparison { timeZone: string; generatedAt: string; branch: Branch; recordedFrom: string; months: SalesMonth[] }
-export type RotationStatus = 'CALCULATED' | 'INSUFFICIENT_HISTORY' | 'ZERO_AVERAGE';
-/** RF-0045: `rotation` is null («No calculable») unless CALCULATED; `averageQuantity` is null without enough history. */
+export type RotationStatus = 'CALCULATED' | 'INSUFFICIENT_HISTORY' | 'ZERO_AVERAGE' | 'INCONSISTENT_HISTORY';
+/** RF-0045: `rotation` is null («No calculable») unless CALCULATED; `averageQuantity` is null without enough or consistent history. */
 export interface RotationItem {
   productExternalId: string; sku: string; name: string; baseUnitName: string; historyStartedAt: string;
   soldQuantity: string; averageQuantity: string | null; rotation: string | null; status: RotationStatus;
@@ -650,7 +650,7 @@ function salesComparisonDto(value: unknown): SalesComparison {
   });
   return { ...(value as unknown as SalesComparison), months };
 }
-const ROTATION_STATUSES: readonly string[] = ['CALCULATED', 'INSUFFICIENT_HISTORY', 'ZERO_AVERAGE'];
+const ROTATION_STATUSES: readonly string[] = ['CALCULATED', 'INSUFFICIENT_HISTORY', 'ZERO_AVERAGE', 'INCONSISTENT_HISTORY'];
 function rotationDto(value: unknown): RotationReport {
   if (!record(value) || !text(value.timeZone) || !day(value.from) || !day(value.to) || !instant(value.measuredUntil)
       || !instant(value.generatedAt)) throw invalid();

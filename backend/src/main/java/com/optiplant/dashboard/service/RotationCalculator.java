@@ -16,7 +16,7 @@ import java.util.List;
  * the database, so the ledger is never loaded row by row.
  */
 public final class RotationCalculator {
-    public enum Status { CALCULATED, INSUFFICIENT_HISTORY, ZERO_AVERAGE }
+    public enum Status { CALCULATED, INSUFFICIENT_HISTORY, ZERO_AVERAGE, INCONSISTENT_HISTORY }
 
     /** A signed change of the physical quantity (entries positive, exits negative) at its instant. */
     public record Change(Instant at, BigDecimal delta) {}
@@ -51,6 +51,9 @@ public final class RotationCalculator {
         BigDecimal span = BigDecimal.valueOf(duration);
         BigDecimal atEnd = current.subtract(ledger.afterEnd());
         BigDecimal integral = atEnd.multiply(span).subtract(ledger.weightedInPeriod());
+        // A physical quantity is never negative: a negative integral means a ledger that does not match the balance (data
+        // changed outside the application), never a rotation to show.
+        if (integral.signum() < 0) return new Result(Status.INCONSISTENT_HISTORY, null, null);
         BigDecimal average = integral.divide(span, 3, RoundingMode.HALF_UP);
         if (integral.signum() == 0) return new Result(Status.ZERO_AVERAGE, average, null);
         // sold / (integral / span), divided once so the rounding happens only at the end.

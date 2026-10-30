@@ -76,6 +76,14 @@ class RotationCalculatorTest {
         assertThat(result.average()).isEqualTo(expected);
     }
 
+    @Test void aLedgerThatDoesNotMatchTheBalanceIsNotCalculable() {
+        // 10 now, but 15 entered after the period: the rebuilt quantity would be −5.
+        Result result = calculate(d("10"), List.of(new Change(END.plus(Duration.ofHours(1)), d("15"))), BEFORE, d("1"));
+        assertThat(result.status()).isEqualTo(Status.INCONSISTENT_HISTORY);
+        assertThat(result.average()).isNull();
+        assertThat(result.rotation()).isNull();
+    }
+
     @Test void aLedgerStartedExactlyAtThePeriodStartIsEnough() {
         Result result = calculate(d("10"), List.of(), START, d("20"));
         assertThat(result.rotation()).isEqualTo(d("2.00"));

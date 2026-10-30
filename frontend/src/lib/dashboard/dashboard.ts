@@ -77,6 +77,7 @@ export function rotationNote(item: RotationItem): string {
     return `Historia insuficiente: el inventario de la sucursal se registra desde el ${day(bogotaLocal(new Date(item.historyStartedAt)).slice(0, 10))}`;
   }
   if (item.status === 'ZERO_AVERAGE') return 'Sin existencias físicas durante el período';
+  if (item.status === 'INCONSISTENT_HISTORY') return 'El historial de movimientos no coincide con el saldo actual; revise los datos';
   // Decided by the units sold, never by the rounded rotation: 1 unit over an average of 1000 also shows 0,00.
   return /^0(\.0+)?$/.test(item.soldQuantity) ? 'Sin ventas en el período, con existencias' : '';
 }
