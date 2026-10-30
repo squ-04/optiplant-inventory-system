@@ -377,6 +377,12 @@ export interface BootstrapDto {
   [key: string]: unknown;
 }
 
+export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+export type ReportCategory = 'movements' | 'sales' | 'transfers';
+/** RF-0055: mandatory inclusive dates; without `branch` the administrator exports the network and a manager their branch. */
+export interface ReportFilter { from: string; to: string; branch?: string; status?: TransferStatus }
+/** `rows` is null when the response does not declare it. */
+export interface ReportDownload { blob: Blob; fileName: string; rows: number | null }
 export interface ProblemDetail {
   title?: string;
   detail?: string;
@@ -834,10 +840,11 @@ export class ApiClient {
     this.onSessionExpired = onSessionExpired;
   }
 
-  private async request(path: string, method = 'GET', body?: unknown, signal?: AbortSignal,
-                        extra: Record<string, string> = {}): Promise<unknown> {
+  /** Sends a request with the session credentials and answers the successful response; a failure becomes an `ApiError`. */
+  private async send(path: string, method = 'GET', body?: unknown, signal?: AbortSignal,
+                     extra: Record<string, string> = {}, accept = 'application/json'): Promise<Response> {
     if (method !== 'GET' && !this.csrf) await this.refreshCsrf();
-    const headers = new Headers({ ...extra, Accept: 'application/json' });
+    const headers = new Headers({ ...extra, Accept: accept });
     if (body !== undefined) headers.set('Content-Type', 'application/json');
     if (method !== 'GET' && this.csrf) headers.set(this.csrf.headerName, this.csrf.token);
     const transport = this.transport;
@@ -862,6 +869,12 @@ export class ApiClient {
       } catch { /* Keep HTTP status even when a gateway returns non-JSON. */ }
       throw new ApiError(response.status, problem);
     }
+    return response;
+  }
+
+  private async request(path: string, method = 'GET', body?: unknown, signal?: AbortSignal,
+                        extra: Record<string, string> = {}): Promise<unknown> {
+    const response = await this.send(path, method, body, signal, extra);
     if (response.status === 204) return undefined;
     try { return await response.json(); } catch { throw invalid(); }
   }
@@ -1203,6 +1216,17 @@ export class ApiClient {
     const query = new URLSearchParams({ from: filter.from, to: filter.to });
     if (filter.branch) query.set('branch', filter.branch);
     return complianceDto(await this.request(`/logistics/compliance?${query}`));
+  }
+  /** RF-0050–RF-0055: the XLSX as the server generated it; the file is binary, never a JSON document. */
+  async downloadReport(category: ReportCategory, filter: ReportFilter): Promise<ReportDownload> {
+    const query = new URLSearchParams({ from: filter.from, to: filter.to });
+    if (filter.branch) query.set('branch', filter.branch);
+    if (filter.status && category === 'transfers') query.set('status', filter.status);
+    const response = await this.send(`/reports/${category}?${query}`, 'GET', undefined, undefined, {},
+      `${XLSX_TYPE}, application/problem+json`);
+    const rows = Number(response.headers.get('X-Report-Rows'));
+    const name = /filename="?([^";]+)"?/.exec(response.headers.get('Content-Disposition') ?? '')?.[1];
+    return { blob: await response.blob(), fileName: name ?? `${category}.xlsx`, rows: Number.isInteger(rows) ? rows : null };
   }
   /** RF-0044: the branch is required for the administrator; everybody else reads their own. */
   async salesComparison(branch?: string): Promise<SalesComparison> {
