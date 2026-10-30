@@ -372,6 +372,17 @@ class TransferReceptionHttpTest {
         assertThat(ids(otherOperator.get("/transfers?discrepancy=ALL"))).isEmpty();
         assertThat(otherOperator.get("/transfers?discrepancy=ALL&branch=" + a).statusCode()).isEqualTo(403);
         assertError(destinationOperator.get("/transfers?discrepancy=CLOSED"), 400, "VALIDATION_FAILED");
+
+        // The shell's counter reads `total`: every match of the filters, even beyond the limit of the listed rows.
+        String another = partial();
+        JsonNode limited = read(destinationManager.get("/transfers?discrepancy=OPEN&limit=1"));
+        assertThat(limited.get("items")).hasSize(1);
+        assertThat(limited.get("total").asInt()).isEqualTo(2);
+        assertThat(ids(destinationManager.get("/transfers?discrepancy=OPEN&limit=1"))).containsExactly(another);
+        assertThat(read(originManager.get("/transfers?discrepancy=RESOLVED")).get("total").asInt()).isEqualTo(1);
+        assertThat(read(otherOperator.get("/transfers?discrepancy=ALL")).get("total").asInt()).isZero();
+        assertThat(read(destinationOperator.get("/transfers")).get("total").asInt())
+            .isEqualTo(read(destinationOperator.get("/transfers")).get("items").size());
     }
 
     // ---------------------------------------------------------------- RF-0039 treatment, transit loss and resend

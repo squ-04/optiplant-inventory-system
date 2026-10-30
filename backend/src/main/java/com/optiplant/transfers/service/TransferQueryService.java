@@ -80,11 +80,17 @@ public class TransferQueryService {
             where.append(discrepancy.equals("ALL") ? " AND x.id IS NOT NULL" : " AND x.status=?");
             if (!discrepancy.equals("ALL")) arguments.add(discrepancy);
         }
+        // The same joins the listing filters on (TransferReader.TRANSFER), without the limit.
+        int total = jdbc.queryForObject("""
+            SELECT count(DISTINCT t.id) FROM transfers_transfer t JOIN identity_branch o ON o.id=t.origin_branch_id
+            JOIN identity_branch d ON d.id=t.destination_branch_id LEFT JOIN logistics_dispatch ld ON ld.transfer_id=t.id
+            LEFT JOIN logistics_arrival la ON la.dispatch_id=ld.id LEFT JOIN logistics_discrepancy x ON x.arrival_id=la.id
+            """ + where, Integer.class, arguments.toArray());
         arguments.add(rows);
         String order = discrepancy == null ? " ORDER BY t.requested_at DESC,t.id DESC LIMIT ?" : " ORDER BY x.opened_at DESC,x.id DESC LIMIT ?";
         List<TransferResponse> items = reader.list(where + order, arguments);
         OffsetDateTime readAt = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP", OffsetDateTime.class);
-        return new TransferHistoryResponse(readAt.toInstant(), consulted, items);
+        return new TransferHistoryResponse(readAt.toInstant(), consulted, total, items);
     }
 
     /** One transfer with lines and history; origin readers and administrators also see the origin's availability. */

@@ -282,7 +282,8 @@ export type { RoutePriority };
 export interface Route { externalId: string; code: string; origin: Branch; destination: Branch; priority: RoutePriority; active: boolean }
 export interface RouteInput { code: string; origin: string; destination: string; priority: RoutePriority }
 export interface RouteUpdate { code: string; priority: RoutePriority; active: boolean }
-export interface TransferHistory { readAt: string; branch: Branch | null; items: Transfer[] }
+/** `total` counts every transfer matching the filters; `items` holds the newest ones up to the limit. */
+export interface TransferHistory { readAt: string; branch: Branch | null; total: number; items: Transfer[] }
 export interface TransferHistoryFilter {
   branch?: string; direction?: 'INCOMING' | 'OUTGOING'; status?: TransferStatus;
   /** RF-0038: only transfers with a shortage alert in that state, newest alert first. */
@@ -1054,14 +1055,14 @@ export class ApiClient {
     return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}`));
   }
   /** Transfers of a branch as origin, destination or both, or of the network for administrators; newest first. */
-  async transfers(filter: TransferHistoryFilter = {}): Promise<TransferHistory> {
+  async transfers(filter: TransferHistoryFilter = {}, signal?: AbortSignal): Promise<TransferHistory> {
     const query = new URLSearchParams();
     for (const key of ['branch', 'direction', 'status', 'discrepancy'] as const) if (filter[key]) query.set(key, filter[key]);
     if (filter.limit !== undefined) query.set('limit', String(filter.limit));
     const suffix = query.size > 0 ? `?${query}` : '';
-    const value = await this.request(`/transfers${suffix}`);
-    if (!record(value) || !instant(value.readAt)) throw invalid();
+    const value = await this.request(`/transfers${suffix}`, 'GET', undefined, signal);
+    if (!record(value) || !instant(value.readAt) || !count(value.total)) throw invalid();
     return { readAt: value.readAt as string, branch: value.branch === null ? null : branchDto(value.branch),
-      items: listDto(value.items, transferDto) };
+      total: value.total as number, items: listDto(value.items, transferDto) };
   }
 }

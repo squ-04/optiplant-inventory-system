@@ -15,14 +15,22 @@ import { Transfers } from './Transfers.tsx';
 import { Routes } from './Routes.tsx';
 import { LogisticsCompliance } from './LogisticsCompliance.tsx';
 import { ReorderAlerts, reorderAlertsQuery } from './ReorderAlerts.tsx';
-import { ShortageAlerts } from './ShortageAlerts.tsx';
+import { ShortageAlerts, shortageAlertsQuery } from './ShortageAlerts.tsx';
 import { Visibility } from './Visibility.tsx';
 import { AppShell } from '../components/shared/AppShell.tsx';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { PasswordField } from '../components/shared/PasswordField.tsx';
 import { alertsNavigationLabel, restockNotice } from '../lib/inventory/alerts.ts';
+import {
+  alertCounts, dismissResolution, dismissedResolutions, recentResolutions, resolutionNotice, shortageNotice,
+} from '../lib/transfers/shortageAlerts.ts';
 import { ArrowLeftRight, BellRing, Gauge, Route as RouteIcon, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
+
+/** The browser's storage, or null where it is blocked (private windows, cleared site data). */
+function browserStorage(): Storage | null {
+  try { return window.localStorage; } catch { return null; }
+}
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -98,7 +106,17 @@ export function App() {
   const valuationAllowed = alertsAllowed;
   const complianceAllowed = alertsAllowed;
   const alerts = useQuery(reorderAlertsQuery(client, '', false, alertsAllowed));
-  const activeAlerts = alertsAllowed ? alerts.data?.activeCount ?? 0 : 0;
+  // RF-0038: open shortage alerts add to the counter with their own notice; a manager is told, in this browser, when the
+  // other branch's manager resolved one in the last 24 h.
+  const shortages = useQuery(shortageAlertsQuery(client, 'OPEN', alertsAllowed));
+  const counts = alertCounts(alertsAllowed, alerts.data, shortages.data);
+  const activeAlerts = counts.restock;
+  const openShortages = counts.shortages;
+  const manager = alertsAllowed && user?.role === 'MANAGER';
+  const resolutions = useQuery(shortageAlertsQuery(client, 'RESOLVED', manager));
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  useEffect(() => { setDismissed(user ? dismissedResolutions(browserStorage(), user.code) : new Set()); }, [user?.code]);
+  const announced = manager && user ? recentResolutions(resolutions.data, user, dismissed) : [];
 
   const navigation = [
     ...(!user?.mustChangePassword ? [
@@ -120,8 +138,8 @@ export function App() {
       { id: 'prices-title', label: 'Precios', icon: Tags },
       // RF-0026 (INC-003/D04): valuation is for the branch manager and administrators, never operators.
       ...(valuationAllowed ? [{ id: 'valuation-title', label: 'Valoración', icon: Coins }] : []),
-      ...(alertsAllowed ? [{ id: 'alerts-title', label: 'Alertas', icon: BellRing, count: activeAlerts,
-        accessibleLabel: alertsNavigationLabel(activeAlerts) }] : []),
+      ...(alertsAllowed ? [{ id: 'alerts-title', label: 'Alertas', icon: BellRing, count: counts.badge,
+        accessibleLabel: alertsNavigationLabel(activeAlerts, openShortages) }] : []),
     ] : []),
     { id: 'account-title', label: 'Mi sesión', icon: UserRound },
     { id: 'password-title', label: 'Contraseña', icon: KeyRound },
@@ -136,6 +154,15 @@ export function App() {
       <p className="notice-warning restock-notice"><TriangleAlert aria-hidden="true" />
         <span>{restockNotice(activeAlerts, user?.role === 'ADMIN')}</span>
         <a href="#alerts-title">Ver alertas de reabastecimiento</a></p>}
+    {alertsAllowed && current !== 'alerts-title' && shortageNotice(openShortages, user?.role === 'ADMIN') &&
+      <p className="notice-warning restock-notice"><TriangleAlert aria-hidden="true" />
+        <span>{shortageNotice(openShortages, user?.role === 'ADMIN')}</span>
+        <a href="#alerts-title">Ver faltantes de transferencias</a></p>}
+    {announced.map(transfer => <p key={transfer.discrepancy!.externalId} className="notice-warning restock-notice">
+      <BellRing aria-hidden="true" /><span>{resolutionNotice(transfer)}</span>
+      <Button variant="outline" size="sm" onClick={() => setDismissed(dismissResolution(browserStorage(), user!.code,
+        transfer.discrepancy!.externalId))}>Entendido<span className="sr-only">: ocultar el aviso de {transfer.code}</span></Button>
+    </p>)}
     {!user ? <section className="login-panel" aria-labelledby="login-title"><h2 id="login-title" tabIndex={-1}>Iniciar sesión</h2>
       <form onSubmit={login} aria-describedby={error ? 'feedback' : undefined}>
         <fieldset disabled={busy}><legend>Credenciales individuales</legend>

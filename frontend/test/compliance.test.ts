@@ -83,7 +83,7 @@ test('RF-0043: the report keeps its 50 % with the overdue transfer apart and «N
 test('an arrival recorded before its departure is shown as an anomaly instead of hiding the listing', async () => {
   const anomalous = { ...partialTiming, actualSeconds: -120, deviationSeconds: -3720, delivery: 'COMPLETE' as const,
     consistent: false };
-  const h = client({ readAt: '2026-10-29T15:00:00Z', branch: null,
+  const h = client({ readAt: '2026-10-29T15:00:00Z', branch: null, total: 2,
     items: [{ ...transfer, status: 'RECEIVED_COMPLETE', timing: anomalous }, { ...transfer, externalId: '7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d' }] },
     { ...transfer, timing: { ...anomalous, consistent: true } }, { ...transfer, timing: { ...anomalous, onTime: true } },
     { ...report, summary: metrics(2, 1, 0, 0, '50.00', 1) });
