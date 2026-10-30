@@ -36,8 +36,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * RF-0046 demand by units sold in a month, RF-0047 active transfers with their effect on inventory and RF-0048 products about
- * to run out with the only restock condition.
+ * RF-0046 demand by units sold in a month, RF-0047 active transfers with their effect on inventory, RF-0048 products about
+ * to run out with the only restock condition, and RF-0049 the network comparison, exclusive to the general administrator.
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -251,6 +251,64 @@ class DashboardIndicatorsHttpTest {
         assertThat(names(ok(bManager.get("/dashboard/restock")).get("items"))).containsExactly("Maceta");
     }
 
+    // ---------------------------------------------------------------- RF-0049
+
+    @Test void onlyTheAdministratorComparesTheBranches() throws Exception {
+        assertError(aManager.get("/dashboard/branch-comparison"), 403, "ROLE_FORBIDDEN");
+        assertError(aOperator.get("/dashboard/branch-comparison"), 403, "ROLE_FORBIDDEN");
+        assertThat(new Browser().get("/dashboard/branch-comparison").statusCode()).isEqualTo(401);
+        // RF-0049-CA-02: the manager keeps the dashboard of the own branch.
+        assertThat(aManager.get("/dashboard/demand").statusCode()).isEqualTo(200);
+        assertError(admin.get("/dashboard/branch-comparison?month=2025-00"), 400, "VALIDATION_FAILED");
+    }
+
+    @Test void theComparisonDistinguishesMissingDataZeroAndNotCalculable() throws Exception {
+        YearMonth current = YearMonth.now(BOGOTA);
+        YearMonth previous = current.minusMonths(1);
+        owner.update("UPDATE identity_branch SET created_at=? WHERE external_id=?", noon(previous.atDay(1)), a);
+        owner.update("UPDATE identity_branch SET created_at=? WHERE external_id=?", noon(current.atDay(1)), b);
+        stock(maceta, "unidad", "100");
+        sale(maceta, "unidad", "2", "10");
+        confirmedAt(sale(maceta, "unidad", "1", "0"), noon(previous.atDay(15)));
+        String arrived = inTransit("2");
+        assertThat(bOperator.post("/transfers/" + arrived + "/receive", quantities("2")).statusCode()).isEqualTo(200);
+        int movements = movements();
+
+        JsonNode report = ok(admin.get("/dashboard/branch-comparison"));
+        Assumptions.assumeTrue(YearMonth.from(serverDay(report)).equals(current), "The run crossed a month boundary in Bogotá");
+        assertThat(report.get("month").asText()).isEqualTo(current.toString());
+        assertThat(report.get("inProgress").asBoolean()).isTrue();
+        JsonNode first = branchOf(report, a);
+        assertThat(first.get("dataAvailable").asBoolean()).isTrue();
+        assertThat(first.get("partialHistory").asBoolean()).isFalse();
+        assertThat(first.get("salesCount").asInt()).isEqualTo(1);
+        assertThat(first.get("netAmount").asText()).isEqualTo("180.00");
+        // Same figures as the RF-0043 report: the transfer was delivered complete on time, seen from both ends.
+        assertThat(first.at("/asOrigin/arrivals").asInt()).isEqualTo(1);
+        assertThat(first.at("/asOrigin/compliancePercent").asText()).isEqualTo("100.00");
+        assertThat(first.at("/asDestination/arrivals").asInt()).isZero();
+        assertThat(first.at("/asDestination/compliancePercent").isNull()).isTrue();
+        JsonNode second = branchOf(report, b);
+        assertThat(second.get("partialHistory").asBoolean()).isTrue();
+        assertThat(second.get("salesCount").asInt()).isZero();
+        assertThat(second.get("netAmount").asText()).isEqualTo("0.00");
+        assertThat(second.at("/asDestination/compliancePercent").asText()).isEqualTo("100.00");
+
+        // In the previous month b did not exist: no data, not zero; a has a sale and nothing to calculate its compliance.
+        JsonNode past = ok(admin.get("/dashboard/branch-comparison?month=" + previous));
+        assertThat(past.get("inProgress").asBoolean()).isFalse();
+        JsonNode missing = branchOf(past, b);
+        assertThat(missing.get("dataAvailable").asBoolean()).isFalse();
+        assertThat(missing.get("salesCount").isNull()).isTrue();
+        assertThat(missing.get("netAmount").isNull()).isTrue();
+        assertThat(missing.get("asOrigin").isNull()).isTrue();
+        JsonNode earlier = branchOf(past, a);
+        assertThat(earlier.get("partialHistory").asBoolean()).isTrue();
+        assertThat(earlier.get("netAmount").asText()).isEqualTo("100.00");
+        assertThat(earlier.at("/asOrigin/compliancePercent").isNull()).isTrue();
+        assertThat(movements()).isEqualTo(movements);
+    }
+
     // ---------------------------------------------------------------- fixtures
 
     static OffsetDateTime noon(LocalDate day) { return day.atTime(12, 0).atZone(BOGOTA).toOffsetDateTime(); }
@@ -272,6 +330,13 @@ class DashboardIndicatorsHttpTest {
         expected.put("pendingShortageQuantity", shortage);
         expected.put("lostQuantity", lost);
         assertThat(found).isEqualTo(expected);
+    }
+
+    JsonNode branchOf(JsonNode report, UUID branch) {
+        for (JsonNode item : report.get("branches")) {
+            if (item.at("/branch/externalId").asText().equals(branch.toString())) return item;
+        }
+        throw new AssertionError("Branch not listed: " + branch);
     }
 
     JsonNode item(JsonNode items, String id) {
