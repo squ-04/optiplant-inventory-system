@@ -4,8 +4,12 @@ import com.optiplant.common.exception.ApiException;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
+import com.optiplant.transfers.dto.TransferExportLine;
 import com.optiplant.transfers.dto.TransferHistoryResponse;
 import com.optiplant.transfers.dto.TransferResponse;
+import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -107,6 +111,53 @@ public class TransferQueryService {
             throw new ApiException(404, "TRANSFER_NOT_FOUND", "No se encontró la transferencia.");
         }
         return reader.detail(((Number) found.get("id")).longValue(), admin || origin);
+    }
+
+    /**
+     * RF-0054: one row per line of the transfers requested in [start, end) in which {@code branch} is origin or destination,
+     * or of the network when it is null. Dispatch, arrival and discrepancy are unique per transfer, so a line never repeats;
+     * authorization is checked by the caller.
+     */
+    public List<TransferExportLine> exportLines(UUID branch, Instant start, Instant end, String status, int limit) {
+        List<Object> arguments = new ArrayList<>(List.of(Timestamp.from(start), Timestamp.from(end)));
+        StringBuilder where = new StringBuilder();
+        if (branch != null) {
+            where.append(" AND (o.external_id=? OR d.external_id=?)");
+            arguments.add(branch);
+            arguments.add(branch);
+        }
+        if (status != null) {
+            where.append(" AND t.status=?");
+            arguments.add(status);
+        }
+        arguments.add(limit);
+        return jdbc.query("""
+            SELECT t.code,o.code AS origin_code,o.name AS origin_name,d.code AS destination_code,d.name AS destination_name,
+                t.requested_at,ld.dispatched_at,la.arrived_at,t.status,l.sku_snapshot,l.unit_name_snapshot,l.requested_commercial_qty,
+                dl.dispatched_commercial_qty,al.received_commercial_qty,it.pending_base_qty,x.status AS discrepancy_status,x.treatment,
+                EXISTS(SELECT 1 FROM inventory_operation lo WHERE lo.discrepancy_id=x.id AND lo.kind='TRANSIT_LOSS') AS transit_loss
+            FROM transfers_line l JOIN transfers_transfer t ON t.id=l.transfer_id
+            JOIN identity_branch o ON o.id=t.origin_branch_id JOIN identity_branch d ON d.id=t.destination_branch_id
+            LEFT JOIN logistics_dispatch ld ON ld.transfer_id=t.id LEFT JOIN logistics_dispatch_line dl ON dl.transfer_line_id=l.id
+            LEFT JOIN logistics_arrival la ON la.dispatch_id=ld.id LEFT JOIN logistics_arrival_line al ON al.dispatch_line_id=dl.id
+            LEFT JOIN inventory_transit it ON it.dispatch_line_id=dl.id LEFT JOIN logistics_discrepancy x ON x.arrival_id=la.id
+            WHERE t.requested_at>=? AND t.requested_at<?""" + where + " ORDER BY t.requested_at DESC,t.id DESC,l.line_no LIMIT ?", (r, i) -> {
+                BigDecimal dispatched = r.getBigDecimal("dispatched_commercial_qty");
+                BigDecimal received = r.getBigDecimal("received_commercial_qty");
+                BigDecimal pending = r.getBigDecimal("pending_base_qty");
+                BigDecimal difference = received == null ? null
+                    : pending == null || pending.signum() == 0 ? BigDecimal.ZERO : dispatched.subtract(received);
+                return new TransferExportLine(r.getString("code"), r.getString("origin_code"), r.getString("origin_name"),
+                    r.getString("destination_code"), r.getString("destination_name"),
+                    r.getObject("requested_at", OffsetDateTime.class).toInstant(), instant(r.getObject("dispatched_at", OffsetDateTime.class)),
+                    instant(r.getObject("arrived_at", OffsetDateTime.class)), r.getString("status"), r.getString("sku_snapshot"),
+                    r.getString("unit_name_snapshot"), r.getBigDecimal("requested_commercial_qty"), dispatched, received, difference,
+                    r.getString("discrepancy_status"), r.getString("treatment"), r.getBoolean("transit_loss"));
+            }, arguments.toArray());
+    }
+
+    private static Instant instant(OffsetDateTime value) {
+        return value == null ? null : value.toInstant();
     }
 
     /** Active branches other than the operator's own, which may be chosen as origin of a request (RF-0032). */

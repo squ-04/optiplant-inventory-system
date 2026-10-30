@@ -4,12 +4,15 @@ import com.optiplant.common.exception.ApiException;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
+import com.optiplant.sales.dto.SaleExportLine;
 import com.optiplant.sales.dto.SaleHistoryResponse;
 import com.optiplant.sales.dto.SaleResponse;
 import com.optiplant.sales.dto.SaleResponse.Line;
 import com.optiplant.sales.dto.SaleResponse.Person;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -86,6 +89,27 @@ public class SaleQueryService {
     /** The record of one sale by internal identifier; authorization is checked by the caller. */
     SaleResponse record(long saleId) {
         return sales(SALE + "WHERE s.id=?", List.of(saleId)).getFirst();
+    }
+
+    /**
+     * RF-0053: one row per line of the sales confirmed in [start, end) of one branch, or of the network when {@code branch}
+     * is null. Built from the stored snapshots; authorization is checked by the caller.
+     */
+    public List<SaleExportLine> exportLines(UUID branch, Instant start, Instant end, int limit) {
+        List<Object> arguments = new ArrayList<>(List.of(Timestamp.from(start), Timestamp.from(end)));
+        if (branch != null) arguments.add(branch);
+        arguments.add(limit);
+        return jdbc.query("""
+            SELECT s.code,s.confirmed_at,b.code AS branch_code,b.name AS branch_name,u.code AS actor_code,u.full_name,
+                l.sku_snapshot,l.product_name_snapshot,l.unit_name_snapshot,l.commercial_qty,l.gross_unit_price,l.discount_pct,l.net_amount
+            FROM sales_line l JOIN sales_sale s ON s.id=l.sale_id JOIN identity_branch b ON b.id=s.branch_id
+            JOIN identity_user_account u ON u.id=s.confirmed_by
+            WHERE s.confirmed_at>=? AND s.confirmed_at<?""" + (branch == null ? "" : " AND b.external_id=?")
+            + " ORDER BY s.confirmed_at DESC,s.id DESC,l.line_no LIMIT ?", (r, i) -> new SaleExportLine(r.getString("code"),
+                r.getObject("confirmed_at", OffsetDateTime.class).toInstant(), r.getString("branch_code"), r.getString("branch_name"),
+                r.getString("actor_code"), r.getString("full_name"), r.getString("sku_snapshot"), r.getString("product_name_snapshot"),
+                r.getString("unit_name_snapshot"), r.getBigDecimal("commercial_qty"), r.getBigDecimal("gross_unit_price"),
+                r.getBigDecimal("discount_pct"), r.getBigDecimal("net_amount")), arguments.toArray());
     }
 
     private record Row(long id, UUID externalId, String code, OffsetDateTime confirmedAt, Branch branch, Person actor,

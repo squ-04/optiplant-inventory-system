@@ -52,6 +52,7 @@ public class SecurityConfiguration {
         cors.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
         // Idempotency-Key protects critical commands against duplicated retries (ARQ-007).
         cors.setAllowedHeaders(List.of("Content-Type", "X-CSRF-TOKEN", "Idempotency-Key"));
+        cors.setExposedHeaders(List.of("Content-Disposition", "X-Report-Rows"));
         var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cors);
         return source;

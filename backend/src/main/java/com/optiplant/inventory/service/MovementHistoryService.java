@@ -4,12 +4,15 @@ import com.optiplant.common.exception.ApiException;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
+import com.optiplant.inventory.dto.MovementExportRow;
 import com.optiplant.inventory.dto.MovementHistoryResponse;
 import com.optiplant.inventory.dto.MovementHistoryResponse.Entry;
 import com.optiplant.inventory.dto.MovementHistoryResponse.Responsible;
 import com.optiplant.inventory.dto.MovementHistoryResponse.Valuation;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -87,6 +90,34 @@ public class MovementHistoryService {
             }, arguments.toArray());
         OffsetDateTime readAt = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP", OffsetDateTime.class);
         return new MovementHistoryResponse(branch, readAt.toInstant(), items);
+    }
+
+    /**
+     * RF-0052: movements registered in [start, end) of one branch, or of the network when {@code branch} is null, newest
+     * first as in the history. Authorization is checked by the caller; costs are never read.
+     */
+    public List<MovementExportRow> exportRows(UUID branch, Instant start, Instant end, int limit) {
+        List<Object> arguments = new ArrayList<>(List.of(Timestamp.from(start), Timestamp.from(end)));
+        if (branch != null) arguments.add(branch);
+        arguments.add(limit);
+        return jdbc.query("""
+            SELECT m.external_id,o.occurred_at,b.code AS branch_code,b.name AS branch_name,m.sku_snapshot,m.product_name_snapshot,
+                o.kind,o.reason,m.direction,m.commercial_qty,m.unit_name_snapshot,u.code AS actor_code,u.full_name,
+                coalesce('Compra '||po.code,'Venta '||s.code,'Transferencia '||t.code,'Movimiento '||r.external_id) AS source
+            FROM inventory_movement m JOIN inventory_operation o ON o.id=m.operation_id
+            JOIN identity_branch b ON b.id=m.branch_id JOIN identity_user_account u ON u.id=o.actor_id
+            LEFT JOIN purchases_order po ON po.id=o.purchase_order_id
+            LEFT JOIN sales_line sl ON sl.id=m.sale_line_id LEFT JOIN sales_sale s ON s.id=coalesce(o.sale_id,sl.sale_id)
+            LEFT JOIN logistics_arrival la ON la.id=o.arrival_id LEFT JOIN logistics_discrepancy x ON x.id=o.discrepancy_id
+            LEFT JOIN logistics_arrival xa ON xa.id=x.arrival_id
+            LEFT JOIN logistics_dispatch ld ON ld.id=coalesce(o.dispatch_id,la.dispatch_id,xa.dispatch_id)
+            LEFT JOIN transfers_transfer t ON t.id=ld.transfer_id LEFT JOIN inventory_movement r ON r.id=m.original_movement_id
+            WHERE o.occurred_at>=? AND o.occurred_at<?""" + (branch == null ? "" : " AND b.external_id=?")
+            + " ORDER BY o.occurred_at DESC,m.id DESC LIMIT ?", (r, i) -> new MovementExportRow(r.getObject("external_id", UUID.class),
+                r.getObject("occurred_at", OffsetDateTime.class).toInstant(), r.getString("branch_code"), r.getString("branch_name"),
+                r.getString("sku_snapshot"), r.getString("product_name_snapshot"), r.getString("kind"), r.getString("reason"),
+                r.getString("direction"), r.getBigDecimal("commercial_qty"), r.getString("unit_name_snapshot"),
+                r.getString("actor_code"), r.getString("full_name"), r.getString("source")), arguments.toArray());
     }
 
     /** Monetary display precision: 2 decimals, half up (INC-013/D03). */
