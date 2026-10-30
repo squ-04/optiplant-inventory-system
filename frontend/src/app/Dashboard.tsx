@@ -90,7 +90,11 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
 
     {admin && <form className="purchase-filters" aria-label="Sucursal del dashboard" onSubmit={event => event.preventDefault()}>
       <div><label htmlFor="dashboard-branch">Sucursal</label>
-        <select id="dashboard-branch" value={branch} onChange={event => setBranch(event.target.value)}>
+        <select id="dashboard-branch" value={branch} onChange={event => {
+          // The figures of the previous branch never stay next to the new selection, nor next to its error.
+          setSales(null); setTurnover(null); setSalesError(''); setTurnoverError('');
+          setBranch(event.target.value);
+        }}>
           <option value="">Seleccione una sucursal</option>
           {branches.map(item => <option key={item.externalId} value={item.externalId}>
             {item.code} · {item.name}{item.active ? '' : ' (inactiva)'}</option>)}
