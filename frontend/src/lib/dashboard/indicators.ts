@@ -44,7 +44,9 @@ export function impactNote(item: TransferImpactItem): string {
   const origin = item.role === 'ORIGIN';
   if (item.status === 'IN_TRANSIT') return origin ? 'Ya salió del físico de esta sucursal' : 'Aún no entra al físico de esta sucursal';
   if (item.status !== 'RECEIVED_DISCREPANCY') return 'Previsión: aún no reserva ni mueve existencias';
-  const received = `Lo recibido ya está en el físico de ${origin ? 'destino' : 'esta sucursal'}`;
+  const nothing = item.lines.every(line => line.receivedQuantity !== null && isZero(line.receivedQuantity));
+  const received = nothing ? `No llegó mercancía a ${origin ? 'destino' : 'esta sucursal'}`
+    : `Lo recibido ya está en el físico de ${origin ? 'destino' : 'esta sucursal'}`;
   if (item.alertStatus === 'OPEN') return `${received}. Alerta de faltante abierta`;
   if (item.alertStatus === 'RESOLVED') {
     const treatment = item.treatment ? ` con ${TREATMENT_LABEL[item.treatment].toLowerCase()}` : '';
@@ -53,11 +55,17 @@ export function impactNote(item: TransferImpactItem): string {
   return received;
 }
 
+/** RF-0047: the estimate only informs while the goods are on the way; after the arrival it would read as still pending. */
+export const estimatedArrival = (item: TransferImpactItem) => item.status === 'IN_TRANSIT' ? item.estimatedArrivalAt : null;
+
 /** RF-0048: how the available stock stands against its minimum. */
 export function restockNote(item: RestockItem): string {
   if (isZero(item.availableQuantity)) return 'Sin existencias';
   return Number(item.availableQuantity) < Number(item.minimumQuantity) ? 'Por debajo de su mínimo' : 'En su mínimo';
 }
+
+/** RF-0049: room for the longest branch code on the chart axis, so that no code is cut; very long ones are the limit. */
+export const codeAxisWidth = (codes: string[]) => Math.min(160, Math.max(72, Math.max(0, ...codes.map(code => code.length)) * 8 + 16));
 
 /** RF-0049: the branches as chart points; the amount stays a string in the tooltip so no precision is lost when shown. */
 export const comparisonPoints = (items: BranchPerformance[]) => items.map(item => ({

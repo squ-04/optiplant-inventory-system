@@ -9,10 +9,12 @@ import java.util.UUID;
 /**
  * Sales of one branch in the current month and the three previous ones (RF-0044, INC-018/D01–D02,D07), oldest first,
  * in {@code timeZone}. {@code recordedFrom} is the day the branch was registered: months before it carry no data
- * ({@code dataAvailable} false, counts null), which is different from a real zero.
+ * ({@code dataAvailable} false, counts null), which is different from a real zero. {@code amountsIncluded} is false for the
+ * operator, whose local panel has counts and units but no aggregated amounts (INC-003/D04): {@code netAmount} is then null
+ * in every month, which is not missing data.
  */
 public record SalesComparisonResponse(String timeZone, Instant generatedAt, Branch branch, LocalDate recordedFrom,
-                                      List<Month> months) {
+                                      boolean amountsIncluded, List<Month> months) {
     /**
      * {@code to} is the last day of a complete month or today for the month in progress. {@code partialHistory} marks the
      * month in which the branch was registered: it does not cover the whole month. {@code netAmount} is the exact sum of

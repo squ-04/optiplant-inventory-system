@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient } from '../src/lib/api/client.ts';
 import {
-  barWidth, comparisonCoverage, comparisonPoints, currentMonthValue, demandCoverage, impactNote, monthError, quantity, rankingScale, restockNote,
+  barWidth, codeAxisWidth, comparisonCoverage, comparisonPoints, currentMonthValue, demandCoverage, estimatedArrival, impactNote, monthError, quantity,
+  rankingScale, restockNote,
 } from '../src/lib/dashboard/indicators.ts';
 
 const branch = { externalId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', code: 'A', name: 'Medellín', active: true };
@@ -87,6 +88,27 @@ test('RF-0047: the transfers read the real endpoint, and an unknown state is rej
   assert.equal((await api.client.transferImpact(branch.externalId)).items[0].lines[0].inTransitQuantity, '10.000');
   assert.deepEqual(api.urls, [`http://localhost:8080/api/v1/dashboard/transfers?branch=${branch.externalId}`]);
   await assert.rejects(api.client.transferImpact());
+});
+
+test('RF-0047: a reception of nothing never says that something arrived', () => {
+  const zero = { status: 'RECEIVED_DISCREPANCY', alertStatus: 'OPEN', lines: [{ receivedQuantity: '0.000' }, { receivedQuantity: '0.000' }] };
+  assert.equal(impactNote(transfer(zero) as never), 'No llegó mercancía a destino. Alerta de faltante abierta');
+  assert.equal(impactNote(transfer({ ...zero, role: 'DESTINATION' }) as never), 'No llegó mercancía a esta sucursal. Alerta de faltante abierta');
+  const some = { ...zero, lines: [{ receivedQuantity: '0.000' }, { receivedQuantity: '1.000' }] };
+  assert.equal(impactNote(transfer(some) as never), 'Lo recibido ya está en el físico de destino. Alerta de faltante abierta');
+});
+
+test('RF-0047: the estimated arrival only informs while the goods are on the way', () => {
+  const at = '2026-10-30T20:00:00Z';
+  assert.equal(estimatedArrival(transfer({ status: 'IN_TRANSIT', estimatedArrivalAt: at }) as never), at);
+  assert.equal(estimatedArrival(transfer({ status: 'RECEIVED_DISCREPANCY', estimatedArrivalAt: at }) as never), null);
+  assert.equal(estimatedArrival(transfer({ status: 'APPROVED', estimatedArrivalAt: null }) as never), null);
+});
+
+test('RF-0049: the axis fits the longest branch code, within limits', () => {
+  assert.equal(codeAxisWidth(['A']), 72);
+  assert.equal(codeAxisWidth(['DEMO-BOG', 'E2E-NORTE']), 88);
+  assert.equal(codeAxisWidth(['X'.repeat(40)]), 160);
 });
 
 test('RF-0047: each state explains its effect from the side of the consulted branch', () => {

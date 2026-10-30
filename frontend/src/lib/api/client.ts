@@ -288,7 +288,10 @@ export interface SalesMonth {
   month: string; from: string; to: string; inProgress: boolean; dataAvailable: boolean; partialHistory: boolean;
   salesCount: number | null; netAmount: string | null; returnsCount: number | null; products: ProductSales[];
 }
-export interface SalesComparison { timeZone: string; generatedAt: string; branch: Branch; recordedFrom: string; months: SalesMonth[] }
+/** Without `amountsIncluded` (the operator's local panel, INC-003/D04) every `netAmount` is null, which is not missing data. */
+export interface SalesComparison {
+  timeZone: string; generatedAt: string; branch: Branch; recordedFrom: string; amountsIncluded: boolean; months: SalesMonth[];
+}
 export type RotationStatus = 'CALCULATED' | 'INSUFFICIENT_HISTORY' | 'ZERO_AVERAGE' | 'INCONSISTENT_HISTORY';
 /** RF-0045: `rotation` is null («No calculable») unless CALCULATED; `averageQuantity` is null without enough or consistent history. */
 export interface RotationItem {
@@ -671,14 +674,16 @@ function complianceDto(value: unknown): ComplianceReport {
   return { ...(value as unknown as ComplianceReport), branches, routes, overdueInTransit };
 }
 function salesComparisonDto(value: unknown): SalesComparison {
-  if (!record(value) || !text(value.timeZone) || !instant(value.generatedAt) || !day(value.recordedFrom)) throw invalid();
+  if (!record(value) || !text(value.timeZone) || !instant(value.generatedAt) || !day(value.recordedFrom)
+      || typeof value.amountsIncluded !== 'boolean') throw invalid();
   branchDto(value.branch);
+  const included = value.amountsIncluded;
   const months = listDto(value.months, item => {
     if (!record(item) || !/^\d{4}-\d{2}$/.test(String(item.month)) || !day(item.from) || !day(item.to)
         || typeof item.inProgress !== 'boolean' || typeof item.dataAvailable !== 'boolean'
         || typeof item.partialHistory !== 'boolean') throw invalid();
     const known = item.dataAvailable;
-    if (known ? !count(item.salesCount) || !decimal(item.netAmount) || !count(item.returnsCount)
+    if (known ? !count(item.salesCount) || (included ? !decimal(item.netAmount) : item.netAmount !== null) || !count(item.returnsCount)
       : item.salesCount !== null || item.netAmount !== null || item.returnsCount !== null) throw invalid();
     const products = listDto(item.products, product => {
       if (!record(product) || !uuid(product.productExternalId) || !text(product.sku) || !text(product.name)
@@ -1227,6 +1232,9 @@ export class ApiClient {
     const declared = response.headers.get('X-Report-Rows');
     const rows = declared === null ? Number.NaN : Number(declared);
     const name = /filename="?([^";]+)"?/.exec(response.headers.get('Content-Disposition') ?? '')?.[1];
+    if (!response.headers.get('Content-Type')?.startsWith(XLSX_TYPE)) {
+      throw new Error('El servidor no entregó un libro de Excel. No se generó ningún archivo.');
+    }
     return { blob: await response.blob(), fileName: name ?? `${category}.xlsx`, rows: Number.isInteger(rows) ? rows : null };
   }
   /** RF-0044: the branch is required for the administrator; everybody else reads their own. */

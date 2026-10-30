@@ -61,6 +61,8 @@ public class DashboardService {
 
     public SalesComparisonResponse sales(SessionPrincipal principal, UUID branch) {
         Scope scope = scope(principal, branch);
+        // Aggregated amounts are only for the profiles that manage the branch; anything else reads counts and units.
+        boolean amounts = "ADMIN".equals(principal.role()) || "MANAGER".equals(principal.role());
         Instant now = clock.instant();
         YearMonth current = YearMonth.from(now.atZone(BUSINESS_ZONE));
         List<Month> months = new ArrayList<>();
@@ -73,20 +75,20 @@ public class DashboardService {
                 continue;
             }
             months.add(month(scope.id(), month, period.to(), period.inProgress(), scope.registeredAt().isAfter(period.start()),
-                period.start(), period.end()));
+                period.start(), period.end(), amounts));
         }
         return new SalesComparisonResponse(BUSINESS_ZONE.getId(), now, scope.branch(),
-            LocalDate.ofInstant(scope.registeredAt(), BUSINESS_ZONE), months);
+            LocalDate.ofInstant(scope.registeredAt(), BUSINESS_ZONE), amounts, months);
     }
 
     private Month month(long branch, YearMonth month, LocalDate to, boolean inProgress, boolean partial, Instant start,
-                        Instant end) {
+                        Instant end, boolean amounts) {
         Timestamp from = Timestamp.from(start);
         Timestamp until = Timestamp.from(end);
         Integer count = jdbc.queryForObject("SELECT count(*) FROM sales_sale WHERE branch_id=? AND confirmed_at>=? AND confirmed_at<?",
             Integer.class, branch, from, until);
-        BigDecimal net = jdbc.queryForObject("SELECT coalesce(sum(l.net_amount),0) FROM sales_line l JOIN sales_sale s ON s.id=l.sale_id "
-            + "WHERE s.branch_id=? AND s.confirmed_at>=? AND s.confirmed_at<?", BigDecimal.class, branch, from, until);
+        BigDecimal net = !amounts ? null : jdbc.queryForObject("SELECT coalesce(sum(l.net_amount),0) FROM sales_line l JOIN sales_sale s "
+            + "ON s.id=l.sale_id WHERE s.branch_id=? AND s.confirmed_at>=? AND s.confirmed_at<?", BigDecimal.class, branch, from, until);
         Integer returns = jdbc.queryForObject("SELECT count(*) FROM inventory_operation o WHERE o.kind='SALE_RETURN' AND o.occurred_at>=? "
             + "AND o.occurred_at<? AND EXISTS (SELECT 1 FROM inventory_movement m WHERE m.operation_id=o.id AND m.branch_id=?)",
             Integer.class, from, until, branch);
@@ -103,7 +105,7 @@ public class DashboardService {
                 r.getString("base_unit_name"), quantity(r.getBigDecimal("sold")), quantity(r.getBigDecimal("returned"))),
             branch, from, until, branch, from, until);
         return new Month(month.toString(), month.atDay(1), to, inProgress, true, partial, count,
-            net.setScale(2, RoundingMode.HALF_UP).toPlainString(), returns, products);
+            net == null ? null : net.setScale(2, RoundingMode.HALF_UP).toPlainString(), returns, products);
     }
 
     public RotationResponse rotation(SessionPrincipal principal, UUID branch, LocalDate from, LocalDate to) {

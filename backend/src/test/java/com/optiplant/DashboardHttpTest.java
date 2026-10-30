@@ -148,10 +148,9 @@ class DashboardHttpTest {
         assertThat(m0.at("/products/0/soldQuantity").asText()).isEqualTo("1.000");
         assertThat(m0.at("/products/0/returnedQuantity").asText()).isEqualTo("1.000");
 
-        // The administrator and the operator of the branch read the same comparison; the other branch has no sales and,
-        // registered today, no data for the previous months.
+        // The administrator reads the same comparison; the other branch has no sales and, registered today, no data for the
+        // previous months.
         assertThat(ok(admin.get("/dashboard/sales-comparison?branch=" + a)).get("months")).isEqualTo(months);
-        assertThat(ok(aOperator.get("/dashboard/sales-comparison")).get("months")).isEqualTo(months);
         JsonNode other = ok(bManager.get("/dashboard/sales-comparison")).get("months");
         for (int i = 0; i < 3; i++) {
             assertThat(other.get(i).get("dataAvailable").asBoolean()).isFalse();
@@ -163,6 +162,28 @@ class DashboardHttpTest {
         assertThat(other.get(3).get("partialHistory").asBoolean()).isTrue();
         // Reading moves nothing.
         assertThat(movements()).isEqualTo(movements);
+    }
+
+    @Test void theOperatorReadsTheSalesWithoutAggregatedAmounts() throws Exception {
+        stock(maceta, "10");
+        sale(maceta, "2", "0");
+        JsonNode manager = ok(aManager.get("/dashboard/sales-comparison"));
+        JsonNode operator = ok(aOperator.get("/dashboard/sales-comparison"));
+        assertThat(manager.get("amountsIncluded").asBoolean()).isTrue();
+        assertThat(ok(admin.get("/dashboard/sales-comparison?branch=" + a)).get("amountsIncluded").asBoolean()).isTrue();
+        assertThat(operator.get("amountsIncluded").asBoolean()).isFalse();
+        assertThat(operator.toString()).doesNotContain(manager.get("months").get(3).get("netAmount").asText());
+        for (int i = 0; i < 4; i++) {
+            JsonNode own = operator.get("months").get(i);
+            JsonNode full = manager.get("months").get(i);
+            assertThat(own.get("netAmount").isNull()).isTrue();
+            // Everything else is the same reading: the operational figures are not affected.
+            assertThat(own.get("dataAvailable")).isEqualTo(full.get("dataAvailable"));
+            assertThat(own.get("salesCount")).isEqualTo(full.get("salesCount"));
+            assertThat(own.get("returnsCount")).isEqualTo(full.get("returnsCount"));
+            assertThat(own.get("products")).isEqualTo(full.get("products"));
+        }
+        assertThat(operator.at("/months/3/salesCount").asInt()).isPositive();
     }
 
     @Test void theDashboardIsLimitedToTheOwnBranchExceptForTheAdministrator() throws Exception {

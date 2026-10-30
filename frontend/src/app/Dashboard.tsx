@@ -44,7 +44,7 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
   const loadSales = () => loadLatest(salesGate.current, () => client.salesComparison(scope), {
     start: () => { setSalesLoading(true); setSalesError(''); },
     value: setSales,
-    error: failure(onError, setSalesError, 'No se pudo consultar la comparación de ventas.'),
+    error: failure(onError, setSalesError, 'No se pudo consultar la comparación de ventas.', () => !!sales),
     done: () => setSalesLoading(false),
   });
 
@@ -60,7 +60,7 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
     loadLatest(turnoverGate.current, () => client.rotation(target), {
       start: () => { setTurnoverLoading(true); setTurnoverError(''); },
       value: setTurnover,
-      error: failure(onError, setTurnoverError, 'No se pudo calcular la rotación.'),
+      error: failure(onError, setTurnoverError, 'No se pudo calcular la rotación.', () => !!turnover),
       done: () => setTurnoverLoading(false),
     });
 
@@ -109,7 +109,8 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
         <div className="list-heading">
           <div>
             <h3 id="dashboard-sales">Ventas del mes y de los tres meses anteriores</h3>
-            <p>Importe de las ventas confirmadas, neto de descuentos. Las devoluciones se muestran aparte y no se restan.</p>
+            <p>{user.role === 'OPERATOR' ? 'Número de ventas confirmadas y unidades vendidas.'
+              : 'Importe de las ventas confirmadas, neto de descuentos.'} Las devoluciones se muestran aparte y no se restan.</p>
           </div>
           <Button variant="outline" disabled={salesLoading} onClick={() => void loadSales()}>
             <RefreshCw aria-hidden="true" />{salesLoading ? 'Actualizando…' : 'Actualizar ventas'}
@@ -168,7 +169,7 @@ function SalesView({ sales }: { sales: SalesComparison }) {
   return <>
     <p className="cell-note">Sucursal registrada el {day(sales.recordedFrom)}. Generado: {when(sales.generatedAt)}</p>
     {/* The table below carries every figure; the chart is a visual summary of the same amounts. */}
-    {!points.some(point => (point.amount ?? 0) > 0)
+    {!sales.amountsIncluded ? null : !points.some(point => (point.amount ?? 0) > 0)
       ? <p>Sin ventas confirmadas en estos meses: no hay importes que graficar.</p>
       : <figure className="sales-chart" aria-hidden="true">
       <ResponsiveContainer width="100%" height={240}>
@@ -207,13 +208,15 @@ function SalesView({ sales }: { sales: SalesComparison }) {
         <TableCaption>Del mes más antiguo al mes en curso. «Sin datos» no equivale a cero ventas.</TableCaption>
         <TableHeader><TableRow>
           <TableHead scope="col">Mes</TableHead><TableHead scope="col">Ventas</TableHead>
-          <TableHead scope="col" className="text-right">Importe neto</TableHead><TableHead scope="col">Devoluciones</TableHead>
+          {sales.amountsIncluded && <TableHead scope="col" className="text-right whitespace-nowrap">Importe neto</TableHead>}
+          <TableHead scope="col">Devoluciones</TableHead>
         </TableRow></TableHeader>
         <TableBody>{months.map(month => <TableRow key={month.month} className={month.inProgress ? 'month-in-progress' : undefined}>
           <TableCell><span className="font-semibold">{monthName(month.month)}</span>
             <span className="cell-note">{monthCoverage(month)}</span></TableCell>
-          <TableCell className={month.dataAvailable ? undefined : 'not-calculable'}>{salesCount(month)}</TableCell>
-          <TableCell className={`text-right tabular-nums${month.dataAvailable ? '' : ' not-calculable'}`}>{netAmount(month)}</TableCell>
+          <TableCell className={`whitespace-nowrap${month.dataAvailable ? '' : ' not-calculable'}`}>{salesCount(month)}</TableCell>
+          {sales.amountsIncluded && <TableCell className={`text-right tabular-nums whitespace-nowrap${month.dataAvailable ? '' : ' not-calculable'}`}>
+            {netAmount(month)}</TableCell>}
           <TableCell className={month.dataAvailable ? undefined : 'not-calculable'}>{month.returnsCount === null ? 'Sin datos'
             : month.returnsCount === 0 ? 'Ninguna' : `${month.returnsCount} ${month.returnsCount === 1 ? 'devolución' : 'devoluciones'}`}
           </TableCell>

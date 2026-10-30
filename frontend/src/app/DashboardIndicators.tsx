@@ -5,7 +5,8 @@ import type { ApiClient, BranchComparison, BranchPerformance, ComplianceMetrics,
 import { dateTime as when, decimal } from '../lib/format.ts';
 import { day, monthName } from '../lib/dashboard/dashboard.ts';
 import {
-  barWidth, comparisonCoverage, comparisonPoints, currentMonthValue, demandCoverage, impactNote, monthError, quantity, rankingScale, restockNote,
+  barWidth, codeAxisWidth, comparisonCoverage, comparisonPoints, currentMonthValue, demandCoverage, estimatedArrival, impactNote, monthError,
+  quantity, rankingScale, restockNote,
 } from '../lib/dashboard/indicators.ts';
 import { useReading } from '../lib/dashboard/useReading.ts';
 import { compliance, complianceBase, bogotaDateTime } from '../lib/logistics/compliance.ts';
@@ -172,7 +173,7 @@ function TransferImpactView({ report }: { report: TransferImpact }) {
               <span className="font-semibold">{item.code}</span> <TransferStatusBadge status={item.status} />
               <span className="cell-note">{item.role === 'ORIGIN' ? 'Sale hacia' : 'Llega desde'} {item.counterpart.name} ({item.counterpart.code})</span>
               <span className="cell-note">{impactNote(item)}</span>
-              {item.estimatedArrivalAt && <span className="cell-note">Llegada estimada: {bogotaDateTime(item.estimatedArrivalAt)}</span>}
+              {estimatedArrival(item) && <span className="cell-note">Llegada estimada: {bogotaDateTime(estimatedArrival(item)!)}</span>}
             </TableCell>}
             <TableCell className="transfer-impact-product"><span className="font-semibold">{line.name}</span>
               <span className="cell-note">{line.sku}</span></TableCell>
@@ -279,7 +280,7 @@ function ComparisonView({ report }: { report: BranchComparison }) {
             <CartesianGrid horizontal={false} stroke="var(--color-border)" />
             <XAxis type="number" tickLine={false} axisLine={false} tick={{ fill: 'var(--color-muted)', fontSize: 12 }}
               tickFormatter={(amount: number) => amount.toLocaleString('es-CO', { notation: 'compact', maximumFractionDigits: 1 })} />
-            <YAxis type="category" dataKey="code" width={72} tickLine={false} axisLine={{ stroke: 'var(--color-border)' }}
+            <YAxis type="category" dataKey="code" width={codeAxisWidth(points.map(point => point.code))} tickLine={false} axisLine={{ stroke: 'var(--color-border)' }}
               tick={{ fill: 'var(--color-muted)', fontSize: 12 }} />
             <Tooltip cursor={{ fill: 'var(--color-background)' }} content={({ active, payload }) => {
               const point = active ? payload?.[0]?.payload as (typeof points)[number] | undefined : undefined;
@@ -300,16 +301,16 @@ function ComparisonView({ report }: { report: BranchComparison }) {
         <TableCaption>Ordenadas por código. «Sin datos» no equivale a cero y «No calculable» indica que no hubo llegadas confirmadas.</TableCaption>
         <TableHeader><TableRow>
           <TableHead scope="col">Sucursal</TableHead>
-          <TableHead scope="col">Ventas</TableHead>
-          <TableHead scope="col" className="text-right">Importe neto</TableHead>
+          <TableHead scope="col" className="whitespace-nowrap">Ventas</TableHead>
+          <TableHead scope="col" className="text-right whitespace-nowrap">Importe neto</TableHead>
           <TableHead scope="col">Cumplimiento como origen</TableHead>
           <TableHead scope="col">Cumplimiento como destino</TableHead>
         </TableRow></TableHeader>
         <TableBody>{report.branches.map(item => <TableRow key={item.branch.externalId}>
           <TableCell><span className="font-semibold">{item.branch.name} ({item.branch.code})</span>
             <span className="cell-note">{comparisonCoverage(item, report)}{item.branch.active ? '' : '. Inactiva'}</span></TableCell>
-          <TableCell className={item.dataAvailable ? undefined : 'not-calculable'}>{countLabel(item)}</TableCell>
-          <TableCell className={`text-right tabular-nums${item.dataAvailable ? '' : ' not-calculable'}`}>
+          <TableCell className={`whitespace-nowrap${item.dataAvailable ? '' : ' not-calculable'}`}>{countLabel(item)}</TableCell>
+          <TableCell className={`text-right tabular-nums whitespace-nowrap${item.dataAvailable ? '' : ' not-calculable'}`}>
             {item.netAmount === null ? 'Sin datos' : `${decimal(item.netAmount)} COP`}</TableCell>
           {metricCell(item.asOrigin)}
           {metricCell(item.asDestination)}

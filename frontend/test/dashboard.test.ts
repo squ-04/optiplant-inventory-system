@@ -4,6 +4,7 @@ import { ApiClient } from '../src/lib/api/client.ts';
 import {
   chartPoints, monthCoverage, monthName, netAmount, productRows, rotation, rotationNote, rotationPeriodError, salesCount,
 } from '../src/lib/dashboard/dashboard.ts';
+import { failureMessage } from '../src/lib/dashboard/useReading.ts';
 
 const branch = { externalId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', code: 'A', name: 'Medellín', active: true };
 const maceta = { productExternalId: '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e', sku: 'MAC-01', name: 'Maceta', baseUnitName: 'unidad' };
@@ -11,7 +12,7 @@ const sustrato = { productExternalId: '3c4d5e6f-7a8b-4c9d-8e1f-2a3b4c5d6e7f', sk
 const month = (overrides: Record<string, unknown>) => ({ month: '2026-08', from: '2026-08-01', to: '2026-08-31', inProgress: false,
   dataAvailable: true, partialHistory: false, salesCount: 0, netAmount: '0.00', returnsCount: 0, products: [], ...overrides });
 const comparison = {
-  timeZone: 'America/Bogota', generatedAt: '2026-10-29T15:00:00Z', branch, recordedFrom: '2026-07-10',
+  timeZone: 'America/Bogota', generatedAt: '2026-10-29T15:00:00Z', branch, recordedFrom: '2026-07-10', amountsIncluded: true,
   months: [
     month({ month: '2026-07', from: '2026-07-01', to: '2026-07-31', dataAvailable: false, salesCount: null, netAmount: null,
       returnsCount: null }),
@@ -44,6 +45,28 @@ test('RF-0044: the comparison is read from the real endpoint, with the chosen br
 test('RF-0044: a month without data must not carry invented figures', async () => {
   const forged = { ...comparison, months: [month({ dataAvailable: false })] };
   await assert.rejects(client(forged).client.salesComparison(), /Respuesta JSON inválida/);
+});
+
+test('RF-0007: the operator reading has no amounts; an amount in it, or a missing one elsewhere, is rejected', async () => {
+  const months = [month({ salesCount: 2, netAmount: null })];
+  const operator = { ...comparison, amountsIncluded: false, months };
+  const read = await client(operator).client.salesComparison();
+  assert.equal(read.amountsIncluded, false);
+  assert.equal(read.months[0].salesCount, 2);
+  await assert.rejects(client({ ...operator, months: [month({ salesCount: 2 })] }).client.salesComparison(), /Respuesta JSON inválida/);
+  await assert.rejects(client({ ...comparison, months }).client.salesComparison(), /Respuesta JSON inválida/);
+  const { amountsIncluded: _, ...unmarked } = comparison;
+  await assert.rejects(client(unmarked).client.salesComparison(), /Respuesta JSON inválida/);
+});
+
+test('A failed reading warns that the figures still on screen may be outdated, and only then', () => {
+  const failure = new Error('El servidor no pudo completar la solicitud (HTTP 500).');
+  assert.equal(failureMessage(failure, 'Fallback', true),
+    'El servidor no pudo completar la solicitud (HTTP 500). Los datos mostrados pueden estar desactualizados.');
+  assert.equal(failureMessage(failure, 'Fallback', false), 'El servidor no pudo completar la solicitud (HTTP 500).');
+  assert.equal(failureMessage('otro', 'Fallback', false), 'Fallback');
+  assert.equal(failureMessage(new TypeError('fetch'), 'Fallback', true),
+    'Sin comunicación con el servidor. Los datos mostrados pueden estar desactualizados.');
 });
 
 test('RF-0044: missing data, a real zero and the month in progress read differently', () => {

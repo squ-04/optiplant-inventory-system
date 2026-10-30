@@ -61,6 +61,12 @@ test('RF-0050-CA-03: a rejected report is an error with the server reason, never
   });
 });
 
+test('RF-0051: a successful answer that is not a workbook is an error, never a saved file', async () => {
+  const h = client(() => new Response('<html>proxy</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }));
+  await assert.rejects(h.client.downloadReport('sales', { from: '2026-10-01', to: '2026-10-30' }),
+    /El servidor no entregó un libro de Excel\. No se generó ningún archivo\./);
+});
+
 test('RF-0050-CA-04: an expired session is reported like any other request', async () => {
   let expired = false;
   const api = new ApiClient('http://localhost:8080', async () => Response.json({}, { status: 401 }), () => { expired = true; });

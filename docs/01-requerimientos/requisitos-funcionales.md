@@ -228,7 +228,7 @@ Las 55 fichas y sus 138 criterios quedan aprobados en su formulación v1.0; las 
 - **Actores / alcance:** exactamente un rol por usuario; administrador global sin sucursal obligatoria; gerente y operador en una única sucursal, activa para operar. Matriz funcional aprobada en §5.2.
 - **Descripción:** el sistema deberá autorizar operaciones y consultas conforme a las responsabilidades y ámbitos aprobados.
 - **Reglas y datos:** aplicar §5.2 a cada recurso y ámbito, incluso si se conoce su identificador público (§5.3). Cuenta desactivada o acceso revocado no permite obtener datos protegidos ni operar. Sucursal inactiva solo conserva consultas históricas autorizadas, sin desactivar automáticamente cuentas. Administrador no hereda operaciones locales; gerente no mantiene catálogo general ni opera en otras sucursales.
-- **Regla de comparativas (H/D, INC-003):** comparativas de rendimiento de red exclusivas del administrador. Gerente con dashboard y reportes propios; operador con panel operacional local sin valoración/costos agregados y sin exportación. Se conserva consulta de inventario de otras sucursales según RF-0014.
+- **Regla de comparativas (H/D, INC-003):** comparativas de rendimiento de red exclusivas del administrador. Gerente con dashboard y reportes propios; operador con panel operacional local sin valoración/costos agregados, sin importes agregados de venta (precisión del responsable, 2026-10-30) y sin exportación. Se conserva consulta de inventario de otras sucursales según RF-0014.
 - **Dependencias:** RF-0006; afecta todos los módulos.
 - **RF-0007-CA-01:** dada la matriz aprobada en INC-003, cuando una identidad solicite una operación, entonces se permitirá si está autorizada y se rechazará sin efectuarla si no lo está.
 - **RF-0007-CA-02:** dada una cuenta desactivada y el tratamiento de sesiones aprobado en INC-003, cuando intente acceder a una operación protegida, entonces no podrá ejecutarla ni obtener los datos protegidos.
@@ -630,7 +630,7 @@ Las 55 fichas y sus 138 criterios quedan aprobados en su formulación v1.0; las 
 
 #### RF-0044 — Comparar ventas mensuales
 - **Fuente:** E §3.6, p. 3: «Volumen de ventas del mes en curso vs. meses anteriores».
-- **Actores / alcance:** usuarios autorizados de cada sucursal; gerente según §6.2.
+- **Actores / alcance:** usuarios autorizados de cada sucursal; gerente según §6.2. El administrador y el gerente ven importes; el operador ve número de ventas y unidades, sin importes agregados (RF-0007).
 - **Descripción:** el sistema deberá mostrar el volumen de ventas del mes actual y su comparación con meses anteriores.
 - **Reglas y datos:** importe de ventas confirmadas neto de descuentos; cantidades físicas en unidad base por producto, sin sumar unidades heterogéneas. Mes actual y tres meses anteriores en America/Bogota; diferenciar meses completos del mes en curso. Devoluciones por separado, no ventas negativas implícitas. D ratifica el período como decisión del proyecto, no imposición del ejemplo externo. Distinguir cero de ausencia de datos, sin fabricar historia ni presentar seeds como producción.
 - **Dependencias:** RF-0027, RF-0005.
@@ -807,7 +807,7 @@ D, INC-003/D01–D08 y decisiones específicas por operación. «Propia» remite
 | Recepción de transferencia | Supervisa | Gerente destino supervisa/valida recibido | Registra en destino |
 | Discrepancias y pérdida en tránsito | Supervisa | Origen/destino gestionan; origen autoriza baja valor tránsito | Registra recepción/incidencia permitida; no autoriza pérdida |
 | Marcar alerta de faltante «Resuelto» | Supervisa/consulta, sin permiso adicional por herencia | Gerente origen o destino, seleccionando tratamiento | Consulta; no resuelve |
-| Dashboard y valoración | Red y comparativa | Dashboard/valoración propios | Panel operacional local, sin valoración/costos agregados |
+| Dashboard y valoración | Red y comparativa | Dashboard/valoración propios | Panel operacional local, sin valoración/costos agregados ni importes agregados de venta |
 | Reportes logísticos y exportaciones | Una/todas las sucursales | Solo propia | Registros operativos propios; no exporta |
 
 H v0.14: no introducir módulo de tareas personales ni bloquear reasignación por compras/transferencias creadas por el usuario. Pendientes permanecen en la sucursal bajo supervisión del gerente y los ejecutan perfiles autorizados actuales; conservar autoría histórica y revocar accesos previos. Resolver alerta no autoriza ajustar stock ajeno ni cambia permisos de movimientos. No conceder privilegios adicionales al administrador ni reemplazar autorización por conocimiento del identificador.
