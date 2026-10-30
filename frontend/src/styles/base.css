@@ -241,6 +241,7 @@ table.restock-table { min-width: 56rem; }
   form.purchase-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 var(--space-4); max-width: none; margin-block: var(--space-4);
     padding: var(--space-4); background: var(--color-surface); }
   .purchase-filters > div { flex: 1 1 12rem; min-width: 0; }
+  .reports-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 var(--space-4); max-width: 44rem; margin-top: var(--space-4); }
   .purchase-filters input[type='month'] { width: 100%; min-width: 0; }
   .purchase-filters select { margin-bottom: 0; }
   .purchase-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-3); margin-block: var(--space-4); }

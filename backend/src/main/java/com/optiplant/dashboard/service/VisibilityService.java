@@ -20,6 +20,8 @@ public class VisibilityService {
     private final ScopePolicy policy;
     public VisibilityService(VisibilityRepository data, ScopePolicy policy) { this.data = data; this.policy = policy; }
     public List<Branch> branches() { return data.branches(); }
+    /** One branch, active or not; answers 404 when it does not exist. Authorization is checked by the caller. */
+    public Branch branch(UUID branch) { return data.branch(branch); }
     public VisibilityResponse history(SessionPrincipal principal, UUID branch) {
         policy.requirePublicReference(branch);
         policy.requireHistoryRead(principal, branch);

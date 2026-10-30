@@ -14,6 +14,7 @@ import { Sales } from './Sales.tsx';
 import { Transfers } from './Transfers.tsx';
 import { Routes } from './Routes.tsx';
 import { LogisticsCompliance } from './LogisticsCompliance.tsx';
+import { Reports } from './Reports.tsx';
 import { Dashboard } from './Dashboard.tsx';
 import { ReorderAlerts, reorderAlertsQuery } from './ReorderAlerts.tsx';
 import { ShortageAlerts, shortageAlertsQuery } from './ShortageAlerts.tsx';
@@ -26,7 +27,7 @@ import { alertsNavigationLabel, restockNotice } from '../lib/inventory/alerts.ts
 import {
   alertCounts, dismissResolution, dismissedResolutions, recentResolutions, resolutionNotice, shortageNotice,
 } from '../lib/transfers/shortageAlerts.ts';
-import { ArrowLeftRight, BellRing, ChartColumn, Gauge, Route as RouteIcon, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
+import { ArrowLeftRight, BellRing, ChartColumn, FileSpreadsheet, Gauge, Route as RouteIcon, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
 
 /** The browser's storage, or null where it is blocked (private windows, cleared site data). */
 function browserStorage(): Storage | null {
@@ -106,6 +107,7 @@ export function App() {
   const alertsAllowed = user !== null && !user.mustChangePassword && user.role !== 'OPERATOR';
   const valuationAllowed = alertsAllowed;
   const complianceAllowed = alertsAllowed;
+  const reportsAllowed = alertsAllowed;
   const alerts = useQuery(reorderAlertsQuery(client, '', false, alertsAllowed));
   // RF-0038: open shortage alerts add to the counter with their own notice; a manager is told, in this browser, when the
   // other branch's manager resolved one in the last 24 h.
@@ -137,6 +139,8 @@ export function App() {
       { id: 'routes-title', label: 'Rutas', icon: RouteIcon },
       // RF-0043 (§5.2): logistics reports for managers (own branch) and administrators; operators consult each transfer.
       ...(complianceAllowed ? [{ id: 'compliance-title', label: 'Cumplimiento', icon: Gauge }] : []),
+      // RF-0050 (INC-020/D03): administrators export one branch or the network, managers their own; operators nothing.
+      ...(reportsAllowed ? [{ id: 'reports-title', label: 'Reportes', icon: FileSpreadsheet }] : []),
       // RF-0030 (INC-003/D06): every profile consults price lists; only administrators maintain them.
       { id: 'prices-title', label: 'Precios', icon: Tags },
       // RF-0026 (INC-003/D04): valuation is for the branch manager and administrators, never operators.
@@ -207,6 +211,8 @@ export function App() {
         revision={revision} visible={current === 'dashboard-title'} /></div>
       {complianceAllowed && <div hidden={current !== 'compliance-title'}><LogisticsCompliance client={client} user={user}
         onError={showError} revision={revision} visible={current === 'compliance-title'} /></div>}
+      {reportsAllowed && <div hidden={current !== 'reports-title'}><Reports client={client} user={user}
+        onError={showError} visible={current === 'reports-title'} /></div>}
       <div hidden={current !== 'prices-title'}><PriceLists client={client} user={user} onError={showError}
         revision={revision} visible={current === 'prices-title'} /></div>
       {valuationAllowed && <div hidden={current !== 'valuation-title'}><Valuation client={client} user={user} onError={showError}
