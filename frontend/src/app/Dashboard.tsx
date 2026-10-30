@@ -1,33 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ApiClient, ApiError } from '../lib/api/client.ts';
+import { ApiClient } from '../lib/api/client.ts';
 import type { Branch, RotationFilter, RotationReport, SalesComparison, User } from '../lib/api/client.ts';
 import { dateTime as when, decimal } from '../lib/format.ts';
 import {
   chartPoints, day, monthCoverage, monthName, netAmount, productRows, rotation, rotationNote, rotationPeriodError, salesCount,
 } from '../lib/dashboard/dashboard.ts';
 import { ZONE_NOTE, bogotaDateTime, currentMonth } from '../lib/logistics/compliance.ts';
+import { failure } from '../lib/dashboard/useReading.ts';
 import { discardPending, loadLatest, requestGate } from '../lib/latestRequest.ts';
+import { SectionTabs } from '../components/shared/SectionTabs.tsx';
+import { BranchComparisonSection, DemandSection, RestockSection, TransferImpactSection } from './DashboardIndicators.tsx';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 interface Props { client: ApiClient; user: User; onError: (reason: unknown) => void; revision: number; visible: boolean }
 
-/** Turns a failed reading into the message of its own section; an expired session goes to the shell. */
-function failure(onError: (reason: unknown) => void, set: (message: string) => void, fallback: string) {
-  return (reason: unknown) => {
-    if (reason instanceof ApiError && reason.status === 401) onError(reason);
-    else set(reason instanceof TypeError ? 'Sin comunicación con el servidor. Los datos mostrados pueden estar desactualizados.'
-      : reason instanceof Error ? reason.message : fallback);
-  };
-}
-
 /**
- * UC-019 branch dashboard: monthly sales of the current month against the three previous ones (RF-0044) and inventory
- * rotation by product (RF-0045). Every profile reads its own branch; the administrator chooses one. Missing data, a real
- * zero and «No calculable» are shown as different things.
+ * UC-019 branch dashboard: monthly sales of the current month against the three previous ones (RF-0044), inventory rotation
+ * by product (RF-0045), high and low demand (RF-0046), active transfers (RF-0047) and products about to run out (RF-0048).
+ * Every profile reads its own branch; the administrator chooses one and also compares the network (RF-0049). Missing data,
+ * a real zero and «No calculable» are shown as different things.
  */
 export function Dashboard({ client, user, onError, revision, visible }: Props) {
   const admin = user.role === 'ADMIN';
@@ -35,6 +30,7 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
   const [branch, setBranch] = useState('');
   const scope = admin ? branch || undefined : undefined;
   const ready = !admin || !!branch;
+  const reading = { client, branch: scope, ready, onError, revision, visible };
 
   useEffect(() => {
     if (admin && visible) client.visibleBranches().then(setBranches).catch(onError);
@@ -103,6 +99,9 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
             {item.code} · {item.name}{item.active ? '' : ' (inactiva)'}</option>)}
         </select></div>
     </form>}
+
+    <SectionTabs label="Indicadores del dashboard" items={[
+      { label: 'Ventas y rotación', content: <>
     {!ready && <p>Seleccione una sucursal para ver sus ventas mensuales y la rotación de su inventario.</p>}
 
     {ready && <>
@@ -142,6 +141,21 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
         {turnover && <RotationView report={turnover} />}
       </section>
     </>}
+      </> },
+      { label: 'Demanda', content: <>
+        {!ready && <p>Seleccione una sucursal para ver sus productos de alta y baja demanda.</p>}
+        {ready && <DemandSection {...reading} />}
+      </> },
+      { label: 'Transferencias', content: <>
+        {!ready && <p>Seleccione una sucursal para ver sus transferencias activas.</p>}
+        {ready && <TransferImpactSection {...reading} />}
+      </> },
+      { label: 'Próximos a agotarse', content: <>
+        {!ready && <p>Seleccione una sucursal para ver sus productos próximos a agotarse.</p>}
+        {ready && <RestockSection {...reading} />}
+      </> },
+      ...(admin ? [{ label: 'Comparativa', content: <BranchComparisonSection {...{ client, onError, revision, visible }} /> }] : []),
+    ]} />
   </section>;
 }
 

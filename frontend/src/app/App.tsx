@@ -124,7 +124,7 @@ export function App() {
       ...(user?.role === 'ADMIN' ? [{ id: 'administration-title', label: 'Administración', icon: Building2 }] : []),
       // Consultas stays first for local profiles: the first entry is the landing view.
       { id: 'visibility-title', label: 'Consultas', icon: Search },
-      // RF-0044/RF-0045 (UC-019): every profile reads the dashboard of its branch; administrators choose the branch.
+      // RF-0044–RF-0049 (UC-019): every profile reads the dashboard of its branch; administrators choose it and compare the network.
       { id: 'dashboard-title', label: 'Dashboard', icon: ChartColumn },
       { id: 'catalog-title', label: 'Catálogo', icon: Package },
       { id: 'movements-title', label: 'Movimientos', icon: ArrowLeftRight },
