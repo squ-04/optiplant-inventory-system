@@ -53,6 +53,12 @@ class ReportWorkbookTest {
         assertThat(exact.getStringCellValue()).isEqualTo("999999999999999.999");
     }
 
+    @Test void aDecimalWithoutFractionShowsNoTrailingSeparator() throws Exception {
+        Row row = row(List.of(new BigDecimal("100")), new Column("A", Kind.DECIMAL, 10));
+        assertThat(row.getCell(0).getNumericCellValue()).isEqualTo(100);
+        assertThat(row.getCell(0).getCellStyle().getDataFormatString()).isEqualTo("General");
+    }
+
     @Test void datesAreRealDatesAndAMissingValueLeavesTheCellEmpty() throws Exception {
         LocalDateTime date = LocalDateTime.of(2026, 10, 30, 8, 15, 30);
         Row row = row(Arrays.asList(date, null), new Column("A", Kind.DATE_TIME, 10), new Column("B", Kind.DATE_TIME, 10));

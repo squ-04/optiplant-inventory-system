@@ -33,6 +33,13 @@ test('RF-0051: the download keeps the binary, the server file name and the sessi
   assert.match(new Headers(h.requests[0].init?.headers).get('Accept')!, /spreadsheetml/);
 });
 
+test('RF-0050: a response without the row count is unknown, never an empty file', async () => {
+  const h = client(() => new Response(new Uint8Array([0x50, 0x4b]), { status: 200, headers: { 'Content-Type': XLSX_TYPE } }));
+  const download = await h.client.downloadReport('sales', { from: '2026-10-01', to: '2026-10-30' });
+  assert.equal(download.rows, null);
+  assert.equal(download.fileName, 'sales.xlsx');
+});
+
 test('RF-0055: branch and status travel as filters, and the status only to the transfers report', async () => {
   const h = client(() => file('1'));
   const filter = { from: '2026-10-01', to: '2026-10-30', branch: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', status: 'IN_TRANSIT' as const };

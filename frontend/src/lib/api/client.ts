@@ -1224,7 +1224,8 @@ export class ApiClient {
     if (filter.status && category === 'transfers') query.set('status', filter.status);
     const response = await this.send(`/reports/${category}?${query}`, 'GET', undefined, undefined, {},
       `${XLSX_TYPE}, application/problem+json`);
-    const rows = Number(response.headers.get('X-Report-Rows'));
+    const declared = response.headers.get('X-Report-Rows');
+    const rows = declared === null ? Number.NaN : Number(declared);
     const name = /filename="?([^";]+)"?/.exec(response.headers.get('Content-Disposition') ?? '')?.[1];
     return { blob: await response.blob(), fileName: name ?? `${category}.xlsx`, rows: Number.isInteger(rows) ? rows : null };
   }

@@ -107,7 +107,7 @@ public class XlsxReportWriter {
         styles.put(Kind.DATE_TIME, format(workbook, "yyyy-mm-dd hh:mm:ss"));
         styles.put(Kind.QUANTITY, format(workbook, "#,##0.000"));
         styles.put(Kind.MONEY, format(workbook, "#,##0.00"));
-        styles.put(Kind.DECIMAL, format(workbook, "#,##0.######"));
+        styles.put(Kind.DECIMAL, format(workbook, "General"));
         return styles;
     }
 
