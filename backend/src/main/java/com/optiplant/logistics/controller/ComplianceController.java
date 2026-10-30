@@ -1,12 +1,11 @@
 package com.optiplant.logistics.controller;
 
 import com.optiplant.common.exception.ApiException;
+import com.optiplant.common.web.PeriodDate;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
 import com.optiplant.logistics.dto.ComplianceReportResponse;
 import com.optiplant.logistics.service.ComplianceService;
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,8 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/logistics/compliance")
 public class ComplianceController {
-    static final int MIN_YEAR = 1900;
-    static final int MAX_YEAR = 9999;
     private final ComplianceService compliance;
     private final ScopePolicy policy;
 
@@ -43,24 +40,6 @@ public class ComplianceController {
                 + "administradores. El operador consulta los tiempos de sus transferencias en Transferencias.");
         }
         if (branch != null) policy.requirePublicReference(branch);
-        return compliance.report(principal, date(from, "inicial"), date(to, "final"), branch);
-    }
-
-    private static LocalDate date(String value, String which) {
-        if (value == null || value.isBlank()) {
-            throw new ApiException(400, "VALIDATION_FAILED", "Indique la fecha " + which + " del período (AAAA-MM-DD).");
-        }
-        LocalDate date;
-        try {
-            date = LocalDate.parse(value);
-        } catch (DateTimeParseException invalid) {
-            throw new ApiException(400, "VALIDATION_FAILED", "La fecha " + which + " del período no es válida: use AAAA-MM-DD.");
-        }
-        // Bounded so that the period's limits always exist as PostgreSQL instants: an extreme year answers 400, not 500.
-        if (date.getYear() < MIN_YEAR || date.getYear() > MAX_YEAR) {
-            throw new ApiException(400, "VALIDATION_FAILED", "La fecha " + which + " del período debe estar entre los años "
-                + MIN_YEAR + " y " + MAX_YEAR + ".");
-        }
-        return date;
+        return compliance.report(principal, PeriodDate.parse(from, "inicial"), PeriodDate.parse(to, "final"), branch);
     }
 }

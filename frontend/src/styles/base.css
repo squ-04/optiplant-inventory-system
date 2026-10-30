@@ -40,6 +40,8 @@
   --color-tint: #fff3e8;
   --color-border: #dfe5ef;
   --color-focus: #254b87;
+  --color-chart: #254b87;
+  --color-chart-soft: #dbe4f3;
   --color-warning: #895700;
   --color-warning-muted: #fff8e6;
   --color-danger: #b42318;
@@ -375,6 +377,19 @@ table.restock-table { min-width: 56rem; }
   .compliance-outcomes .inconsistent, .compliance-legend .inconsistent { background: var(--color-muted); }
   .compliance-section { margin-top: var(--space-8, 2rem); }
   .compliance-section td.not-calculable { color: var(--color-muted); }
+  /* RF-0044: one series in the structure blue; the month in progress is hatched so it never reads as a closed month. */
+  .sales-chart { margin: var(--space-4) 0; padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: .625rem; }
+  .sales-chart .compliance-legend i { border: 1px solid var(--color-chart); }
+  .sales-chart .chart-complete { background: var(--color-chart); }
+  .sales-chart .chart-in-progress { background: repeating-linear-gradient(45deg, var(--color-chart) 0 2px, var(--color-chart-soft) 2px 4px); }
+  .sales-chart .chart-missing { background: transparent; border-style: dashed; }
+  .chart-tooltip { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-3); background: var(--color-surface);
+    border: 1px solid var(--color-border); border-radius: .5rem; box-shadow: 0 2px 6px rgb(20 33 61 / 8%); font-size: .875rem; }
+  .chart-tooltip span { font-variant-numeric: tabular-nums; font-weight: 650; }
+  .chart-tooltip small { color: var(--color-muted); }
+  .compliance-section h4 { margin-top: var(--space-6); }
+  tr.month-in-progress { background: var(--color-background); }
 
   @media (min-width: 40rem) {
     ol.transfer-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); }

@@ -276,6 +276,29 @@ export interface ComplianceReport {
     carrier: string; departedAt: string; estimatedArrivalAt: string }[];
 }
 export interface ComplianceFilter { from: string; to: string; branch?: string }
+/** RF-0044: quantities of one product in its base unit; products are never added together. */
+export interface ProductSales {
+  productExternalId: string; sku: string; name: string; baseUnitName: string; soldQuantity: string; returnedQuantity: string;
+}
+/**
+ * RF-0044: one month of sales of the branch. Without `dataAvailable` (before the branch was registered) the counts are
+ * null, which is not a zero. `partialHistory` marks the month the branch was registered; `inProgress` the current one.
+ */
+export interface SalesMonth {
+  month: string; from: string; to: string; inProgress: boolean; dataAvailable: boolean; partialHistory: boolean;
+  salesCount: number | null; netAmount: string | null; returnsCount: number | null; products: ProductSales[];
+}
+export interface SalesComparison { timeZone: string; generatedAt: string; branch: Branch; recordedFrom: string; months: SalesMonth[] }
+export type RotationStatus = 'CALCULATED' | 'INSUFFICIENT_HISTORY' | 'ZERO_AVERAGE' | 'INCONSISTENT_HISTORY';
+/** RF-0045: `rotation` is null («No calculable») unless CALCULATED; `averageQuantity` is null without enough or consistent history. */
+export interface RotationItem {
+  productExternalId: string; sku: string; name: string; baseUnitName: string; historyStartedAt: string;
+  soldQuantity: string; averageQuantity: string | null; rotation: string | null; status: RotationStatus;
+}
+export interface RotationReport {
+  timeZone: string; from: string; to: string; measuredUntil: string; generatedAt: string; branch: Branch; items: RotationItem[];
+}
+export interface RotationFilter { from: string; to: string; branch?: string }
 export interface TransferDispatchInput { carrier: string; departedAt: string; estimatedArrivalAt: string }
 export type { RoutePriority };
 /** RF-0041: a directed route with its manual priority. */
@@ -607,6 +630,39 @@ function complianceDto(value: unknown): ComplianceReport {
     return item as unknown as ComplianceReport['overdueInTransit'][number];
   });
   return { ...(value as unknown as ComplianceReport), branches, routes, overdueInTransit };
+}
+function salesComparisonDto(value: unknown): SalesComparison {
+  if (!record(value) || !text(value.timeZone) || !instant(value.generatedAt) || !day(value.recordedFrom)) throw invalid();
+  branchDto(value.branch);
+  const months = listDto(value.months, item => {
+    if (!record(item) || !/^\d{4}-\d{2}$/.test(String(item.month)) || !day(item.from) || !day(item.to)
+        || typeof item.inProgress !== 'boolean' || typeof item.dataAvailable !== 'boolean'
+        || typeof item.partialHistory !== 'boolean') throw invalid();
+    const known = item.dataAvailable;
+    if (known ? !count(item.salesCount) || !decimal(item.netAmount) || !count(item.returnsCount)
+      : item.salesCount !== null || item.netAmount !== null || item.returnsCount !== null) throw invalid();
+    const products = listDto(item.products, product => {
+      if (!record(product) || !uuid(product.productExternalId) || !text(product.sku) || !text(product.name)
+          || !text(product.baseUnitName) || !decimal(product.soldQuantity) || !decimal(product.returnedQuantity)) throw invalid();
+      return product as unknown as ProductSales;
+    });
+    return { ...(item as unknown as SalesMonth), products };
+  });
+  return { ...(value as unknown as SalesComparison), months };
+}
+const ROTATION_STATUSES: readonly string[] = ['CALCULATED', 'INSUFFICIENT_HISTORY', 'ZERO_AVERAGE', 'INCONSISTENT_HISTORY'];
+function rotationDto(value: unknown): RotationReport {
+  if (!record(value) || !text(value.timeZone) || !day(value.from) || !day(value.to) || !instant(value.measuredUntil)
+      || !instant(value.generatedAt)) throw invalid();
+  branchDto(value.branch);
+  const items = listDto(value.items, item => {
+    if (!record(item) || !uuid(item.productExternalId) || !text(item.sku) || !text(item.name) || !text(item.baseUnitName)
+        || !instant(item.historyStartedAt) || !decimal(item.soldQuantity) || !ROTATION_STATUSES.includes(String(item.status))
+        || !(item.averageQuantity === null || decimal(item.averageQuantity))
+        || (item.status === 'CALCULATED' ? !decimal(item.rotation) : item.rotation !== null)) throw invalid();
+    return item as unknown as RotationItem;
+  });
+  return { ...(value as unknown as RotationReport), items };
 }
 function transferDto(value: unknown): Transfer {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !isTransferStatus(value.status) ||
@@ -1050,6 +1106,16 @@ export class ApiClient {
     const query = new URLSearchParams({ from: filter.from, to: filter.to });
     if (filter.branch) query.set('branch', filter.branch);
     return complianceDto(await this.request(`/logistics/compliance?${query}`));
+  }
+  /** RF-0044: the branch is required for the administrator; everybody else reads their own. */
+  async salesComparison(branch?: string): Promise<SalesComparison> {
+    const query = branch ? `?${new URLSearchParams({ branch })}` : '';
+    return salesComparisonDto(await this.request(`/dashboard/sales-comparison${query}`));
+  }
+  async rotation(filter: RotationFilter): Promise<RotationReport> {
+    const query = new URLSearchParams({ from: filter.from, to: filter.to });
+    if (filter.branch) query.set('branch', filter.branch);
+    return rotationDto(await this.request(`/dashboard/rotation?${query}`));
   }
   async transfer(id: string): Promise<Transfer> {
     return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}`));
