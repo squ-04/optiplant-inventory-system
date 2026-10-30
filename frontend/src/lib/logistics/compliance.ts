@@ -60,7 +60,7 @@ export function currentMonth(now: Date): { from: string; to: string } {
   return { from: `${today.slice(0, 8)}01`, to: today };
 }
 
-/** Mirrors `ComplianceController.MIN_YEAR`/`MAX_YEAR`; a four-digit date never exceeds the maximum. */
+/** Mirrors `PeriodDate.MIN_YEAR`/`MAX_YEAR`; a four-digit date never exceeds the maximum. */
 const MIN_YEAR = 1900;
 const MAX_YEAR = 9999;
 

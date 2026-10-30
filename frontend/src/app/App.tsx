@@ -14,6 +14,7 @@ import { Sales } from './Sales.tsx';
 import { Transfers } from './Transfers.tsx';
 import { Routes } from './Routes.tsx';
 import { LogisticsCompliance } from './LogisticsCompliance.tsx';
+import { Dashboard } from './Dashboard.tsx';
 import { ReorderAlerts, reorderAlertsQuery } from './ReorderAlerts.tsx';
 import { ShortageAlerts, shortageAlertsQuery } from './ShortageAlerts.tsx';
 import { Visibility } from './Visibility.tsx';
@@ -25,7 +26,7 @@ import { alertsNavigationLabel, restockNotice } from '../lib/inventory/alerts.ts
 import {
   alertCounts, dismissResolution, dismissedResolutions, recentResolutions, resolutionNotice, shortageNotice,
 } from '../lib/transfers/shortageAlerts.ts';
-import { ArrowLeftRight, BellRing, Gauge, Route as RouteIcon, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
+import { ArrowLeftRight, BellRing, ChartColumn, Gauge, Route as RouteIcon, Building2, Coins, KeyRound, LogIn, LogOut, Package, ReceiptText, Search, ShoppingCart, Tags, TriangleAlert, Truck, UserRound } from 'lucide-react';
 
 /** The browser's storage, or null where it is blocked (private windows, cleared site data). */
 function browserStorage(): Storage | null {
@@ -123,6 +124,8 @@ export function App() {
       ...(user?.role === 'ADMIN' ? [{ id: 'administration-title', label: 'Administración', icon: Building2 }] : []),
       // Consultas stays first for local profiles: the first entry is the landing view.
       { id: 'visibility-title', label: 'Consultas', icon: Search },
+      // RF-0044/RF-0045 (UC-019): every profile reads the dashboard of its branch; administrators choose the branch.
+      { id: 'dashboard-title', label: 'Dashboard', icon: ChartColumn },
       { id: 'catalog-title', label: 'Catálogo', icon: Package },
       { id: 'movements-title', label: 'Movimientos', icon: ArrowLeftRight },
       { id: 'purchases-title', label: 'Compras', icon: ShoppingCart },
@@ -200,6 +203,8 @@ export function App() {
         revision={revision} visible={current === 'transfers-title'} /></div>
       <div hidden={current !== 'routes-title'}><Routes client={client} user={user} onError={showError}
         revision={revision} visible={current === 'routes-title'} /></div>
+      <div hidden={current !== 'dashboard-title'}><Dashboard client={client} user={user} onError={showError}
+        revision={revision} visible={current === 'dashboard-title'} /></div>
       {complianceAllowed && <div hidden={current !== 'compliance-title'}><LogisticsCompliance client={client} user={user}
         onError={showError} revision={revision} visible={current === 'compliance-title'} /></div>}
       <div hidden={current !== 'prices-title'}><PriceLists client={client} user={user} onError={showError}
