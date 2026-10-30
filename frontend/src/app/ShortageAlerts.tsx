@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, RefreshCw, X } from 'lucide-react';
 import { ApiClient, ApiError } from '../lib/api/client.ts';
 import type { ShortageTreatment, Transfer, TransferHistory, TransferHistoryFilter, User } from '../lib/api/client.ts';
 import { TREATMENT_LABEL, canResolve } from '../lib/transfers/transfers.ts';
 import { keepsIdempotencyKey, newIdempotencyKey } from '../lib/inventory/movements.ts';
 import { dateTime as when, sentence } from '../lib/format.ts';
+import {
+  INVENTORY_NETWORK_MODE, INVENTORY_POLL_MS, INVENTORY_TIMEOUT_MS, connectionFailure,
+} from '../lib/inventory/freshness.ts';
 import { ShortageBadge, ShortageLines, ShortageResolveForm } from './TransferShortagePanel.tsx';
 import { TransferStatusBadge } from '../components/shared/TransferStatusBadge.tsx';
 import { Button } from '../components/ui/button';
@@ -16,6 +20,25 @@ const VIEWS: { value: View; label: string }[] = [
 ];
 
 /**
+ * RF-0038: shortage alerts are read with the same polling as the restock alerts (ARQ PEN-003). The open ones of the
+ * default scope share their query with the shell's notice and counter, so they are polled only once.
+ */
+export function shortageAlertsQuery(client: ApiClient, view: View, enabled: boolean) {
+  return {
+    queryKey: ['shortage-alerts', view],
+    queryFn: ({ signal }: { signal: AbortSignal }) => client.transfers({ discrepancy: view },
+      AbortSignal.any([signal, AbortSignal.timeout(INVENTORY_TIMEOUT_MS)])),
+    enabled,
+    refetchInterval: (query: { state: { error: unknown } }) =>
+      enabled && (query.state.error === null || connectionFailure(query.state.error)) ? INVENTORY_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnReconnect: 'always' as const,
+    networkMode: INVENTORY_NETWORK_MODE,
+    retry: false,
+  };
+}
+
+/**
  * RF-0038: the shortage alerts of transfers, apart from the restock alerts (they never resolve by threshold). Managers of
  * the origin or destination mark them «Resuelto» with a treatment; administrators supervise the network. The transit loss
  * and the resend are registered from the transfer detail.
@@ -24,24 +47,27 @@ export function ShortageAlerts({ client, user, onError, revision, visible }: {
   client: ApiClient; user: User; onError: (reason: unknown) => void; revision: number; visible: boolean;
 }) {
   const [view, setView] = useState<View>('OPEN');
-  const [alerts, setAlerts] = useState<TransferHistory | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const queries = useQueryClient();
+  const query = useQuery<TransferHistory>(shortageAlertsQuery(client, view, visible));
+  const alerts = query.data ?? null;
+  const loading = query.isFetching;
   const [resolving, setResolving] = useState<string | null>(null);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
   const [confirmed, setConfirmed] = useState('');
 
-  async function load(target = view) {
-    setLoading(true); setError('');
-    try { setAlerts(await client.transfers({ discrepancy: target })); } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 401) onError(reason);
-      else setError(reason instanceof TypeError ? 'Sin comunicación con el servidor. El listado mostrado puede estar desactualizado.'
-        : reason instanceof Error ? reason.message : 'No se pudieron consultar las alertas de faltante.');
-    } finally { setLoading(false); }
-  }
-  useEffect(() => { if (visible) void load(); }, [visible, view, revision]);
+  useEffect(() => {
+    if (query.error instanceof ApiError && query.error.status === 401) onError(query.error);
+  }, [query.errorUpdatedAt]);
+  const error = !query.isError || (query.error instanceof ApiError && query.error.status === 401) ? ''
+    : connectionFailure(query.error) && !(query.error instanceof ApiError)
+      ? 'Sin comunicación con el servidor. El listado mostrado puede estar desactualizado.'
+      : `${query.error instanceof Error ? query.error.message : 'No se pudieron consultar las alertas de faltante.'}`
+        + (alerts ? ' El listado mostrado puede estar desactualizado.' : '');
+  // Every shortage listing (this view and the shell's notices) is read again after a local change.
+  const load = () => queries.invalidateQueries({ queryKey: ['shortage-alerts'] });
+  useEffect(() => { if (visible && revision > 0) void load(); }, [revision]);
   useEffect(() => { if (!visible) setConfirmed(''); }, [visible]);
 
   async function resolve(transfer: Transfer, treatment: ShortageTreatment) {

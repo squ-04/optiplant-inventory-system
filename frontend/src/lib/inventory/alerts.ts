@@ -12,8 +12,17 @@ export function restockNotice(activeCount: number, network: boolean): string | n
     : `${activeCount} productos ${scope} están en su stock mínimo o por debajo.`;
 }
 
-/** Accessible name of the navigation entry, so the count is not conveyed by the badge alone. */
-export function alertsNavigationLabel(activeCount: number): string {
-  if (activeCount <= 0) return 'Alertas de reabastecimiento, sin alertas activas';
-  return `Alertas de reabastecimiento, ${activeCount} ${activeCount === 1 ? 'activa' : 'activas'}`;
+/**
+ * Accessible name of the navigation entry, so the count is not conveyed by the badge alone. The badge adds the open
+ * shortage alerts of transfers (RF-0038), named apart from the restock ones.
+ */
+export function alertsNavigationLabel(activeCount: number, openShortages = 0): string {
+  if (openShortages <= 0) {
+    if (activeCount <= 0) return 'Alertas de reabastecimiento, sin alertas activas';
+    return `Alertas de reabastecimiento, ${activeCount} ${activeCount === 1 ? 'activa' : 'activas'}`;
+  }
+  const restock = activeCount <= 0 ? 'sin reabastecimiento activo'
+    : `${activeCount} de reabastecimiento ${activeCount === 1 ? 'activa' : 'activas'}`;
+  const shortages = openShortages === 1 ? '1 faltante de transferencia abierto' : `${openShortages} faltantes de transferencias abiertos`;
+  return `Alertas: ${restock} y ${shortages}`;
 }

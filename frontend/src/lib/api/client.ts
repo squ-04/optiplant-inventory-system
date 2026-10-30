@@ -1054,12 +1054,12 @@ export class ApiClient {
     return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}`));
   }
   /** Transfers of a branch as origin, destination or both, or of the network for administrators; newest first. */
-  async transfers(filter: TransferHistoryFilter = {}): Promise<TransferHistory> {
+  async transfers(filter: TransferHistoryFilter = {}, signal?: AbortSignal): Promise<TransferHistory> {
     const query = new URLSearchParams();
     for (const key of ['branch', 'direction', 'status', 'discrepancy'] as const) if (filter[key]) query.set(key, filter[key]);
     if (filter.limit !== undefined) query.set('limit', String(filter.limit));
     const suffix = query.size > 0 ? `?${query}` : '';
-    const value = await this.request(`/transfers${suffix}`);
+    const value = await this.request(`/transfers${suffix}`, 'GET', undefined, signal);
     if (!record(value) || !instant(value.readAt)) throw invalid();
     return { readAt: value.readAt as string, branch: value.branch === null ? null : branchDto(value.branch),
       items: listDto(value.items, transferDto) };

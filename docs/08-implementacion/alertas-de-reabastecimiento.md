@@ -10,6 +10,7 @@ Guía de la implementación de RF-0019 (controlar stock mínimo) y RF-0020 (aler
 - **Reconciliación al arrancar.** Al iniciar, el backend evalúa todas las combinaciones para alinear datos cargados antes de esta entrega, como la semilla de demostración. Es idempotente: una base consistente no cambia. No se añadió migración.
 - **Destinatarios (INC-010/D04).** El gerente ve las alertas de su sucursal y el administrador las de cualquier sucursal o de toda la red, con un aviso persistente mientras haya alertas activas. El operador no consulta alertas: ve el indicador «Requiere reabastecimiento» en el catálogo de su sucursal.
 - **Actualización.** La vista y el aviso consultan por polling REST con el mismo intervalo y tiempo máximo que el inventario (ARQ PEN-003, RF-0015); la consulta por defecto se comparte entre aviso y vista, de modo que se lee una sola vez.
+- **Contador compartido con los faltantes.** El número de **Alertas** en la navegación suma las alertas de reabastecimiento activas y las alertas de faltante de transferencias abiertas (RF-0038); su nombre accesible las nombra por separado y cada tipo tiene su propio aviso. Ver [transferencias](transferencias.md).
 
 ## Contrato REST
 
