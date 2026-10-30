@@ -126,7 +126,7 @@ test('a resend sends its shortage and the listing filters by alert state', async
     preparedBaseQuantity: null, dispatchedQuantity: null, dispatchedBaseQuantity: null, inTransitBaseQuantity: null }],
     sourceDiscrepancy: { externalId: shortage.externalId, transferExternalId: inTransit.externalId, transferCode: 'TR-000001' } };
   const h = harness([csrf(), Response.json(resend, { status: 201 }),
-    Response.json({ readAt: '2026-10-29T18:00:00Z', branch: destination, items: [{ ...partial, discrepancy: { ...shortage, resends: null } }] })]);
+    Response.json({ readAt: '2026-10-29T18:00:00Z', branch: destination, total: 1, items: [{ ...partial, discrepancy: { ...shortage, resends: null } }] })]);
   const input = { origin: origin.externalId, sourceDiscrepancy: shortage.externalId, lines: [{ product: sent.productExternalId, unit: 'unidad', quantity: '3' }] };
   assert.equal((await h.client.requestTransfer(input, 'k')).sourceDiscrepancy?.transferCode, 'TR-000001');
   assert.deepEqual(JSON.parse(String(h.calls[1].options.body)), input);

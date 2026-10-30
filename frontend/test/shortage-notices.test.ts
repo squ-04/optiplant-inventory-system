@@ -23,7 +23,7 @@ function resolvedTransfer(code: string, discrepancy: string, resolvedAt: string,
 const recent = resolvedTransfer('TR-000002', '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', '2026-10-29T15:00:00Z');
 const old = resolvedTransfer('TR-000001', '6f7a8b9c-0d1e-4f2a-8b3c-4d5e6f7a8b9c', '2026-10-28T11:59:59Z');
 const mine = resolvedTransfer('TR-000003', '7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d', '2026-10-29T14:00:00Z', me);
-const history: TransferHistory = { readAt: '2026-10-29T16:00:00Z', branch: origin, items: [recent, old, mine] };
+const history: TransferHistory = { readAt: '2026-10-29T16:00:00Z', branch: origin, total: 3, items: [recent, old, mine] };
 
 class MemoryStorage {
   values = new Map<string, string>();
@@ -81,9 +81,20 @@ test('the shortage listing forwards its abort signal', async () => {
   let received: AbortSignal | null | undefined;
   const client = new ApiClient('http://localhost:8080', async (_url, options) => {
     received = options?.signal;
-    return Response.json({ readAt: '2026-10-29T16:00:00Z', branch: null, items: [] });
+    return Response.json({ readAt: '2026-10-29T16:00:00Z', branch: null, total: 0, items: [] });
   });
   const controller = new AbortController();
   await client.transfers({ discrepancy: 'OPEN' }, controller.signal);
   assert.equal(received, controller.signal);
+});
+
+test('the listing exposes every match as total, beyond the listed rows, and rejects an incoherent one', async () => {
+  const listing = (total: unknown) => new ApiClient('http://localhost:8080',
+    async () => Response.json({ readAt: '2026-10-29T16:00:00Z', branch: null, total, items: [] }));
+  // The server lists at most its limit of rows; the counter reads the total of open alerts.
+  assert.equal((await listing(150).transfers({ discrepancy: 'OPEN' })).total, 150);
+  assert.equal((await listing(0).transfers()).total, 0);
+  for (const bad of [undefined, -1, 1.5, '2', null]) {
+    await assert.rejects(listing(bad).transfers({ discrepancy: 'OPEN' }), /inválida/);
+  }
 });

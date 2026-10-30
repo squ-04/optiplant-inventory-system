@@ -176,7 +176,7 @@ test('transitions post to their endpoint with their own body', async () => {
 });
 
 test('transfers builds the filter query and validates the listing', async () => {
-  const h = harness([Response.json({ readAt: '2026-10-28T18:00:00Z', branch: destination, items: [{ ...requested, events: null }] })]);
+  const h = harness([Response.json({ readAt: '2026-10-28T18:00:00Z', branch: destination, total: 1, items: [{ ...requested, events: null }] })]);
   const listed = await h.client.transfers({ direction: 'INCOMING', status: 'REQUESTED' });
   assert.equal(h.calls[0].url, 'http://localhost:8080/api/v1/transfers?direction=INCOMING&status=REQUESTED');
   assert.equal(listed.items[0].events, null);

@@ -110,7 +110,8 @@ export function App() {
   // RF-0038: open shortage alerts add to the counter with their own notice; a manager is told, in this browser, when the
   // other branch's manager resolved one in the last 24 h.
   const shortages = useQuery(shortageAlertsQuery(client, 'OPEN', alertsAllowed));
-  const openShortages = alertsAllowed ? shortages.data?.items.length ?? 0 : 0;
+  // The total, not the listed rows: the listing stops at its limit, the counter never does.
+  const openShortages = alertsAllowed ? shortages.data?.total ?? 0 : 0;
   const manager = alertsAllowed && user?.role === 'MANAGER';
   const resolutions = useQuery(shortageAlertsQuery(client, 'RESOLVED', manager));
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
