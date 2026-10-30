@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError, XLSX_TYPE } from '../src/lib/api/client.ts';
-import { REPORT_CATEGORIES, downloadSummary, reportPeriodError } from '../src/lib/reports/reports.ts';
+import { REPORT_CATEGORIES, downloadSummary, reportPeriodError, saveFile } from '../src/lib/reports/reports.ts';
 
 const file = (rows: string, name = 'ventas_2026-10-01_2026-10-30.xlsx') => new Response(new Uint8Array([0x50, 0x4b]), { status: 200,
   headers: { 'Content-Type': XLSX_TYPE, 'Content-Disposition': `attachment; filename="${name}"`, 'X-Report-Rows': rows } });
@@ -88,4 +88,21 @@ test('RF-0050-CA-03: an empty file says so instead of reading as data', () => {
   assert.deepEqual(downloadSummary({ blob, fileName: 'ventas.xlsx', rows: 1 }), { empty: false, message: 'Se descargó ventas.xlsx con 1 fila.' });
   assert.deepEqual(downloadSummary({ blob, fileName: 'ventas.xlsx', rows: 10000 }), { empty: false, message: 'Se descargó ventas.xlsx con 10.000 filas.' });
   assert.deepEqual(downloadSummary({ blob, fileName: 'ventas.xlsx', rows: null }), { empty: false, message: 'Se descargó ventas.xlsx.' });
+});
+
+test('RF-0050: the file stays available to the browser after the click, and is released later', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const events: string[] = [];
+  const link = { href: '', download: '', hidden: false, click: () => events.push('click'), remove: () => events.push('remove') };
+  t.mock.method(URL, 'createObjectURL', () => 'blob:report');
+  t.mock.method(URL, 'revokeObjectURL', () => events.push('revoke'));
+  Object.assign(globalThis, { document: { createElement: () => link, body: { append: () => events.push('append') } } });
+  t.after(() => { Reflect.deleteProperty(globalThis, 'document'); });
+
+  saveFile({ blob: new Blob(), fileName: 'ventas.xlsx', rows: 1 });
+
+  assert.equal(link.download, 'ventas.xlsx');
+  assert.deepEqual(events, ['append', 'click', 'remove']);
+  t.mock.timers.runAll();
+  assert.deepEqual(events, ['append', 'click', 'remove', 'revoke']);
 });

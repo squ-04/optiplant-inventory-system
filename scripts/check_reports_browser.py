@@ -33,6 +33,17 @@ STAGES = {
       await transfers.saveAs(config.shots + '/transferencias.xlsx');
       await page.getByText(/ con 1 fila\\.$/).waitFor();
 
+      // While generating, the filters are locked: the result must belong to the ones on screen.
+      await page.route('**/api/v1/reports/**', async route => {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        await route.continue();
+      });
+      const slow = download();
+      await page.getByRole('button', { name: 'Generando archivo…' }).waitFor();
+      check(await form().getByLabel('Estado', { exact: true }).isDisabled(), 'El estado sigue editable durante la generación');
+      check(await page.getByRole('radio', { name: /^Ventas/ }).isDisabled(), 'La categoría sigue editable durante la generación');
+      await slow;
+      await page.unroute('**/api/v1/reports/**');
       await form().getByLabel('Desde', { exact: true }).fill('2020-01-01');
       await form().getByLabel('Hasta', { exact: true }).fill('2020-01-31');
       await (await download()).saveAs(config.shots + '/vacio.xlsx');

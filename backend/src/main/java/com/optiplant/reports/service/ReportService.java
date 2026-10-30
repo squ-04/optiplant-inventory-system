@@ -102,6 +102,7 @@ public class ReportService {
     }
 
     public ReportFile transfers(SessionPrincipal principal, String from, String to, UUID branch, String status) {
+        requireExporter(principal);
         if (status != null && !TransferStatus.isCode(status)) {
             throw new ApiException(400, "VALIDATION_FAILED", "Estado no admitido: use " + TransferStatus.codes() + ".");
         }
@@ -117,10 +118,8 @@ public class ReportService {
                                Function<T, List<Object>> row) {}
 
     private <T> ReportFile export(SessionPrincipal principal, String from, String to, UUID branch, Category<T> category) {
+        requireExporter(principal);
         boolean admin = "ADMIN".equals(principal.role());
-        if (!admin && !("MANAGER".equals(principal.role()) && principal.branchExternalId() != null)) {
-            throw new ApiException(403, "ROLE_FORBIDDEN", "Los reportes exportables corresponden a gerentes y administradores.");
-        }
         if (branch != null) policy.requirePublicReference(branch);
         ReportPeriod period = ReportPeriod.parse(from, to);
         UUID requested = branch != null ? branch : admin ? null : principal.branchExternalId();
@@ -143,6 +142,13 @@ public class ReportService {
         ReportTable table = new ReportTable(category.sheet(), category.title(), metadata, category.columns(),
             records.stream().map(category.row()).toList());
         return new ReportFile("%s_%s_%s.xlsx".formatted(category.file(), period.from(), period.to()), writer.write(table), records.size());
+    }
+
+    private static void requireExporter(SessionPrincipal principal) {
+        boolean manager = "MANAGER".equals(principal.role()) && principal.branchExternalId() != null;
+        if (!"ADMIN".equals(principal.role()) && !manager) {
+            throw new ApiException(403, "ROLE_FORBIDDEN", "Los reportes exportables corresponden a gerentes y administradores.");
+        }
     }
 
     private static List<Object> movement(MovementExportRow row) {

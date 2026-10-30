@@ -193,7 +193,7 @@ class ReportExportHttpTest {
         assertThat(requested.get("Tratamiento")).isNull();
     }
 
-    @Test void aResolvedAlertIsNotAReceptionAndAResendKeepsItsOwnRow() throws Exception {
+    @Test void aResolvedAlertIsNotAReceptionAndAWriteOffClearsThePendingDifference() throws Exception {
         String id = inTransit("10");
         assertThat(bOperator.post("/transfers/" + id + "/receive", quantities("6")).statusCode()).isEqualTo(200);
         assertThat(aManager.post("/transfers/" + id + "/discrepancy/resolve", Map.of("treatment", "CLAIM")).statusCode()).isEqualTo(200);
@@ -209,6 +209,42 @@ class ReportExportHttpTest {
             .row("Número de transferencia", code(id));
         assertThat(written).containsEntry("Diferencia pendiente", "0").containsEntry("Cantidad recibida", "6")
             .containsEntry("Tratamiento", "Reclamación; pérdida en tránsito registrada");
+    }
+
+    @Test void aResendKeepsItsOwnRowWithoutAddingItsReceptionToTheOriginal() throws Exception {
+        String id = inTransit("10");
+        assertThat(bOperator.post("/transfers/" + id + "/receive", quantities("6")).statusCode()).isEqualTo(200);
+        assertThat(aManager.post("/transfers/" + id + "/discrepancy/resolve", Map.of("treatment", "RESEND")).statusCode()).isEqualTo(200);
+        String discrepancy = read(bOperator.get("/transfers/" + id)).at("/discrepancy/externalId").asText();
+        HttpResponse<String> created = bOperator.post("/transfers", Map.of("origin", a.toString(), "sourceDiscrepancy", discrepancy,
+            "lines", List.of(Map.of("product", product.toString(), "unit", "unidad", "quantity", "4"))));
+        assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+        String resend = read(created).get("externalId").asText();
+        dispatch(resend, "4");
+        assertThat(bOperator.post("/transfers/" + resend + "/receive", quantities("4")).statusCode()).isEqualTo(200);
+
+        Report report = report(bManager.download("/reports/transfers?from=" + today() + "&to=" + today()));
+
+        assertThat(report.rows()).hasSize(2);
+        assertThat(report.row("Número de transferencia", code(id))).containsEntry("Cantidad recibida", "6")
+            .containsEntry("Diferencia pendiente", "4").containsEntry("Tratamiento", "Reenvío");
+        Map<String, String> own = report.row("Número de transferencia", code(resend));
+        assertThat(own).containsEntry("Estado", "Recibida completa").containsEntry("Cantidad recibida", "4")
+            .containsEntry("Diferencia pendiente", "0");
+        assertThat(own.get("Tratamiento")).isNull();
+    }
+
+    @Test void aWriteOffOnAnOpenAlertKeepsTheAlertVisible() throws Exception {
+        String id = inTransit("10");
+        assertThat(bOperator.post("/transfers/" + id + "/receive", quantities("6")).statusCode()).isEqualTo(200);
+        assertThat(aManager.post("/transfers/" + id + "/discrepancy/transit-loss", Map.of("reason", "Mercancía extraviada",
+            "evidence", "Acta 12")).statusCode()).isEqualTo(200);
+
+        Map<String, String> row = report(aManager.download("/reports/transfers?from=" + today() + "&to=" + today()))
+            .row("Número de transferencia", code(id));
+
+        assertThat(row).containsEntry("Diferencia pendiente", "0")
+            .containsEntry("Tratamiento", "Sin tratamiento (alerta abierta); pérdida en tránsito registrada");
     }
 
     @Test void transfersAreFilteredByTheOptionalStatusAndAnUnknownStatusIsRejected() throws Exception {
@@ -304,6 +340,7 @@ class ReportExportHttpTest {
             String path = "/reports/" + category;
             assertError(aOperator.download(path + period), 403, "ROLE_FORBIDDEN");
             assertError(aOperator.download(path), 403, "ROLE_FORBIDDEN");
+            assertError(aOperator.download(path + period + "&status=DONE"), 403, "ROLE_FORBIDDEN");
             assertError(aManager.download(path + period + "&branch=" + b), 403, "BRANCH_FORBIDDEN");
             assertThat(aManager.download(path + period + "&branch=" + a).statusCode()).isEqualTo(200);
             assertThat(new Browser().download(path + period).statusCode()).isEqualTo(401);
@@ -381,7 +418,10 @@ class ReportExportHttpTest {
     }
 
     String inTransit(String quantity) throws Exception {
-        String id = requested(quantity);
+        return dispatch(requested(quantity), quantity);
+    }
+
+    String dispatch(String id, String quantity) throws Exception {
         assertThat(aOperator.post("/transfers/" + id + "/prepare", quantities(quantity)).statusCode()).isEqualTo(200);
         assertThat(aManager.post("/transfers/" + id + "/approve", Map.of()).statusCode()).isEqualTo(200);
         OffsetDateTime now = OffsetDateTime.now(BOGOTA);

@@ -12,6 +12,7 @@ export const REPORT_CATEGORIES: { id: ReportCategory; label: string; description
 ];
 
 const MAX_MONTHS = 12;
+const RELEASE_DELAY_MS = 60_000;
 
 /** The first day out of range: the start plus 12 calendar months, on the last day of a shorter month (`ReportPeriod`). */
 function firstDayOutOfRange(from: string): string {
@@ -47,5 +48,6 @@ export function saveFile(download: ReportDownload): void {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Some browsers start the download after the click: releasing the file at once could abort it.
+  setTimeout(() => URL.revokeObjectURL(url), RELEASE_DELAY_MS);
 }

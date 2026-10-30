@@ -34,6 +34,7 @@ export function Reports({ client, user, onError, visible }: Props) {
   // A result describes the filters that produced it: changing them must not leave it on screen.
   useEffect(() => { setResult(null); setError(''); }, [category, period, branch, status]);
 
+  // The filters stay locked while generating, so the result always belongs to the ones on screen.
   const selected = REPORT_CATEGORIES.find(item => item.id === category)!;
 
   async function submit() {
@@ -67,7 +68,7 @@ export function Reports({ client, user, onError, visible }: Props) {
       <fieldset className="choice-list">
         <legend>Reporte</legend>
         {REPORT_CATEGORIES.map(item => <label key={item.id} className="choice">
-          <input type="radio" name="report-category" value={item.id} checked={category === item.id}
+          <input type="radio" name="report-category" value={item.id} checked={category === item.id} disabled={generating}
             onChange={() => setCategory(item.id)} />
           <span><strong>{item.label}</strong><span>{item.description}</span></span>
         </label>)}
@@ -75,19 +76,19 @@ export function Reports({ client, user, onError, visible }: Props) {
 
       <div className="purchase-filters reports-filters">
         <div><label htmlFor="reports-from">Desde</label>
-          <Input id="reports-from" type="date" value={period.from} required aria-invalid={!!filterError}
+          <Input id="reports-from" type="date" value={period.from} required aria-invalid={!!filterError} disabled={generating}
             onChange={event => setPeriod({ ...period, from: event.target.value })} /></div>
         <div><label htmlFor="reports-to">Hasta</label>
-          <Input id="reports-to" type="date" value={period.to} required aria-invalid={!!filterError}
+          <Input id="reports-to" type="date" value={period.to} required aria-invalid={!!filterError} disabled={generating}
             onChange={event => setPeriod({ ...period, to: event.target.value })} /></div>
         {admin && <div><label htmlFor="reports-branch">Sucursal</label>
-          <select id="reports-branch" value={branch} onChange={event => setBranch(event.target.value)}>
+          <select id="reports-branch" value={branch} disabled={generating} onChange={event => setBranch(event.target.value)}>
             <option value="">Toda la red</option>
             {branches.map(item => <option key={item.externalId} value={item.externalId}>
               {item.code} · {item.name}{item.active ? '' : ' (inactiva)'}</option>)}
           </select></div>}
         {category === 'transfers' && <div><label htmlFor="reports-status">Estado</label>
-          <select id="reports-status" value={status} onChange={event => setStatus(event.target.value as TransferStatus | '')}>
+          <select id="reports-status" value={status} disabled={generating} onChange={event => setStatus(event.target.value as TransferStatus | '')}>
             <option value="">Todos</option>
             {TRANSFER_STATUSES.map(item => <option key={item} value={item}>{TRANSFER_STATUS[item].filterLabel}</option>)}
           </select></div>}
