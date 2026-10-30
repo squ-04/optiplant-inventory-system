@@ -7,6 +7,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
@@ -15,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -104,6 +106,10 @@ class DashboardHttpTest {
         int movements = movements();
 
         JsonNode report = ok(aManager.get("/dashboard/sales-comparison"));
+        // The server reads its own clock: the expectations follow the day it answered for, and a run that crossed into
+        // another month after the fixtures were placed is skipped instead of failing on the calendar.
+        LocalDate today = LocalDate.ofInstant(Instant.parse(report.get("generatedAt").asText()), BOGOTA);
+        Assumptions.assumeTrue(YearMonth.from(today).equals(current), "The run crossed a month boundary in Bogotá");
         assertThat(report.get("timeZone").asText()).isEqualTo("America/Bogota");
         assertThat(report.at("/branch/externalId").asText()).isEqualTo(a.toString());
         JsonNode months = report.get("months");
@@ -135,7 +141,7 @@ class DashboardHttpTest {
         JsonNode m0 = months.get(3);
         assertThat(m0.get("month").asText()).isEqualTo(current.toString());
         assertThat(m0.get("inProgress").asBoolean()).isTrue();
-        assertThat(m0.get("to").asText()).isEqualTo(LocalDate.now(BOGOTA).toString());
+        assertThat(m0.get("to").asText()).isEqualTo(today.toString());
         assertThat(m0.get("salesCount").asInt()).isEqualTo(1);
         assertThat(m0.get("netAmount").asText()).isEqualTo("100.00");
         assertThat(m0.get("returnsCount").asInt()).isEqualTo(1);
@@ -174,7 +180,8 @@ class DashboardHttpTest {
 
     @Test void rotationDividesTheUnitsSoldByTheTimeWeightedAverageOfThePhysicalQuantity() throws Exception {
         LocalDate first = LocalDate.of(2025, 3, 1);
-        // maceta: 10 since February; on the 6th 20 enter and 20 are sold at the same instant, so the average stays 10.
+        // maceta: 10 since February; on the 6th 20 enter at 00:00 and 20 are sold at 12:00, so during half a day there are 30:
+        // (10·5 + 30·0.5 + 10·4.5) / 10 days = 11.
         stock(maceta, "10");
         stock(maceta, "20");
         String sold = sale(maceta, "20", "0");
@@ -190,8 +197,8 @@ class DashboardHttpTest {
         List<Long> macetaOps = operations(maceta);
         occurredAt(macetaOps.get(0), midnight(first.minusDays(28)));
         occurredAt(macetaOps.get(1), midnight(first.plusDays(5)));
-        occurredAt(macetaOps.get(2), midnight(first.plusDays(5)));
-        confirmedAt(sold, midnight(first.plusDays(5)));
+        occurredAt(macetaOps.get(2), noon(first.plusDays(5)));
+        confirmedAt(sold, noon(first.plusDays(5)));
         historyStarted(maceta, midnight(first.minusDays(28)));
         occurredAt(operations(sustrato).getFirst(), midnight(first.plusDays(2)));
         historyStarted(sustrato, midnight(first.plusDays(2)));
@@ -204,8 +211,11 @@ class DashboardHttpTest {
         assertThat(report.get("measuredUntil").asText()).isEqualTo("2025-03-11T05:00:00Z");
         JsonNode items = report.get("items");
         assertThat(items.size()).isEqualTo(3);
-        // RF-0045-CA-01/CA-02: 20 sold over an average of 10.
-        assertThat(item(items, maceta)).isEqualTo(expected(maceta, "20.000", "10.000", "2.00", "CALCULATED"));
+        // RF-0045-CA-01: 20 sold over the time-weighted average of 11 (20 / 11 = 1.818…).
+        assertThat(item(items, maceta)).isEqualTo(expected(maceta, "20.000", "11.000", "1.82", "CALCULATED"));
+        // RF-0045-CA-02: before the 6th the quantity is a constant 10; the later changes are undone, not averaged.
+        JsonNode before = ok(aManager.get("/dashboard/rotation?from=2025-03-01&to=2025-03-05")).get("items");
+        assertThat(item(before, maceta)).isEqualTo(expected(maceta, "0.000", "10.000", "0.00", "CALCULATED"));
         // RF-0045-CA-03: incomplete history is «No calculable», never completed with zeros.
         assertThat(item(items, sustrato)).isEqualTo(expected(sustrato, "0.000", null, null, "INSUFFICIENT_HISTORY"));
         assertThat(item(items, abono)).isEqualTo(expected(abono, "0.000", "0.000", null, "ZERO_AVERAGE"));
@@ -223,10 +233,12 @@ class DashboardHttpTest {
         assertError(aManager.get("/dashboard/rotation?from=2025-03-10&to=2025-03-01"), 400, "VALIDATION_FAILED");
         assertError(aManager.get("/dashboard/rotation?from=2025-03-01&to=2025-02-30"), 400, "VALIDATION_FAILED");
         assertError(aManager.get("/dashboard/rotation?from=0001-01-01&to=2025-03-01"), 400, "VALIDATION_FAILED");
-        LocalDate tomorrow = LocalDate.now(BOGOTA).plusDays(1);
+        // Today as the server sees it, not as this machine's clock does.
+        LocalDate today = LocalDate.ofInstant(Instant.parse(ok(aManager.get("/dashboard/sales-comparison")).get("generatedAt").asText()),
+            BOGOTA);
+        LocalDate tomorrow = today.plusDays(1);
         assertError(aManager.get("/dashboard/rotation?from=2025-03-01&to=" + tomorrow), 400, "VALIDATION_FAILED");
         // Today is measured until now.
-        LocalDate today = LocalDate.now(BOGOTA);
         assertThat(aManager.get("/dashboard/rotation?from=" + today + "&to=" + today).statusCode()).isEqualTo(200);
     }
 

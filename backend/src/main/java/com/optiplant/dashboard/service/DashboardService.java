@@ -6,7 +6,7 @@ import com.optiplant.dashboard.dto.SalesComparisonResponse;
 import com.optiplant.dashboard.dto.SalesComparisonResponse.Month;
 import com.optiplant.dashboard.dto.SalesComparisonResponse.ProductSales;
 import com.optiplant.dashboard.dto.VisibilityResponse.Branch;
-import com.optiplant.dashboard.service.RotationCalculator.Change;
+import com.optiplant.dashboard.service.RotationCalculator.Ledger;
 import com.optiplant.dashboard.service.RotationCalculator.Result;
 import com.optiplant.identity.service.ScopePolicy;
 import com.optiplant.identity.service.SessionPrincipal;
@@ -115,14 +115,22 @@ public class DashboardService {
         Instant dayAfter = to.plusDays(1).atStartOfDay(BUSINESS_ZONE).toInstant();
         Instant end = dayAfter.isBefore(now) ? dayAfter : now;
 
-        Map<Long, List<Change>> changes = new HashMap<>();
+        // Two sums per product (see RotationCalculator): bounded by the number of products, not by the ledger's length.
+        // EXTRACT(EPOCH ...) is an exact numeric; timestamps have microsecond precision.
+        Map<Long, Ledger> ledgers = new HashMap<>();
+        Timestamp periodStart = Timestamp.from(start);
+        Timestamp periodEnd = Timestamp.from(end);
         jdbc.query("""
-            SELECT m.product_id,o.occurred_at,CASE m.direction WHEN 'IN' THEN m.base_qty ELSE -m.base_qty END AS delta
-            FROM inventory_movement m JOIN inventory_operation o ON o.id=m.operation_id WHERE m.branch_id=? AND o.occurred_at>=?""",
+            SELECT m.product_id,
+              coalesce(sum(CASE WHEN o.occurred_at>=? THEN x.delta END),0) AS after_end,
+              coalesce(sum(CASE WHEN o.occurred_at<? THEN x.delta*EXTRACT(EPOCH FROM o.occurred_at-?::timestamptz)*1000000 END),0)
+                AS weighted
+            FROM inventory_movement m JOIN inventory_operation o ON o.id=m.operation_id
+            CROSS JOIN LATERAL (SELECT CASE m.direction WHEN 'IN' THEN m.base_qty ELSE -m.base_qty END AS delta) x
+            WHERE m.branch_id=? AND o.occurred_at>=? GROUP BY m.product_id""",
             (java.sql.ResultSet r) -> {
-                changes.computeIfAbsent(r.getLong("product_id"), product -> new ArrayList<>())
-                    .add(new Change(r.getObject("occurred_at", OffsetDateTime.class).toInstant(), r.getBigDecimal("delta")));
-            }, scope.id(), Timestamp.from(start));
+                ledgers.put(r.getLong("product_id"), new Ledger(r.getBigDecimal("after_end"), r.getBigDecimal("weighted")));
+            }, periodEnd, periodEnd, periodStart, scope.id(), periodStart);
         Map<Long, BigDecimal> sold = new HashMap<>();
         jdbc.query("SELECT l.product_id,sum(l.base_qty) AS sold FROM sales_line l JOIN sales_sale s ON s.id=l.sale_id "
                 + "WHERE s.branch_id=? AND s.confirmed_at>=? AND s.confirmed_at<? GROUP BY l.product_id",
@@ -136,7 +144,8 @@ public class DashboardService {
             long product = r.getLong("product_id");
             Instant history = r.getObject("history_started_at", OffsetDateTime.class).toInstant();
             BigDecimal units = sold.getOrDefault(product, BigDecimal.ZERO);
-            Result result = RotationCalculator.calculate(r.getBigDecimal("physical_qty"), changes.getOrDefault(product, List.of()),
+            Result result = RotationCalculator.calculate(r.getBigDecimal("physical_qty"),
+                ledgers.getOrDefault(product, new Ledger(BigDecimal.ZERO, BigDecimal.ZERO)),
                 history, start, end, units);
             return new RotationResponse.Item(r.getObject("external_id", UUID.class), r.getString("sku"), r.getString("name"),
                 r.getString("base_unit_name"), history, quantity(units),

@@ -77,7 +77,8 @@ export function rotationNote(item: RotationItem): string {
     return `Historia insuficiente: el inventario de la sucursal se registra desde el ${day(bogotaLocal(new Date(item.historyStartedAt)).slice(0, 10))}`;
   }
   if (item.status === 'ZERO_AVERAGE') return 'Sin existencias físicas durante el período';
-  return /^0(\.0+)?$/.test(item.rotation ?? '') ? 'Sin ventas en el período, con existencias' : '';
+  // Decided by the units sold, never by the rounded rotation: 1 unit over an average of 1000 also shows 0,00.
+  return /^0(\.0+)?$/.test(item.soldQuantity) ? 'Sin ventas en el período, con existencias' : '';
 }
 
 /** A rotation period is valid like a report period and cannot end after today (Bogotá). */
