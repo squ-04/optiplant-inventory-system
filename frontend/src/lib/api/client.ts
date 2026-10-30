@@ -299,6 +299,39 @@ export interface RotationReport {
   timeZone: string; from: string; to: string; measuredUntil: string; generatedAt: string; branch: Branch; items: RotationItem[];
 }
 export interface RotationFilter { from: string; to: string; branch?: string }
+export interface DemandItem { productExternalId: string; sku: string; name: string; soldQuantity: string }
+/** RF-0046: one ranking per base unit, because pieces and kilos are not comparable. */
+export interface DemandRanking { baseUnitName: string; productsWithSales: number; high: DemandItem[]; low: DemandItem[] }
+/** RF-0046: without `dataAvailable` the month ended before the branch was registered: empty lists, not «no sales». */
+export interface DemandReport {
+  timeZone: string; month: string; from: string; to: string; inProgress: boolean; dataAvailable: boolean; partialHistory: boolean;
+  generatedAt: string; branch: Branch; rankings: DemandRanking[];
+  withoutSales: { productExternalId: string; sku: string; name: string; baseUnitName: string }[];
+}
+export interface DemandFilter { month?: string; branch?: string }
+/** RF-0047: each quantity is null in the states where it does not apply, so none of them adds to another. */
+export interface TransferImpactLine {
+  productExternalId: string; sku: string; name: string; baseUnitName: string; forecastQuantity: string | null;
+  inTransitQuantity: string | null; receivedQuantity: string | null; pendingShortageQuantity: string | null; lostQuantity: string | null;
+}
+export interface TransferImpactItem {
+  externalId: string; code: string; status: TransferStatus; role: 'ORIGIN' | 'DESTINATION'; counterpart: Branch; requestedAt: string;
+  estimatedArrivalAt: string | null; alertStatus: 'OPEN' | 'RESOLVED' | null; treatment: ShortageTreatment | null; lines: TransferImpactLine[];
+}
+export interface TransferImpact { generatedAt: string; branch: Branch; items: TransferImpactItem[] }
+/** RF-0048: the operable combinations whose available stock is lower than or equal to their current minimum. */
+export interface RestockItem {
+  productExternalId: string; sku: string; name: string; baseUnitName: string; availableQuantity: string; minimumQuantity: string;
+}
+export interface RestockIndicators { generatedAt: string; branch: Branch; items: RestockItem[] }
+/** RF-0049: without `dataAvailable` every figure is null, which is not a zero; a percent is null («No calculable») without arrivals. */
+export interface BranchPerformance {
+  branch: Branch; dataAvailable: boolean; partialHistory: boolean; salesCount: number | null; netAmount: string | null;
+  asOrigin: ComplianceMetrics | null; asDestination: ComplianceMetrics | null;
+}
+export interface BranchComparison {
+  timeZone: string; month: string; from: string; to: string; inProgress: boolean; generatedAt: string; branches: BranchPerformance[];
+}
 export interface TransferDispatchInput { carrier: string; departedAt: string; estimatedArrivalAt: string }
 export type { RoutePriority };
 /** RF-0041: a directed route with its manual priority. */
@@ -663,6 +696,70 @@ function rotationDto(value: unknown): RotationReport {
     return item as unknown as RotationItem;
   });
   return { ...(value as unknown as RotationReport), items };
+}
+const month = (value: unknown) => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+function demandDto(value: unknown): DemandReport {
+  if (!record(value) || !text(value.timeZone) || !month(value.month) || !day(value.from) || !day(value.to)
+      || typeof value.inProgress !== 'boolean' || typeof value.dataAvailable !== 'boolean'
+      || typeof value.partialHistory !== 'boolean' || !instant(value.generatedAt)) throw invalid();
+  branchDto(value.branch);
+  const items = (list: unknown) => listDto(list, item => {
+    if (!record(item) || !uuid(item.productExternalId) || !text(item.sku) || !text(item.name) || !decimal(item.soldQuantity)) throw invalid();
+    return item as unknown as DemandItem;
+  });
+  const rankings = listDto(value.rankings, item => {
+    if (!record(item) || !text(item.baseUnitName) || !count(item.productsWithSales)) throw invalid();
+    return { ...(item as unknown as DemandRanking), high: items(item.high), low: items(item.low) };
+  });
+  const withoutSales = listDto(value.withoutSales, item => {
+    if (!record(item) || !uuid(item.productExternalId) || !text(item.sku) || !text(item.name) || !text(item.baseUnitName)) throw invalid();
+    return item as unknown as DemandReport['withoutSales'][number];
+  });
+  return { ...(value as unknown as DemandReport), rankings, withoutSales };
+}
+function transferImpactDto(value: unknown): TransferImpact {
+  if (!record(value) || !instant(value.generatedAt)) throw invalid();
+  branchDto(value.branch);
+  const items = listDto(value.items, item => {
+    if (!record(item) || !uuid(item.externalId) || !text(item.code) || !isTransferStatus(item.status)
+        || (item.role !== 'ORIGIN' && item.role !== 'DESTINATION') || !instant(item.requestedAt)
+        || !(item.estimatedArrivalAt === null || instant(item.estimatedArrivalAt))
+        || !(item.alertStatus === null || item.alertStatus === 'OPEN' || item.alertStatus === 'RESOLVED')
+        || !(item.treatment === null || ['RESEND', 'ADJUSTMENT', 'CLAIM'].includes(String(item.treatment)))) throw invalid();
+    branchDto(item.counterpart);
+    const lines = listDto(item.lines, line => {
+      if (!record(line) || !uuid(line.productExternalId) || !text(line.sku) || !text(line.name) || !text(line.baseUnitName)
+          || !optionalDecimal(line.forecastQuantity) || !optionalDecimal(line.inTransitQuantity) || !optionalDecimal(line.receivedQuantity)
+          || !optionalDecimal(line.pendingShortageQuantity) || !optionalDecimal(line.lostQuantity)) throw invalid();
+      return line as unknown as TransferImpactLine;
+    });
+    return { ...(item as unknown as TransferImpactItem), lines };
+  });
+  return { ...(value as unknown as TransferImpact), items };
+}
+function restockDto(value: unknown): RestockIndicators {
+  if (!record(value) || !instant(value.generatedAt)) throw invalid();
+  branchDto(value.branch);
+  const items = listDto(value.items, item => {
+    if (!record(item) || !uuid(item.productExternalId) || !text(item.sku) || !text(item.name) || !text(item.baseUnitName)
+        || !decimal(item.availableQuantity) || !decimal(item.minimumQuantity)) throw invalid();
+    return item as unknown as RestockItem;
+  });
+  return { ...(value as unknown as RestockIndicators), items };
+}
+function branchComparisonDto(value: unknown): BranchComparison {
+  if (!record(value) || !text(value.timeZone) || !month(value.month) || !day(value.from) || !day(value.to)
+      || typeof value.inProgress !== 'boolean' || !instant(value.generatedAt)) throw invalid();
+  const branches = listDto(value.branches, item => {
+    if (!record(item) || typeof item.dataAvailable !== 'boolean' || typeof item.partialHistory !== 'boolean') throw invalid();
+    branchDto(item.branch);
+    const known = item.dataAvailable;
+    if (known ? !count(item.salesCount) || !decimal(item.netAmount) || item.asOrigin === null || item.asDestination === null
+      : item.salesCount !== null || item.netAmount !== null || item.asOrigin !== null || item.asDestination !== null) throw invalid();
+    return { ...(item as unknown as BranchPerformance), asOrigin: known ? complianceMetricsDto(item.asOrigin) : null,
+      asDestination: known ? complianceMetricsDto(item.asDestination) : null };
+  });
+  return { ...(value as unknown as BranchComparison), branches };
 }
 function transferDto(value: unknown): Transfer {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !isTransferStatus(value.status) ||
@@ -1116,6 +1213,28 @@ export class ApiClient {
     const query = new URLSearchParams({ from: filter.from, to: filter.to });
     if (filter.branch) query.set('branch', filter.branch);
     return rotationDto(await this.request(`/dashboard/rotation?${query}`));
+  }
+  /** RF-0046: the month in progress by default; the branch is required for the administrator. */
+  async demand(filter: DemandFilter): Promise<DemandReport> {
+    const query = new URLSearchParams();
+    if (filter.month) query.set('month', filter.month);
+    if (filter.branch) query.set('branch', filter.branch);
+    return demandDto(await this.request(`/dashboard/demand${query.size ? `?${query}` : ''}`));
+  }
+  /** RF-0047. */
+  async transferImpact(branch?: string): Promise<TransferImpact> {
+    const query = branch ? `?${new URLSearchParams({ branch })}` : '';
+    return transferImpactDto(await this.request(`/dashboard/transfers${query}`));
+  }
+  /** RF-0048. */
+  async restockIndicators(branch?: string): Promise<RestockIndicators> {
+    const query = branch ? `?${new URLSearchParams({ branch })}` : '';
+    return restockDto(await this.request(`/dashboard/restock${query}`));
+  }
+  /** RF-0049: exclusive to the general administrator. */
+  async branchComparison(period?: string): Promise<BranchComparison> {
+    const query = period ? `?${new URLSearchParams({ month: period })}` : '';
+    return branchComparisonDto(await this.request(`/dashboard/branch-comparison${query}`));
   }
   async transfer(id: string): Promise<Transfer> {
     return transferDto(await this.request(`/transfers/${encodeURIComponent(id)}`));

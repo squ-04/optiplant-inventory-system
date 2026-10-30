@@ -240,7 +240,8 @@ table.restock-table { min-width: 56rem; }
   .purchase-total strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
   form.purchase-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 var(--space-4); max-width: none; margin-block: var(--space-4);
     padding: var(--space-4); background: var(--color-surface); }
-  .purchase-filters > div { flex: 1 1 12rem; }
+  .purchase-filters > div { flex: 1 1 12rem; min-width: 0; }
+  .purchase-filters input[type='month'] { width: 100%; min-width: 0; }
   .purchase-filters select { margin-bottom: 0; }
   .purchase-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-3); margin-block: var(--space-4); }
   .purchase-summary div { padding: var(--space-3) var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border);
@@ -390,6 +391,25 @@ table.restock-table { min-width: 56rem; }
   .chart-tooltip small { color: var(--color-muted); }
   .compliance-section h4 { margin-top: var(--space-6); }
   tr.month-in-progress { background: var(--color-background); }
+  /* RF-0046: the list is the chart: each row prints its exact figure and both groups share one scale. */
+  .demand-ranking { margin-top: var(--space-6); }
+  .demand-ranking h4 { margin-top: 0; }
+  .demand-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--space-4); margin-top: var(--space-3); }
+  .demand-group { min-width: 0; padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel); }
+  .demand-group h5 { margin: 0 0 var(--space-3); font-size: 1rem; }
+  .demand-group p { margin: 0; color: var(--color-muted); }
+  .demand-group ol { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+  .demand-group li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); align-items: baseline; }
+  .demand-quantity { font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; }
+  .demand-bar { grid-column: 1 / -1; display: block; height: .5rem; background: var(--color-background); border-radius: 4px; overflow: hidden; }
+  .demand-bar i { display: block; height: 100%; background: var(--color-chart); border-radius: 0 4px 4px 0; }
+  /* RF-0047: quantities stay in separate columns so nothing reads as one stock. */
+  table.transfer-impact { min-width: 52rem; }
+  table.transfer-impact th, table.transfer-impact td { overflow-wrap: normal; word-break: normal; }
+  td.transfer-impact-head { width: 15rem; min-width: 15rem; vertical-align: top; white-space: normal; }
+  td.transfer-impact-product { min-width: 7rem; }
+  .sales-chart figcaption { margin-bottom: var(--space-3); color: var(--color-muted); font-size: .875rem; }
 
   @media (min-width: 40rem) {
     ol.transfer-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); }
