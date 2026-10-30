@@ -265,8 +265,8 @@ class DashboardIndicatorsHttpTest {
     @Test void theComparisonDistinguishesMissingDataZeroAndNotCalculable() throws Exception {
         YearMonth current = YearMonth.now(BOGOTA);
         YearMonth previous = current.minusMonths(1);
+        // b keeps its real registration, an instant ago: a fixed day of this month could still be in the future.
         owner.update("UPDATE identity_branch SET created_at=? WHERE external_id=?", noon(previous.atDay(1)), a);
-        owner.update("UPDATE identity_branch SET created_at=? WHERE external_id=?", noon(current.atDay(1)), b);
         stock(maceta, "unidad", "100");
         sale(maceta, "unidad", "2", "10");
         confirmedAt(sale(maceta, "unidad", "1", "0"), noon(previous.atDay(15)));
