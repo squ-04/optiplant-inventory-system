@@ -63,26 +63,19 @@ def main():
     project = "optiplant-check-" + secrets.token_hex(6)
     directory = Path(tempfile.mkdtemp(prefix="optiplant-check-"))
     env_path = directory / ".env"
-    admin_password = secrets.token_urlsafe(36)
     new_password = secrets.token_urlsafe(36)
     backend_port, frontend_port = available_port(), available_port()
     while frontend_port == backend_port:
         frontend_port = available_port()
-    values = {
-        "POSTGRES_DB": "optiplant", "POSTGRES_USER": "optiplant_owner",
-        "POSTGRES_PASSWORD": secrets.token_urlsafe(36),
-        "APP_DB_PASSWORD": secrets.token_urlsafe(36),
-        "APP_DB_MIGRATION_PASSWORD": secrets.token_urlsafe(36),
-        "APP_ADMIN_CODE": "ADMIN", "APP_ADMIN_PASSWORD": admin_password,
-        "APP_DEMO_DATA": "true", "BACKEND_PORT": str(backend_port),
-        "FRONTEND_PORT": str(frontend_port),
-    }
+    # Ports only: a clean clone must start with no credential configured (M §5).
+    values = {"BACKEND_PORT": str(backend_port), "FRONTEND_PORT": str(frontend_port)}
+    credentials = ("POSTGRES_PASSWORD", "APP_DB_PASSWORD", "APP_DB_MIGRATION_PASSWORD", "APP_ADMIN_PASSWORD")
     descriptor = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w") as stream:
         stream.write("".join(f"{key}={value}\n" for key, value in values.items()))
     # Do not let ambient COMPOSE_* or .env values select another project or credential.
     env = {key: value for key, value in os.environ.items()
-           if not key.startswith("COMPOSE_") and key not in values}
+           if not key.startswith("COMPOSE_") and key not in values and key not in credentials}
     env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
     env.pop("DOCKER_CONTEXT", None)
     command = ["docker", "compose", "--project-name", project,
@@ -107,8 +100,20 @@ def main():
                        'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"',
                        "sh", sql, capture=True, timeout=30).stdout
 
+    def stored_credentials():
+        return compose("exec", "-T", "backend", "cat", "/run/optiplant/backend.env", capture=True, timeout=30).stdout
+
     try:
         compose("up", "--build", "--wait", "--wait-timeout", "240")
+        admin_password = compose("exec", "-T", "backend", "cat", "/run/optiplant/admin-password",
+                                 capture=True, timeout=30).stdout.strip()
+        assert 15 <= len(admin_password) <= 128, "Contraseña inicial generada inválida"
+        generated = stored_credentials()
+        logs = compose("logs", "credentials", "postgres", "backend", capture=True, timeout=30).stdout
+        assert admin_password not in logs, "La contraseña inicial apareció en los registros"
+        denied = compose("exec", "-T", "backend", "cat", "/run/optiplant/postgres.env",
+                         capture=True, check=False, timeout=30)
+        assert denied.returncode != 0, "El backend pudo leer las credenciales de PostgreSQL"
         initial_counts = domain_counts()
         assert len(initial_counts.splitlines()) >= 32, "Esquema de dominio incompleto"
         api = Client(f"http://localhost:{backend_port}")
@@ -165,7 +170,14 @@ def main():
         assert_status(api.request("/api/v1/auth/login", "POST", {
             "code": "ADMIN", "password": new_password,
         }, api.csrf()), 200, "contraseña persistida tras down/up")
-        print("Humo OK: Compose, salud, frontend, OpenAPI, cookies, CORS/CSRF, cambio inicial, DTO, sesión JDBC y persistencia/semillas.")
+        assert stored_credentials() == generated, "down/up regeneró las credenciales"
+        supplied = secrets.token_urlsafe(36)
+        env["APP_ADMIN_PASSWORD"] = supplied
+        compose("run", "--rm", "--no-deps", "credentials", timeout=60)
+        del env["APP_ADMIN_PASSWORD"]
+        assert stored_credentials() == generated.replace(admin_password, supplied), \
+            "El valor configurado no prevaleció solo sobre su credencial"
+        print("Humo OK: Compose sin credenciales previas, salud, frontend, OpenAPI, cookies, CORS/CSRF, cambio inicial, DTO, sesión JDBC y persistencia/semillas.")
         return 0
     except (AssertionError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print(f"Integración FALLÓ: {error}", file=sys.stderr)
