@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.json.JsonMapper;
@@ -18,6 +19,10 @@ import tools.jackson.databind.json.JsonMapper;
 public class SessionPolicyFilter extends OncePerRequestFilter {
     public static final String STARTED_AT = "optiplant.startedAt";
     public static final String INTERACTIVE_AT = "optiplant.interactiveAt";
+    // Business resources whose successful POST is a user command; polling only uses GET.
+    private static final List<String> COMMANDS = List.of("/api/v1/users", "/api/v1/branches", "/api/v1/products",
+        "/api/v1/catalog/price-lists", "/api/v1/inventory/movements", "/api/v1/purchases/suppliers",
+        "/api/v1/purchases/orders", "/api/v1/sales", "/api/v1/transfers", "/api/v1/logistics/routes");
     private final UserAccountRepository users;
     private final AccountService accounts;
     private final Clock clock;
@@ -65,10 +70,13 @@ public class SessionPolicyFilter extends OncePerRequestFilter {
         }
         chain.doFilter(request, response);
         if (request.getMethod().equals("POST") && response.getStatus() >= 200 && response.getStatus() < 300
-            && (path.equals("/api/v1/users") || path.startsWith("/api/v1/users/")
-                || path.equals("/api/v1/branches") || path.startsWith("/api/v1/branches/"))) {
+            && command(path)) {
             HttpSession live = request.getSession(false);
             if (live != null) live.setAttribute(INTERACTIVE_AT, now);
         }
+    }
+
+    private static boolean command(String path) {
+        return COMMANDS.stream().anyMatch(root -> path.equals(root) || path.startsWith(root + "/"));
     }
 }
