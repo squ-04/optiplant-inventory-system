@@ -40,7 +40,8 @@ Sesión (RNF-SEG-04): vence a los 30 minutos sin actividad interactiva o a las 8
 - RF-0002 y RF-0003: administración integrada con persistencia y seguridad; RF-0006: ciclo de autenticación existente conectado a gestión/revocación y cambio voluntario visible.
 - RF-0004: consultas de datos operativos persistidos en todas las sucursales. Esta vista no reemplaza los detalles, indicadores, dashboards ni reportes de los RF que los definen.
 - RF-0005 y RF-0007: separación de consultas locales/globales y mantenimiento administrativo protegidos; consultar existencias ajenas no concede acceso al historial ajeno. La sucursal inactiva conserva consultas autorizadas.
-- Los comandos de ingresos/retiros, compras, ventas, ajustes, etapas de transferencias y exportación todavía no existen. Por ello los criterios de RF-0005/RF-0007 que exigen ejecutar esos comandos y verificar sus efectos no pueden declararse cumplidos por esta entrega. Se aplicarán y probarán con sus módulos dependientes; aquí no se sustituyen por endpoints ficticios ni se amplía el alcance para implementarlos.
+- Los comandos de ingresos/retiros, compras, ventas, ajustes, etapas de transferencias y exportación se entregaron después, con sus permisos por rol y sucursal; los criterios de RF-0005/RF-0007 que dependen de ellos se comprueban en las guías de cada módulo.
+- Nota de esta entrega inicial: esos comandos no existían, por lo que no pudieron declararse cumplidos aquí. Se aplicarán y probarán con sus módulos dependientes; aquí no se sustituyen por endpoints ficticios ni se amplía el alcance para implementarlos.
 - Desde RF-0014/RF-0015 la tabla de existencias de **Consultas** se actualiza por polling cada dos segundos y advierte datos potencialmente desactualizados; el historial operativo sigue requiriendo consulta explícita. Ver [inventario entre sucursales](inventario-entre-sucursales.md).
 
 ## Códigos sin distinguir mayúsculas (V12)

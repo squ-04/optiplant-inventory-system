@@ -1,6 +1,6 @@
 # Requisitos no funcionales — OptiPlant
 
-**Estado:** documentación de la sección 6.1; requisitos delimitados por la prueba técnica y decisiones ya aprobadas. No acredita diseño, implementación ni pruebas.  
+**Estado:** documentación de la sección 6.1; requisitos delimitados por la prueba técnica y decisiones ya aprobadas. El diseño está en [arquitectura](../04-arquitectura/arquitectura-y-diseno-tecnico.md) y la funcionalidad está implementada; este documento no acredita la medición individual de cada requisito.  
 **Versión:** 1.0 — 21 de octubre de 2026.  
 **Ámbito:** rendimiento, seguridad, escalabilidad, usabilidad, precisión y capacidad que condicionan el alcance funcional aprobado.
 

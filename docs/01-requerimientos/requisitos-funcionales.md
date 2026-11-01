@@ -1,6 +1,6 @@
 # Requerimientos funcionales — OptiPlant
 
-**Estado:** catálogo funcional **aprobado** en su formulación v1.0; decisiones y cuatro precisiones PR-01–PR-04 integradas. No acredita implementación ni verificación del software.  
+**Estado:** catálogo funcional **aprobado** en su formulación v1.0; decisiones y cuatro precisiones PR-01–PR-04 integradas. RF-0001–RF-0055 implementados; evidencia en el [estado de la implementación](../indice-documental.md#estado-de-la-implementación).  
 **Versión:** 1.3 — 22 de octubre de 2026. Conserva H v1.1 y H v1.2/01; integra H v1.3/01–02: productos con baja exclusivamente lógica y captura/congelación del nombre histórico del proveedor.  
 **Ámbito:** sección 6.1 de la prueba técnica, exclusivamente requerimientos funcionales.
 

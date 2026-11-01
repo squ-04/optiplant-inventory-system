@@ -40,5 +40,5 @@ Errores de validación: `400 VALIDATION_FAILED` (campos ajenos, precio negativo,
 
 ## Límites
 
-- La elección de lista al confirmar una venta, el descuento por línea y el comprobante pertenecen a RF-0027, RF-0029 y RF-0031, aún no implementados; esta entrega deja disponible la resolución del precio para esa venta.
+- La elección de lista al confirmar una venta, el descuento por línea y el comprobante pertenecen a RF-0027, RF-0029 y RF-0031; ver [ventas](ventas.md).
 - No se eliminan precios individuales: el modelo no concede borrado al rol de ejecución. Para retirar una lista de las ventas se desactiva.

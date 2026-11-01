@@ -1,6 +1,6 @@
 # Historias de usuario — OptiPlant
 
-**Estado:** elaborado a partir del catálogo funcional aprobado v1.0 y las decisiones ratificadas; no acredita implementación ni pruebas.  
+**Estado:** elaborado a partir del catálogo funcional aprobado v1.0 y las decisiones ratificadas; funcionalidad implementada, con evidencia en el [estado de la implementación](../indice-documental.md#estado-de-la-implementación).  
 **Alcance:** necesidades funcionales de los actores internos de OptiPlant. No define arquitectura, API, persistencia, pantallas ni mecanismos técnicos.  
 **Versión:** 1.3 — 22 de octubre de 2026. Conserva H v1.1 y H v1.2/01; integra H v1.3/01–02 en HU-005 y HU-009: baja lógica de productos y nombre histórico del proveedor.
 
