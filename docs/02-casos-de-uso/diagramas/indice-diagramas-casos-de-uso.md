@@ -1,6 +1,10 @@
 # Diagramas UML de casos de uso
 
-Esta carpeta contiene los diagramas editables de la sección 7 en formato [Excalidraw](https://excalidraw.com/). La fuente normativa es [`../especificacion-casos-de-uso.md`](../especificacion-casos-de-uso.md), versión 1.1.
+Cada óvalo presenta su identificador y nombre completo en una única etiqueta vinculada.
+
+**Integración posterior H v1.2/01:** la asociación del gerente con UC-015 explicita ahora «Aprueba / rechaza / cancela en origen». El rechazo requiere motivo y solo se permite desde «en preparación», antes de aprobar; los permisos de preparación y despacho del operador se conservan. No se modificó el respaldo.
+
+Esta carpeta contiene los diagramas editables de la sección 7 en formato [Excalidraw](https://excalidraw.com/). La fuente normativa es [`../especificacion-casos-de-uso.md`](../especificacion-casos-de-uso.md), versión 1.2.
 
 ## Organización y cobertura
 

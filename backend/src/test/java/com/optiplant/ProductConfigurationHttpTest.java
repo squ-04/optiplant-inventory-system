@@ -138,6 +138,8 @@ class ProductConfigurationHttpTest {
         assertProblem(convert(operator, product, "caja", "1.5"), 400, "VALIDATION_FAILED");
         assertProblem(convert(operator, product, "caja", "0"), 400, "VALIDATION_FAILED");
         assertProblem(convert(operator, product, "pallet", "1"), 404, "PRODUCT_UNIT_NOT_FOUND");
+        assertProblem(operator.get("/api/v1/products/" + product + "/units/convert?unit=caja"), 400, "VALIDATION_FAILED");
+        assertProblem(operator.get("/api/v1/products/" + product + "/units/convert?quantity=1"), 400, "VALIDATION_FAILED");
 
         String before = catalogDigest();
         assertProblem(unit(admin, product, Map.of("name", "Caja", "factor", "6", "divisible", false)), 409, "PRODUCT_UNIT_EXISTS");

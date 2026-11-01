@@ -42,7 +42,7 @@ RF-0001–RF-0055 están implementados en `main` (31 de octubre de 2026). La evi
 |---|---|
 | [Especificación de casos de uso](02-casos-de-uso/especificacion-casos-de-uso.md) | Actores, objetivos, flujos y trazabilidad funcional. |
 | [Historias de usuario](03-historias%20de%20usuario/historias-de-usuario.md) | Necesidades y valor funcional desde la perspectiva de los actores. |
-| [Diagramas de casos de uso — versión 2](02-casos-de-uso/diagramas-v2/indice-diagramas-casos-de-uso.md) | Índice de los diagramas editables por módulo. La especificación textual es su referencia normativa. |
+| [Diagramas de casos de uso](02-casos-de-uso/diagramas/indice-diagramas-casos-de-uso.md) | Índice de los diagramas editables por módulo. La especificación textual es su referencia normativa. |
 | [Diagramas de arquitectura](04-arquitectura/diagramas/indice-diagramas-arquitectura.md) | Vistas de arquitectura general, monolito modular y composición de un módulo. |
 | [Diagramas de actividad](05-diagramas-actividad/indice-diagramas-actividad.md) | Flujos de transferencia entre sucursales y venta. |
 
@@ -67,6 +67,7 @@ Los diagramas E-R están incluidos en el [modelo de datos](06-modelo-base-datos/
 | [Exploración funcional E2E del 2026-10-28](08-implementacion/exploracion-e2e-2026-10-28.md) | Evidencia de pruebas exploratorias con Playwright de compras, valoración, listas de precios y ventas (RF-0021–RF-0031) y regresión de módulos previos. Borrador pendiente de revisión; no constituye decisiones aprobadas. |
 | [Exploración funcional E2E del 2026-10-29](08-implementacion/exploracion-e2e-2026-10-29.md) | Evidencia de pruebas exploratorias con Playwright de transferencias, rutas, faltantes, tiempos y cumplimiento logístico (RF-0032–RF-0043) y regresión de módulos previos. Borrador pendiente de revisión; no constituye decisiones aprobadas. |
 | [Exploración funcional E2E del 2026-10-30](08-implementacion/exploracion-e2e-2026-10-30.md) | Evidencia de pruebas exploratorias con Playwright del dashboard y los reportes exportables (RF-0044–RF-0055) y regresión de módulos previos. Borrador pendiente de revisión; no constituye decisiones aprobadas. |
+| [Validación desde un clon limpio del 2026-11-01](08-implementacion/validacion-clon-limpio-2026-11-01.md) | Evidencia de arranque con `docker compose up` desde un clon nuevo y recorrido funcional por API y navegador. |
 | [Recorrido manual integral](08-implementacion/recorrido-manual-integral.md) | Recorrido secuencial desde la interfaz que verifica los módulos implementados (RF-0001–RF-0020 y RF-0026) y deja datos de ejemplo coherentes y reutilizables en PostgreSQL. Generado con IA a partir de las guías de prueba manual; realizado por el responsable (25 de 25 pasos, confirmado el 29/10/2026). |
 | [Recorrido manual de compras y ventas](08-implementacion/recorrido-manual-compras-ventas.md) | Continuación del recorrido integral que verifica desde la interfaz compras, valoración, listas de precios y ventas (RF-0021–RF-0031) partiendo de los datos que este deja. Generado con IA a partir de las guías de prueba manual; realizado por el responsable (25 de 25 pasos, confirmado el 29/10/2026), con el estado final contrastado en la base local. |
 | [Recorrido manual de transferencias](08-implementacion/recorrido-manual-transferencias.md) | Continuación del recorrido de compras y ventas que verifica desde la interfaz transferencias, rutas, faltantes, tiempos de entrega y cumplimiento logístico (RF-0032–RF-0043) partiendo de los datos que este deja. Generado con IA a partir de la guía de transferencias y de la base local; realizado por el responsable (26 de 26 pasos, confirmado el 29/10/2026), con el estado final contrastado en la base local. |
@@ -74,7 +75,6 @@ Los diagramas E-R están incluidos en el [modelo de datos](06-modelo-base-datos/
 | [Ejecutar y verificar la base técnica](07-colaboracion/preparacion-tecnica.md) | Arranque con Docker Compose, primer acceso, persistencia y comprobaciones compartidas con CI. |
 | [Git, GitHub y pull requests](07-colaboracion/git-github-y-pull-requests.md) | Guía de colaboración y revisión del repositorio. |
 | [Guía temporal de incertidumbres](01-requerimientos/incertidumbres-pendientes-temporal.md) | Antecedente de análisis con alternativas no aprobadas por sí mismas. No sustituye las decisiones ratificadas ni demuestra que todas sus preguntas sigan abiertas. |
-| [Diagramas de casos de uso — respaldo anterior](02-casos-de-uso/diagramas/indice-diagramas-casos-de-uso.md) | Versión anterior conservada como respaldo; consultar primero la versión 2 y la especificación textual. |
 
 ## Ruta de lectura y mantenimiento
 

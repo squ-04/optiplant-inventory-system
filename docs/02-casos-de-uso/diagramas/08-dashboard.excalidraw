@@ -891,14 +891,6 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-ceea5cb6b5cd",
-          "type": "text"
-        },
-        {
-          "id": "text-152e37519527",
-          "type": "text"
-        },
-        {
           "id": "arrow-ec7a75577894",
           "type": "arrow"
         },
@@ -909,6 +901,10 @@
         {
           "id": "arrow-d44f9091016d",
           "type": "arrow"
+        },
+        {
+          "id": "text-ceea5cb6b5cd",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -918,12 +914,12 @@
     {
       "id": "text-ceea5cb6b5cd",
       "type": "text",
-      "x": 735,
-      "y": 272,
+      "x": 735.0,
+      "y": 296.25,
       "width": 430,
-      "height": 22.5,
+      "height": 47.5,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -942,50 +938,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-019",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-55e0c101d94f",
-      "originalText": "UC-019",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-152e37519527",
-      "type": "text",
-      "x": 735,
-      "y": 316,
-      "width": 430,
-      "height": 23.75,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 1148354576,
-      "version": 1,
-      "versionNonce": 1072166278,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Consultar dashboard e indicadores",
+      "text": "UC-019\nConsultar dashboard e indicadores",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-55e0c101d94f",
-      "originalText": "Consultar dashboard e indicadores",
+      "originalText": "UC-019\nConsultar dashboard e indicadores",
       "autoResize": false,
       "lineHeight": 1.25
     },
