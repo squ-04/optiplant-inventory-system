@@ -4,16 +4,23 @@ Esta base conecta React con Spring Boot y PostgreSQL por REST. Es preparación t
 
 ## Arranque local
 
-Requisitos del equipo: Docker con Compose y motor activo, Git y Python 3.10 o posterior. Java, Maven, Node y PostgreSQL se ejecutan dentro de contenedores; la primera construcción requiere acceso a los registros públicos y puede tardar varios minutos.
+Requisitos del equipo: Docker con Compose y motor activo y Git; Python 3.10 o posterior solo para las comprobaciones. Java, Maven, Node y PostgreSQL se ejecutan dentro de contenedores; la primera construcción requiere acceso a los registros públicos y puede tardar varios minutos.
 
 ```sh
-python3 scripts/init_environment.py
 docker compose up --build --wait
 ```
 
+No requiere configuración previa. El servicio de un solo uso `credentials` genera las credenciales individuales en el primer arranque, las conserva en el volumen `credentials` y termina. Para el primer acceso, el código es `ADMIN` y la contraseña inicial se consulta con:
+
+```sh
+docker compose exec backend cat /run/optiplant/admin-password
+```
+
+El primer ingreso exige cambiarla. La contraseña no se imprime en los registros.
+
 Abre `http://localhost:5173`. La API está en `http://localhost:8080`, su salud en `/actuator/health`, la especificación en `/v3/api-docs` y Swagger UI en `/swagger-ui/index.html`. No mezcles `localhost` y `127.0.0.1` en las URL del navegador: cookies y CORS deben conservar el mismo hostname.
 
-La inicialización crea `.env` ignorado por Git, con permisos `0600` y secretos aleatorios individuales. Nunca reemplaza un archivo existente. Consulta **localmente** `APP_ADMIN_CODE` y `APP_ADMIN_PASSWORD` para acceder; no copies esos valores en tickets, capturas, logs o commits. El primer acceso exige cambiar la contraseña antes de consultar el recurso protegido. `.env.example` documenta variables, no proporciona credenciales utilizables.
+El archivo `.env` es opcional: cada valor que defina prevalece sobre el generado, de modo que un entorno existente conserva sus credenciales. `python3 scripts/init_environment.py` lo crea ignorado por Git, con permisos `0600` y secretos aleatorios individuales, y nunca reemplaza un archivo existente. Si lo utilizas, consulta **localmente** `APP_ADMIN_CODE` y `APP_ADMIN_PASSWORD` para acceder; no copies esos valores en tickets, capturas, logs o commits. El primer acceso exige cambiar la contraseña antes de consultar el recurso protegido. `.env.example` documenta variables, no proporciona credenciales utilizables.
 
 Si cambias los puertos `FRONTEND_PORT` o `BACKEND_PORT`, reconstruye/recrea los servicios y utiliza las URL resultantes. PostgreSQL no publica puertos al host.
 
@@ -23,7 +30,7 @@ Si cambias los puertos `FRONTEND_PORT` o `BACKEND_PORT`, reconstruye/recrea los 
 - `APP_DEMO_DATA=true` habilita las semillas locales separadas de la estructura. Son datos de demostración, no historia productiva ni evidencia de casos de uso implementados.
 - El administrador inicial proviene de configuración privada, no de contraseñas públicas en SQL. Reiniciar no debe restablecer su contraseña ni duplicar registros.
 - PostgreSQL inicializa el grupo `optiplant_runtime` sin login, el login limitado `optiplant_app` y el propietario de migraciones `optiplant_migrator`, ambos sin privilegios administrativos. La API utiliza `optiplant_app`; Flyway utiliza las credenciales independientes del migrador. El administrador del clúster también tiene un secreto distinto. No reutilices contraseñas entre esos roles.
-- El volumen `pgdata` conserva la base tras `docker compose down` y reconstrucciones. **`docker compose down -v` elimina datos**: no lo utilices para un reinicio normal.
+- El volumen `pgdata` conserva la base tras `docker compose down` y reconstrucciones. **`docker compose down -v` elimina datos y las credenciales generadas**: no lo utilices para un reinicio normal.
 - No elimines migraciones ya aplicadas ni alteres sus checksums para ocultar fallos. Un error de migración debe impedir el arranque; no se reconstruye silenciosamente la base.
 
 ## Comprobaciones compartidas con CI
