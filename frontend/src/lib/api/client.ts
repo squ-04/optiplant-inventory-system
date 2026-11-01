@@ -178,7 +178,16 @@ export interface ValuationItem {
   productExternalId: string; sku: string; productName: string; baseUnitName: string; physicalQuantity: string;
   averageCost: string; value: string; exactValue: string;
 }
-export interface InventoryValuation { branch: Branch; readAt: string; totalValue: string; exactTotalValue: string; items: ValuationItem[] }
+/** RF-0026-CA-02: units dispatched from or towards a branch that are still pending, at their frozen dispatch cost. */
+export interface ValuationTransitItem {
+  transferExternalId: string; transferCode: string; direction: 'OUTGOING' | 'INCOMING'; counterpart: Branch;
+  productExternalId: string; sku: string; productName: string; baseUnitName: string; pendingQuantity: string;
+  frozenCost: string; value: string; exactValue: string;
+}
+export interface InventoryValuation {
+  branch: Branch; readAt: string; totalValue: string; exactTotalValue: string; items: ValuationItem[];
+  outgoingTransitValue: string; incomingTransitValue: string; transit: ValuationTransitItem[];
+}
 function routeDto(value: unknown): Route {
   if (!record(value) || !uuid(value.externalId) || !text(value.code) || !isRoutePriority(value.priority) ||
       typeof value.active !== 'boolean') throw invalid();
@@ -589,6 +598,13 @@ function valuationItemDto(value: unknown): ValuationItem {
   if (!record(value) || !uuid(value.productExternalId) || !['sku', 'productName', 'baseUnitName'].every(k => text(value[k])) ||
       !['physicalQuantity', 'averageCost', 'value', 'exactValue'].every(k => decimal(value[k]))) throw invalid();
   return value as unknown as ValuationItem;
+}
+function valuationTransitDto(value: unknown): ValuationTransitItem {
+  if (!record(value) || !uuid(value.transferExternalId) || !uuid(value.productExternalId) ||
+      !['transferCode', 'sku', 'productName', 'baseUnitName'].every(k => text(value[k])) ||
+      !['OUTGOING', 'INCOMING'].includes(String(value.direction)) ||
+      !['pendingQuantity', 'frozenCost', 'value', 'exactValue'].every(k => decimal(value[k]))) throw invalid();
+  return { ...(value as unknown as ValuationTransitItem), counterpart: branchDto(value.counterpart) };
 }
 const optionalDecimal = (value: unknown) => value === null || decimal(value);
 function transferLineDto(value: unknown): TransferLine {
@@ -1116,9 +1132,12 @@ export class ApiClient {
   /** RF-0026: current weighted-average valuation of a branch; managers read their own, administrators any. */
   async inventoryValuation(branch: string): Promise<InventoryValuation> {
     const value = await this.request(`/inventory/branches/${encodeURIComponent(branch)}/valuation`);
-    if (!record(value) || !instant(value.readAt) || !decimal(value.totalValue) || !decimal(value.exactTotalValue)) throw invalid();
+    if (!record(value) || !instant(value.readAt) || !decimal(value.totalValue) || !decimal(value.exactTotalValue) ||
+        !decimal(value.outgoingTransitValue) || !decimal(value.incomingTransitValue)) throw invalid();
     return { branch: branchDto(value.branch), readAt: value.readAt as string, totalValue: value.totalValue as string,
-      exactTotalValue: value.exactTotalValue as string, items: listDto(value.items, valuationItemDto) };
+      exactTotalValue: value.exactTotalValue as string, items: listDto(value.items, valuationItemDto),
+      outgoingTransitValue: value.outgoingTransitValue as string, incomingTransitValue: value.incomingTransitValue as string,
+      transit: listDto(value.transit, valuationTransitDto) };
   }
   /** RF-0025: purchase history by branch, supplier, product and status, newest first. */
   async purchaseHistory(filter: PurchaseHistoryFilter = {}): Promise<PurchaseHistory> {

@@ -71,6 +71,8 @@ export function Valuation({ client, user, onError, revision, visible }: Props) {
       <dl className="purchase-summary" aria-label="Resumen de la valoración">
         <div className="purchase-summary-received"><dt>Valor del inventario</dt><dd>{decimal(valuation.totalValue)} COP</dd></div>
         <div><dt>Productos con existencias</dt><dd>{valuation.items.length}</dd></div>
+        <div><dt>En tránsito de salida</dt><dd>{decimal(valuation.outgoingTransitValue)} COP</dd></div>
+        <div><dt>En tránsito de entrada</dt><dd>{decimal(valuation.incomingTransitValue)} COP</dd></div>
       </dl>
       {valuation.items.length === 0
         ? <p>La sucursal no tiene existencias valoradas. El valor aparece al recibir compras o registrar ingresos.</p>
@@ -94,6 +96,30 @@ export function Valuation({ client, user, onError, revision, visible }: Props) {
               <TableCell colSpan={3}>Total</TableCell>
               <TableCell className="quantity">{decimal(valuation.totalValue)} COP</TableCell>
             </TableRow></TableFooter>
+          </Table>
+        </div>}
+      <h3>Valor en tránsito</h3>
+      {valuation.transit.length === 0
+        ? <p>No hay unidades pendientes en tránsito hacia o desde esta sucursal.</p>
+        : <div className="table-scroll" role="region" aria-label={`Valor en tránsito de ${valuation.branch.name}`} tabIndex={0}>
+          <Table className="valuation-table">
+            <TableCaption>Unidades despachadas pendientes al costo congelado del despacho. No forman parte de las existencias
+              ni del valor del inventario de ninguna de las dos sucursales.</TableCaption>
+            <TableHeader><TableRow>
+              <TableHead scope="col">Transferencia</TableHead><TableHead scope="col">Sentido</TableHead>
+              <TableHead scope="col">Producto</TableHead><TableHead className="quantity" scope="col">Pendiente</TableHead>
+              <TableHead className="quantity" scope="col">Costo congelado</TableHead>
+              <TableHead className="quantity" scope="col">Valor</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>{valuation.transit.map(item => <TableRow key={`${item.transferExternalId}-${item.productExternalId}`}>
+              <TableCell>{item.transferCode}</TableCell>
+              <TableCell>{item.direction === 'OUTGOING' ? 'Hacia' : 'Desde'} {item.counterpart.name} ({item.counterpart.code})</TableCell>
+              <TableCell><span className="font-semibold">{item.sku}</span> {item.productName}</TableCell>
+              <TableCell className="quantity">{decimal(item.pendingQuantity)} {item.baseUnitName}</TableCell>
+              <TableCell className="quantity">{decimal(item.frozenCost)}<span className="cell-note">por {item.baseUnitName}</span></TableCell>
+              <TableCell className="quantity">{decimal(item.value)}{exactDiffers(item.exactValue) &&
+                <span className="cell-note">exacto {decimal(item.exactValue)}</span>}</TableCell>
+            </TableRow>)}</TableBody>
           </Table>
         </div>}
     </>}
