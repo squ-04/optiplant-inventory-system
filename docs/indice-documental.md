@@ -9,6 +9,8 @@ Punto de entrada a la documentación del Sistema de Inventario Multi-Sucursal. E
 | [Requisitos funcionales](01-requerimientos/requisitos-funcionales.md) | Comportamiento aprobado, RF-0001–RF-0055, permisos, reglas y criterios de aceptación. |
 | [Arquitectura y diseño técnico](04-arquitectura/arquitectura-y-diseno-tecnico.md) | Diseño por capas, organización modular, decisiones ARQ, fundamentos, alternativas y verificaciones pendientes. |
 | [Modelo relacional y especificación de datos](06-modelo-base-datos/modelo-datos.md) | Entidades, atributos, relaciones, restricciones, índices, diagramas E-R y trazabilidad. Diseño técnico implementado mediante migraciones Flyway. |
+| [README del proyecto](../README.md) | Descripción, instalación, arquitectura, módulos implementados y decisiones de diseño. |
+| [Uso de inteligencia artificial](09-uso-de-ia/uso-de-inteligencia-artificial.md) | Herramientas y etapas, prompts textuales con sus resultados, evaluación crítica y estimación de contenido generado. |
 
 ## Fuentes y decisiones
 
@@ -24,7 +26,7 @@ Las tecnologías elegidas y las reglas ratificadas por el responsable son decisi
 
 ## Estado de la implementación
 
-RF-0001–RF-0055 están implementados en `main` (31 de octubre de 2026). La evidencia son las comprobaciones de `scripts/run_checks.py`, que incluyen un arranque desde cero de Compose, y los cuatro recorridos manuales realizados por el responsable: RF-0001–RF-0020 y RF-0026, RF-0021–RF-0031, RF-0032–RF-0043 y RF-0044–RF-0055. Quedan pendientes el `README.md` general y la sección de uso de IA. Los requisitos no funcionales no tienen una medición individual.
+RF-0001–RF-0055 están implementados en `main` (31 de octubre de 2026). La evidencia son las comprobaciones de `scripts/run_checks.py`, que incluyen un arranque desde cero de Compose, y los cuatro recorridos manuales realizados por el responsable: RF-0001–RF-0020 y RF-0026, RF-0021–RF-0031, RF-0032–RF-0043 y RF-0044–RF-0055. Los requisitos no funcionales no tienen una medición individual.
 
 ## Requisitos complementarios
 
