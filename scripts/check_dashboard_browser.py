@@ -134,7 +134,7 @@ def main():
     env = {key: value for key, value in os.environ.items() if not key.startswith("COMPOSE_") and key not in values}
     env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
     env.pop("DOCKER_CONTEXT", None)
-    command = ["docker", "compose", "--project-name", project, "--env-file", str(env_path), "-f", str(ROOT / "compose.yaml")]
+    command = ["docker", "compose", "--project-name", project, "--env-file", str(env_path), "-f", str(ROOT / "docker-compose.yml")]
     browser = ["playwright-cli", "-s=" + project]
 
     def compose(*args, check=True, timeout=900):

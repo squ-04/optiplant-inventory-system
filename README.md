@@ -24,7 +24,7 @@ docker compose up --build --wait
 
 `--build` construye las imágenes y `--wait` devuelve el control cuando los servicios están sanos. La primera construcción puede tardar varios minutos.
 
-No hay configuración previa, como exige el enunciado (§5): el servicio de un solo uso `credentials` genera las credenciales en el primer arranque y las conserva en un volumen. Se prefirió esta solución a fijar valores por defecto en `compose.yaml`, porque estos quedarían publicados en el repositorio.
+No hay configuración previa, como exige el enunciado (§5): el servicio de un solo uso `credentials` genera las credenciales en el primer arranque y las conserva en un volumen. Se prefirió esta solución a fijar valores por defecto en `docker-compose.yml`, porque estos quedarían publicados en el repositorio.
 
 | Servicio | Dirección |
 |---|---|
