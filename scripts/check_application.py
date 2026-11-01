@@ -22,7 +22,7 @@ def main():
     args = parser.parse_args()
     image = None
     marker = {"backend": "backend/pom.xml", "frontend": "frontend/package.json",
-              "integration": "compose.yaml"}[args.group]
+              "integration": "docker-compose.yml"}[args.group]
     if not (ROOT / marker).is_file():
         if any((ROOT / name).exists() for name in
                ("backend/pom.xml", "frontend/package.json", "compose.yaml", "compose.yml",
