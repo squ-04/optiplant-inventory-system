@@ -1,3 +1,7 @@
+/**
+ * Categories, period check and file delivery of the Excel reports (RF-0050–RF-0055). The server generates the file and
+ * applies every rule; the browser only saves it.
+ */
 import type { ReportCategory, ReportDownload } from '../api/client.ts';
 import { periodError } from '../logistics/compliance.ts';
 

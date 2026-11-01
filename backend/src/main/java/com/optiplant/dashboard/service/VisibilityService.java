@@ -13,6 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Application service of the visibility reads. Its read-only repeatable-read transaction gives each call one consistent
+ * snapshot across all its queries. Stock and history reads validate the public reference; the history also checks scope.
+ */
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class VisibilityService {

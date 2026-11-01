@@ -1,3 +1,7 @@
+/**
+ * Presentation helpers of the branch dashboard: sales comparison (RF-0044) and inventory rotation (RF-0045). The server
+ * computes the figures; these helpers word them so missing data, a real zero and «No calculable» never read alike.
+ */
 import type { RotationItem, SalesMonth } from '../api/client.ts';
 import { decimal } from '../format.ts';
 import { periodError } from '../logistics/compliance.ts';

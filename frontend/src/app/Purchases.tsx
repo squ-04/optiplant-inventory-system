@@ -1,3 +1,8 @@
+/**
+ * Purchase orders: the branch operator creates, submits, receives, cancels and replaces them; managers and administrators
+ * consult, and administrators also keep the suppliers. The server validates the conditions and decides every effect on
+ * stock and cost; the amounts typed here are only a preview.
+ */
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Ban, CopyPlus, PackageCheck, Pencil, Plus, RefreshCw, Search, Send, Save, Trash2, X } from 'lucide-react';
@@ -73,6 +78,7 @@ export function Purchases(props: Props) {
   </section>;
 }
 
+/** The orders of a branch: history, detail and the editor, which only operators reach. */
 function PurchaseOrders({ client, user, onError, onChanged, revision, visible }: Props) {
   const operator = user.role === 'OPERATOR';
   const admin = user.role === 'ADMIN';
@@ -193,6 +199,10 @@ function PurchaseOrders({ client, user, onError, onChanged, revision, visible }:
     }).finally(() => setBusy(false));
   }
 
+  /**
+   * Submits or receives an order once the user confirms. The key is kept per order and action until the outcome is
+   * known, so a retry cannot repeat the transition.
+   */
   async function transition(order: PurchaseOrder, action: PurchaseAction) {
     const receive = action === 'receive';
     const accepted = await confirm(receive ? {

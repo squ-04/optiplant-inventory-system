@@ -28,6 +28,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Session lifecycle over REST: CSRF token, login, current user, password change and logout. Credentials are checked by
+ * {@link LoginService}; this controller creates and destroys the HTTP session around that result.
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
@@ -51,6 +55,10 @@ public class AuthController {
     @GetMapping("/csrf")
     public CsrfResponse csrf(CsrfToken token) { return new CsrfResponse(token.getToken(), token.getHeaderName()); }
 
+    /**
+     * Starts a new session recording its start and interactive timestamps for {@link SessionPolicyFilter}, stores the
+     * authenticated principal in the session and discards the previous CSRF token.
+     */
     @PostMapping("/login")
     public UserResponse login(@Valid @RequestBody LoginRequest body, HttpServletRequest request,
         HttpServletResponse response) {

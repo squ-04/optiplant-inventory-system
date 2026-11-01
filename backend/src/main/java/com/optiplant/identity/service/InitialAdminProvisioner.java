@@ -11,6 +11,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Creates the first administrator at startup from configuration, so a new installation can be operated without seed
+ * credentials in the code. The account must change its password on first use.
+ */
 @Component
 public class InitialAdminProvisioner implements ApplicationRunner {
     private final UserAccountRepository users;
@@ -30,6 +34,10 @@ public class InitialAdminProvisioner implements ApplicationRunner {
         this.password = password;
     }
 
+    /**
+     * Fails startup if the runtime role may delete catalog products or the configured credentials are unusable. The advisory
+     * lock serializes concurrent starts, and nothing is created while an active administrator exists.
+     */
     @Override @Transactional
     public void run(ApplicationArguments args) {
         if (Boolean.TRUE.equals(jdbc.queryForObject(

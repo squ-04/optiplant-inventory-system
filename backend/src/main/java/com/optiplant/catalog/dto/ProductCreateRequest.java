@@ -7,6 +7,10 @@ import java.util.List;
 import java.util.Set;
 import tools.jackson.databind.JsonNode;
 
+/**
+ * Body of a product creation: the product attributes plus its initial branch enablements. Parsed strictly from JSON, it
+ * rejects unknown or missing fields, a branch listed twice, and enablements the product's base divisibility does not admit.
+ */
 public record ProductCreateRequest(ProductUpdateRequest attributes, List<ProductEnablementRequest> branches) {
     public static ProductCreateRequest from(JsonNode body) {
         Set<String> fields = new HashSet<>(ProductUpdateRequest.FIELDS);

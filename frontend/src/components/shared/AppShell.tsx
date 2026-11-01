@@ -1,3 +1,7 @@
+/**
+ * Application frame: skip link, header and, with a session, the sidebar with navigation and session summary. It moves focus
+ * to the section chosen; `App` decides which sections exist.
+ */
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { LucideIcon } from 'lucide-react';

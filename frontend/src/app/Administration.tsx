@@ -1,3 +1,7 @@
+/**
+ * Network administration, mounted only for administrators: maintains branches and user accounts through the REST API.
+ * The server validates every change; this view shows its answer.
+ */
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiClient, sessionProblem } from '../lib/api/client.ts';
@@ -181,6 +185,7 @@ export function Administration({ client, onError, onChanged }: Props) {
   </section>;
 }
 
+/** Form to create or edit one account (`account` null creates it); the temporary password leaves the input on submit. */
 function UserEditor({ account, branches, busy, onSave, onDeactivate, onClose }: {
   account: ManagedUser | null; branches: Branch[]; busy: boolean;
   onSave: (data: UserInput, password: string) => Promise<void>; onDeactivate: () => void; onClose: () => void;

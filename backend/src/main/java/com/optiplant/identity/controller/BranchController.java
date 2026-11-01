@@ -20,6 +20,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
+/**
+ * Branch administration. Administrators read and change every branch; managers and operators only read their assigned
+ * branch. Bodies are parsed strictly from JSON, and changes use POST command routes.
+ */
 @RestController
 @RequestMapping("/api/v1/branches")
 public class BranchController {

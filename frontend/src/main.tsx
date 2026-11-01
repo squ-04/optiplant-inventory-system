@@ -1,3 +1,6 @@
+/**
+ * Browser entry point: installs the form format hints and mounts `App` inside the TanStack Query provider.
+ */
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app/App.tsx';

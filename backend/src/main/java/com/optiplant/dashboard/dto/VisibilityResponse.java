@@ -4,6 +4,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Complete view of one branch: identity, stock, purchases, sales, transfers and movements. The nested records are also
+ * the rows of the narrower visibility reads.
+ */
 public record VisibilityResponse(Branch branch, List<InventoryItem> inventory, List<Document> purchases,
     List<Document> sales, List<Document> transfers, List<Movement> movements) {
     public record Branch(UUID externalId, String code, String name, boolean active) {}

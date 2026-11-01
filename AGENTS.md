@@ -12,7 +12,7 @@ Estas instrucciones complementan las instrucciones globales de Gentle AI y Organ
 - Dashboards: Recharts, aprobado en ARQ-001 junto con el stack del frontend.
 - Biblioteca de componentes y estilos: shadcn/ui y Tailwind CSS, aprobados en ARQ-001; las versiones y herramientas de referencia se consultan en arquitectura §5.4.2. No tratarlos como una elección pendiente ni sustituirlos automáticamente.
 - Infraestructura: Docker Compose.
-- Presentación prevista: 27 de octubre de 2026.
+- Presentación prevista: 4 de noviembre de 2026.
 - Funcionalidad adicional seleccionada: módulo de reportes exportables, conforme a la alternativa propuesta en la sección 4 del enunciado oficial.
 - Distinguir la obligación externa de implementar al menos una funcionalidad adicional de la decisión del proyecto de implementar reportes exportables. Estos deberán aportar valor incremental respecto a los dashboards, consultas y reportes básicos obligatorios.
 - Los formatos de exportación y las categorías concretas de reportes quedaron ratificados en el registro de decisiones aprobadas (INC-020/D01–D10): Excel `.xlsx` real para movimientos de inventario, ventas y transferencias, con fechas obligatorias, columnas, permisos y topes definidos. La propuesta inicial de Excel filtrado por rangos de fechas fue su antecedente; ya no debe tratarse como alcance pendiente ni reabrirse sin una decisión expresa.

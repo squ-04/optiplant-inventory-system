@@ -1,3 +1,8 @@
+/**
+ * Typed client of the backend REST API (`/api/v1`). It sends the session credentials and the CSRF token, turns failed
+ * responses into `ApiError` and checks JSON responses with the `*Dto` parsers before a view uses them. Quantities and
+ * amounts stay exact decimal strings.
+ */
 import { isTransferStatus } from '../transfers/statuses.ts';
 import { isRoutePriority } from '../logistics/routes.ts';
 import type { RoutePriority } from '../logistics/routes.ts';
@@ -403,6 +408,7 @@ export interface ProblemDetail {
   [key: string]: unknown;
 }
 
+/** A rejected request: its HTTP status, the problem body of the server and the message views show. */
 export class ApiError extends Error {
   status: number;
   problem: ProblemDetail;
@@ -428,6 +434,7 @@ export const sessionNotice = (code: string | undefined) => (code === 'SESSION_RE
   : 'Su sesión venció por inactividad o por alcanzar la duración máxima.')
   + ' Inicie sesión de nuevo. Los formularios no enviados no se confirmaron.';
 
+// Response validation: each `*Dto` parser checks the shape of a JSON payload and rejects a malformed one with `invalid()`.
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
@@ -855,6 +862,7 @@ function saleDto(value: unknown): Sale {
   return { ...(value as unknown as Sale), lines };
 }
 
+/** One method per REST operation. `onSessionExpired` lets the shell react when a session ends. */
 export class ApiClient {
   private baseUrl: string;
   private transport: typeof fetch;
@@ -900,6 +908,7 @@ export class ApiClient {
     return response;
   }
 
+  /** `send` for JSON operations: a 204 answers undefined and an unreadable body counts as an invalid response. */
   private async request(path: string, method = 'GET', body?: unknown, signal?: AbortSignal,
                         extra: Record<string, string> = {}): Promise<unknown> {
     const response = await this.send(path, method, body, signal, extra);
@@ -907,6 +916,7 @@ export class ApiClient {
     try { return await response.json(); } catch { throw invalid(); }
   }
 
+  /** Reads the CSRF token and header required on non-GET requests; it is read again whenever the session changes. */
   private async refreshCsrf(): Promise<void> {
     this.csrf = null;
     const value = await this.request('/auth/csrf');

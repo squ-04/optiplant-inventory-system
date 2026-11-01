@@ -1,3 +1,4 @@
+/** Badge with the manual priority of a route, from its single definition in `lib/logistics/routes.ts`. */
 import { Badge } from '../ui/badge';
 import { ROUTE_PRIORITY } from '../../lib/logistics/routes.ts';
 import type { RoutePriority } from '../../lib/logistics/routes.ts';

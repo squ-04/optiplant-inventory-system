@@ -1,3 +1,7 @@
+/**
+ * Restock alerts for managers and administrators, active or in history, and the polling query the shell shares (RF-0020).
+ * The server decides which alerts are active; this view only reads them.
+ */
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';

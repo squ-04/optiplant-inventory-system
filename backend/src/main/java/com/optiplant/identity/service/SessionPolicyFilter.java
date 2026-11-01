@@ -16,6 +16,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.json.JsonMapper;
 
+/**
+ * Enforces session policy on every authenticated request: 8 hours absolute lifetime, 30 minutes of inactivity, revocation
+ * when the account no longer matches the session, and a mandatory password change before operating.
+ */
 public class SessionPolicyFilter extends OncePerRequestFilter {
     public static final String STARTED_AT = "optiplant.startedAt";
     public static final String INTERACTIVE_AT = "optiplant.interactiveAt";
@@ -35,6 +39,10 @@ public class SessionPolicyFilter extends OncePerRequestFilter {
         this.json = json;
     }
 
+    /**
+     * Rejected sessions are destroyed and answered with 401. Only a successful business POST or a password change
+     * request counts as interactive activity, so background polling never extends a session.
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
         throws ServletException, IOException {

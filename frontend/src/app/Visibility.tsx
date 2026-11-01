@@ -1,3 +1,7 @@
+/**
+ * «Consultas»: the stock of a visible branch, kept current by REST polling (RF-0015), plus the operating history of the
+ * user's own branch or, for administrators, of the selected one. It only reads; the last read stays flagged when polling fails.
+ */
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Search } from 'lucide-react';
@@ -50,6 +54,7 @@ export function Visibility({ client, user, onError, revision, visible }: {
     if (inventory.error && !connectionFailure(inventory.error)) onError(inventory.error);
   }, [inventory.errorUpdatedAt]);
 
+  /** Reads the selected branch; its operating history is requested only for administrators or the user's own branch. */
   async function load() {
     setBusy(true); setSnapshot(null);
     try {

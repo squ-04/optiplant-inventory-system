@@ -149,6 +149,7 @@ export function PriceLists({ client, user, onError, revision, visible }: Props) 
   </section>;
 }
 
+/** The prices of one list; the administrator sets the price of a unit of an active product. */
 function ListPrices({ client, list, admin, onSaved, onError, revision }: {
   client: ApiClient; list: PriceList; admin: boolean; onSaved: (list: PriceList) => void;
   onError: (reason: unknown) => void; revision: number;

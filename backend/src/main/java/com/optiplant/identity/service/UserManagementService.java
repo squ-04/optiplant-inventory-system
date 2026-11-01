@@ -14,6 +14,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Administrator-only user management. Every operation checks the role itself, and accounts are deactivated rather than
+ * removed; changes that affect access revoke the account's sessions through {@code UserAccount}.
+ */
 @Service
 public class UserManagementService {
     private final UserAccountRepository users;
@@ -83,6 +87,10 @@ public class UserManagementService {
         return values(request.getCode(), request.getFullName(), request.getRole(), request.getBranchExternalId());
     }
 
+    /**
+     * Normalizes and validates shared fields. Only an administrator may have no branch; any given branch must be an active
+     * UUIDv4 reference, and its row is held {@code FOR SHARE} until commit so it cannot be deactivated meanwhile.
+     */
     private Values values(String rawCode, String rawName, String role, UUID branchExternalId) {
         String code = trimmed(rawCode, 64);
         String fullName = trimmed(rawName, 160);

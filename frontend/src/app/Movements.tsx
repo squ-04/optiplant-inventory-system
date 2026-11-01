@@ -1,3 +1,7 @@
+/**
+ * Inventory movements of a branch (RF-0016–RF-0018): operators and managers register the kinds their role offers and
+ * every profile consults the history. The server validates and decides every effect; an idempotency key makes a retry safe.
+ */
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Plus, RefreshCw, Save, Search, X } from 'lucide-react';
@@ -95,6 +99,7 @@ export function Movements({ client, user, onError, revision, visible }: Props) {
     revealEditor('movement-editor');
   }
 
+  /** Sends the movement: a success or a rejection renews the key, an unknown outcome keeps it for a safe retry. */
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft.kind) return;

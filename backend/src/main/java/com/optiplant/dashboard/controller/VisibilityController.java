@@ -14,6 +14,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Read-only REST access to branches, their stock and their history. Listing branches and consulting stock is open to any
+ * authenticated profile, while the branch history is authorized by the service against the session scope.
+ */
 @RestController
 @RequestMapping("/api/v1/visibility")
 public class VisibilityController {

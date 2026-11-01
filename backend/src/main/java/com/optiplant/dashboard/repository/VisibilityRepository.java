@@ -15,6 +15,10 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Read-only SQL projections for the visibility views. It queries the tables of several modules directly because these
+ * reads cross module boundaries and need flat rows, not entities; decimals are returned as plain strings to keep precision.
+ */
 @Repository
 public class VisibilityRepository {
     private final JdbcTemplate jdbc;

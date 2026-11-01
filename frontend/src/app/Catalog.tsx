@@ -1,3 +1,8 @@
+/**
+ * Product catalog: administrators maintain products, their enablement and minimum stock per branch, and their units;
+ * local profiles consult the general catalog and the one of their own branch. The server validates every change and
+ * computes every conversion.
+ */
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiClient, sessionProblem } from '../lib/api/client.ts';
@@ -249,6 +254,7 @@ function ProductEditor({ product, branches, busy, onSave, onDeactivate, onReacti
   </form>;
 }
 
+/** Enables a product in the active branches that lack it and edits the minimum stock of the enabled ones. */
 function EnablementPanel({ product, branches, busy, onEnable, onMinimum }: {
   product: Product; branches: Branch[]; busy: boolean; onEnable: (enablement: ProductEnablement) => void;
   onMinimum: (branchId: string, minimumQuantity: string) => void;
@@ -326,6 +332,7 @@ function EnablementPanel({ product, branches, busy, onEnable, onMinimum }: {
   </div>;
 }
 
+/** Adds units to a product and changes the existing ones, except its base unit. */
 function UnitsPanel({ client, product, busy, onCreate, onUpdate }: {
   client: ApiClient; product: Product; busy: boolean;
   onCreate: (unit: ProductUnitInput) => void; onUpdate: (change: ProductUnitChange) => void;
@@ -453,6 +460,7 @@ function ConversionForm({ client, productId, sku, baseUnitName, units }: {
   </form>;
 }
 
+/** The products enabled in the user's branch, with or without stock, and the conversion of the selected one. */
 function LocalCatalogPanel({ client, catalog, loaded }: { client: ApiClient; catalog: LocalCatalog | null; loaded: boolean }) {
   const [selected, setSelected] = useState('');
   if (!catalog) return <p>{loaded ? 'El catálogo de su sucursal no está disponible.' : 'Consultando el catálogo de su sucursal…'}</p>;

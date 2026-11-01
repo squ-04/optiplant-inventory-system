@@ -10,6 +10,10 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+/**
+ * Persistence of catalog products, addressed publicly by external id. {@code lockByExternalId} takes a pessimistic write
+ * lock for commands that must serialize on one product; SKU checks ignore letter case.
+ */
 public interface ProductRepository extends JpaRepository<Product, Long> {
     List<Product> findAllByOrderBySkuAsc();
     Optional<Product> findByExternalId(UUID externalId);

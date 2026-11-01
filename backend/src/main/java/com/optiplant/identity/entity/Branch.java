@@ -9,6 +9,10 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * A branch of the network. The database id stays internal and {@code externalId} is its public reference; the
+ * code is immutable, and a branch leaves operation by deactivation.
+ */
 @Entity
 @Table(name = "identity_branch")
 public class Branch {

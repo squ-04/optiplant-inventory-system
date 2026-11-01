@@ -162,6 +162,7 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
 
 const prefersReducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+/** Monthly sales: a chart when the profile receives amounts, and the tables that carry every figure. */
 function SalesView({ sales }: { sales: SalesComparison }) {
   const points = chartPoints(sales.months);
   const rows = productRows(sales.months);

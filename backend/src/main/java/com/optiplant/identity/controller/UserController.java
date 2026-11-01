@@ -25,6 +25,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.dao.DataIntegrityViolationException;
 import tools.jackson.databind.JsonNode;
 
+/**
+ * User administration, restricted to administrators by {@code UserManagementService}. A unique-code violation that
+ * passes the service's prior check, such as a concurrent creation, is still answered as a 409 conflict.
+ */
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {

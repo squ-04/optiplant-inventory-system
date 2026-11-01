@@ -4,6 +4,10 @@ import com.optiplant.common.exception.ApiException;
 import java.util.Set;
 import tools.jackson.databind.JsonNode;
 
+/**
+ * Body of a branch creation, parsed strictly from JSON. It also hosts the exact-field validation that other strict
+ * request parsers reuse: a body must contain the expected fields and nothing else.
+ */
 public record BranchCreateRequest(String code, String name) {
     public static BranchCreateRequest from(JsonNode body) {
         validateFields(body, Set.of("code", "name"));

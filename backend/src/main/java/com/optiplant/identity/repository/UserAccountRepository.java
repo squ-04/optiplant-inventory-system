@@ -10,6 +10,10 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+/**
+ * Persistence of accounts, looked up by exact code at login and by external id elsewhere. {@code lockByExternalId}
+ * serializes the commands that change an account.
+ */
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
     Optional<UserAccount> findByCode(String code);
     Optional<UserAccount> findByExternalId(UUID externalId);

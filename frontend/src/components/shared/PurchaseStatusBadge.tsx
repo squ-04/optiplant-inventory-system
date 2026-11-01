@@ -1,3 +1,4 @@
+/** Badge with the state of a purchase order. */
 import { Badge } from '../ui/badge';
 import type { PurchaseStatus } from '../../lib/api/client.ts';
 import { purchaseStatusLabel } from '../../lib/purchases/purchases.ts';
