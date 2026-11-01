@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ApiClient, ApiError, sessionProblem } from '../src/lib/api/client.ts';
+import { ApiClient, ApiError, sessionNotice, sessionProblem } from '../src/lib/api/client.ts';
 
 const user = {
   externalId: 'df06cdfe-a745-4bf4-bc81-e10db132724b', code: 'ADMIN',
@@ -38,6 +38,30 @@ test('login sends JSON, credentials and CSRF, then rotates the token', async () 
   assert.equal(new Headers(h.calls[1].options.headers).get('Content-Type'), 'application/json');
   assert.deepEqual(JSON.parse(String(h.calls[1].options.body)), { code: 'ADMIN', password: 'temporary password' });
   assert.equal(new Headers(h.calls[3].options.headers).get('X-CSRF-TOKEN'), 'rotated');
+});
+
+test('a lost session reports the server reason once, whichever request received it', async () => {
+  const codes: (string | undefined)[] = [];
+  const responses = [json({ code: 'SESSION_EXPIRED', detail: 'La sesión ya no es válida.' }, 401), new Response('gateway', { status: 401 })];
+  const client = new ApiClient('http://localhost:8080', async () => responses.shift()!, code => { codes.push(code); });
+  await assert.rejects(client.me(), ApiError);
+  await assert.rejects(client.me(), ApiError);
+  assert.deepEqual(codes, ['SESSION_EXPIRED', 'UNKNOWN']);
+});
+
+test('logout and password changes end the session without reporting a loss', async () => {
+  const codes: (string | undefined)[] = [];
+  const responses = [json(csrf()), new Response(null, { status: 204 }), json(csrf('out'))];
+  const client = new ApiClient('http://localhost:8080', async () => responses.shift()!, code => { codes.push(code); });
+  await client.logout();
+  assert.deepEqual(codes, [undefined]);
+});
+
+test('the session notice explains why it ended and never mentions credentials', () => {
+  assert.equal(sessionNotice('SESSION_EXPIRED'), 'Su sesión venció por inactividad o por alcanzar la duración máxima. Inicie sesión de nuevo. Los formularios no enviados no se confirmaron.');
+  assert.equal(sessionNotice('AUTHENTICATION_REQUIRED'), sessionNotice('SESSION_EXPIRED'));
+  assert.equal(sessionNotice('SESSION_REVOKED'), 'Su sesión se cerró por un cambio en su cuenta. Inicie sesión de nuevo. Los formularios no enviados no se confirmaron.');
+  assert.doesNotMatch(sessionNotice('SESSION_EXPIRED'), /credenciales/i);
 });
 
 test('password change rotates CSRF before the next mutation', async () => {

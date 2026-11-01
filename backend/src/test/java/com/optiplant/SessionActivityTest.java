@@ -28,7 +28,7 @@ import tools.jackson.databind.json.JsonMapper;
 class SessionActivityTest {
     @AfterEach void clear() { SecurityContextHolder.clearContext(); }
 
-    @Test void successfulAdministrationRefreshesActivityAndQueriesDoNotAlterTheExistingPolicy() throws Exception {
+    @Test void successfulCommandsRefreshActivityAndQueriesDoNotAlterTheExistingPolicy() throws Exception {
         Instant now = Instant.parse("2026-10-25T12:00:00Z");
         Instant previous = now.minusSeconds(1200);
         var users = mock(UserAccountRepository.class);
@@ -43,7 +43,17 @@ class SessionActivityTest {
         Object[][] cases = {
             {"POST", "/api/v1/users", 201, now},
             {"POST", "/api/v1/branches/" + UUID.randomUUID() + "/update", 200, now},
+            {"POST", "/api/v1/sales", 201, now},
+            {"POST", "/api/v1/products/" + UUID.randomUUID() + "/update", 200, now},
+            {"POST", "/api/v1/catalog/price-lists/" + UUID.randomUUID() + "/prices", 200, now},
+            {"POST", "/api/v1/inventory/movements", 201, now},
+            {"POST", "/api/v1/purchases/suppliers", 201, now},
+            {"POST", "/api/v1/purchases/orders/" + UUID.randomUUID() + "/receive", 200, now},
+            {"POST", "/api/v1/transfers/" + UUID.randomUUID() + "/dispatch", 200, now},
+            {"POST", "/api/v1/logistics/routes", 201, now},
             {"POST", "/api/v1/users", 403, previous},
+            {"POST", "/api/v1/sales", 409, previous},
+            {"POST", "/api/v1/sales-archive", 200, previous},
             {"POST", "/api/v1/auth/password", 400, now},
             {"GET", "/api/v1/visibility/branches", 200, previous},
             {"GET", "/api/v1/auth/me", 200, previous},
@@ -59,5 +69,26 @@ class SessionActivityTest {
                 ((jakarta.servlet.http.HttpServletResponse) res).setStatus((Integer) value[2]));
             assertThat(session.getAttribute(SessionPolicyFilter.INTERACTIVE_AT)).as(value[0] + " " + value[1] + " " + value[2]).isEqualTo(value[3]);
         }
+    }
+
+    @Test void aCommandNeverExtendsTheAbsoluteLimit() throws Exception {
+        Instant now = Instant.parse("2026-10-25T12:00:00Z");
+        var users = mock(UserAccountRepository.class);
+        var accounts = mock(AccountService.class);
+        when(users.findByExternalId(any())).thenReturn(Optional.of(mock(UserAccount.class)));
+        when(accounts.valid(any(), any())).thenReturn(true);
+        var principal = new SessionPrincipal(UUID.randomUUID(), 0, "OPERATOR", UUID.randomUUID());
+        SecurityContextHolder.getContext().setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of()));
+        var filter = new SessionPolicyFilter(users, accounts, Clock.fixed(now, ZoneOffset.UTC), JsonMapper.builder().build());
+        var session = new MockHttpSession();
+        session.setAttribute(SessionPolicyFilter.STARTED_AT, now.minusSeconds(8 * 3600));
+        session.setAttribute(SessionPolicyFilter.INTERACTIVE_AT, now.minusSeconds(60));
+        var request = new MockHttpServletRequest("POST", "/api/v1/sales");
+        request.setSession(session);
+        var response = new MockHttpServletResponse();
+        filter.doFilter(request, response, (req, res) -> { throw new AssertionError("an expired session must not reach the command"); });
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("SESSION_EXPIRED");
     }
 }

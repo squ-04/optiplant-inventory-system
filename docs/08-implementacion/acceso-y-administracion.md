@@ -33,6 +33,8 @@ Todos los cambios usan cookie de sesión y CSRF; la autorización se comprueba e
 
 Errores: `400` solicitud inválida; `401` sin sesión/vencida/revocada; `403` sin permiso o CSRF inválido; `404` recurso inexistente autorizado; `409` duplicación/impedimentos. Las respuestas usan ProblemDetail. Las bajas no admiten DELETE ni reactivación implícita. Los campos desconocidos o identidades enviadas como editables se rechazan.
 
+Sesión (RNF-SEG-04): vence a los 30 minutos sin actividad interactiva o a las 8 horas de haberse iniciado, igual para todos los perfiles. Renuevan la inactividad el cambio de contraseña y los comandos `POST` exitosos sobre usuarios, sucursales, productos, listas de precios, movimientos, proveedores, órdenes de compra, ventas, transferencias y rutas; ningún comando extiende las 8 horas. Las consultas `GET`, incluidos el polling y el cambio de sección, no renuevan: leer o navegar durante 30 minutos sin ejecutar comandos cierra la sesión. Al perderla, el login explica la causa (`SESSION_EXPIRED` o `SESSION_REVOKED`) sin mencionar credenciales; una recarga posterior no la muestra, porque el navegador ya no conserva qué sesión había.
+
 ## Alcance y límites verificables
 
 - RF-0002 y RF-0003: administración integrada con persistencia y seguridad; RF-0006: ciclo de autenticación existente conectado a gestión/revocación y cambio voluntario visible.

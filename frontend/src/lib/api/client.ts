@@ -413,6 +413,12 @@ export class ApiError extends Error {
 export const sessionProblem = (reason: unknown) => reason instanceof ApiError
   && (reason.status === 401 || reason.problem.code === 'PASSWORD_CHANGE_REQUIRED');
 
+/** Why the server ended a session; a request that simply arrives without one reads as the same expiry. */
+export const sessionNotice = (code: string | undefined) => (code === 'SESSION_REVOKED'
+  ? 'Su sesión se cerró por un cambio en su cuenta.'
+  : 'Su sesión venció por inactividad o por alcanzar la duración máxima.')
+  + ' Inicie sesión de nuevo. Los formularios no enviados no se confirmaron.';
+
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
@@ -836,10 +842,11 @@ function saleDto(value: unknown): Sale {
 export class ApiClient {
   private baseUrl: string;
   private transport: typeof fetch;
-  private onSessionExpired: () => void;
+  private onSessionExpired: (code?: string) => void;
   private csrf: { token: string; headerName: string } | null = null;
 
-  constructor(baseUrl: string, transport: typeof fetch = fetch, onSessionExpired = () => {}) {
+  /** `onSessionExpired` receives the server's reason; logout and password changes end the session without one. */
+  constructor(baseUrl: string, transport: typeof fetch = fetch, onSessionExpired: (code?: string) => void = () => {}) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.transport = transport;
     this.onSessionExpired = onSessionExpired;
@@ -857,10 +864,6 @@ export class ApiClient {
       method, credentials: 'include', headers, signal,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (response.status === 401) {
-      this.csrf = null;
-      this.onSessionExpired();
-    }
     if (!response.ok) {
       let problem: ProblemDetail = {};
       try {
@@ -872,6 +875,10 @@ export class ApiClient {
           };
         }
       } catch { /* Keep HTTP status even when a gateway returns non-JSON. */ }
+      if (response.status === 401) {
+        this.csrf = null;
+        this.onSessionExpired(problem.code ?? 'UNKNOWN');
+      }
       throw new ApiError(response.status, problem);
     }
     return response;
