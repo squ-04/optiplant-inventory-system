@@ -37,7 +37,7 @@ Guía de la implementación de RF-0021 (crear órdenes de compra), RF-0022 (gest
 | `POST /api/v1/purchases/orders/{id}/receive` | Operador | `200`, orden `RECEIVED` con costo por unidad base, vencimiento y operación de inventario. Cuerpo vacío o `{}`. Requiere `Idempotency-Key`. |
 | `GET /api/v1/purchases/orders?branch=&supplier=&product=&status=&limit=` | Todos, según ámbito | Histórico, del más reciente al más antiguo, con `summary` por estado. Límite por defecto 100, máximo 500. |
 | `GET /api/v1/purchases/orders/{id}` | Todos, según ámbito | Orden con líneas, condiciones, historia de estados con motivos y vínculos de reemplazo. |
-| `GET /api/v1/inventory/branches/{id}/valuation` | Gerente (propia), administrador | Valoración registrada de la sucursal: `items` con `physicalQuantity`, `averageCost`, `value`, `exactValue`, y `totalValue`/`exactTotalValue`. |
+| `GET /api/v1/inventory/branches/{id}/valuation` | Gerente (propia), administrador | Valoración registrada de la sucursal: `items` con `physicalQuantity`, `averageCost`, `value`, `exactValue`, y `totalValue`/`exactTotalValue`; `transit` con lo pendiente al costo congelado, y `outgoingTransitValue`/`incomingTransitValue` (RF-0026-CA-02). |
 
 Los importes se devuelven a 2 decimales (`netAmount`, `totalNet`) y exactos (`exactNetAmount`, `exactTotalNet`). `supplier.name` es el nombre histórico que conserva la orden.
 
@@ -58,7 +58,7 @@ Los importes se devuelven a 2 decimales (`netAmount`, `totalNet`) y exactos (`ex
 
 - Una sucursal con borradores o pendientes no puede desactivarse hasta recibirlos o cancelarlos (INC-011/D05, RF-0003-CA-06).
 - No hay aprobación de compra, tesorería ni recepción parcial (RF-0022). La cancelación no se deshace: para retomar la compra se crea una orden de reemplazo.
-- RF-0026-CA-02 (costo congelado en tránsito) se entregó con las transferencias: `InventoryLedger` conserva el valor del tránsito, cubierto por `RouteAndDispatchHttpTest` y `TransferReceptionHttpTest`. La vista de valoración sigue mostrando solo existencias físicas.
+- RF-0026-CA-02 (costo congelado en tránsito) se entregó con las transferencias: `InventoryLedger` conserva el valor del tránsito, cubierto por `RouteAndDispatchHttpTest` y `TransferReceptionHttpTest`. La vista **Valoración** muestra lo pendiente en tránsito, hacia y desde la sucursal, al costo congelado; no lo suma al valor del inventario.
 - No se implementan pagos, saldos por pagar, impuestos, fletes ni otras monedas (INC-012/D05, INC-019/D01). Tampoco la desactivación de proveedores: la columna `active` existe y se respeta al crear órdenes, pero no tiene operación.
 - El código de orden `OC-` más el identificador interno con seis dígitos es una convención técnica de esta entrega.
 

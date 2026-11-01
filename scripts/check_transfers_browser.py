@@ -254,7 +254,7 @@ STAGES = {
       await page.locator('#transfer-detail').getByText('Recibida con discrepancia', { exact: true }).first().waitFor();
       await page.getByRole('heading', { name: 'Tiempo de entrega' }).waitFor();
       await page.getByText(/Recibida con discrepancia: no llegó mercancía, no cumple/).waitFor();
-      await page.getByText(/Hora de Bogotá \\(America\\/Bogota\\)/).waitFor();
+      await page.getByText(/Hora de Bogotá \\(America\\/Bogota\\)/).first().waitFor();
       await page.locator('.transfer-timing-compare').getByRole('heading', { name: 'Real', exact: true }).waitFor();
       check(await page.locator('.transfer-timing-compare dt', { hasText: 'Duración' }).count() === 2, 'Falta la duración estimada o real');
       await page.setViewportSize({ width: 390, height: 844 });
@@ -266,6 +266,18 @@ STAGES = {
       await page.setViewportSize({ width: 1280, height: 800 });
       await logout();
       return 'tras resolver la alerta, el destino ve TR-000001 «Recibida con discrepancia» con estimado y real en hora de Bogotá, sin opción de reporte; sin desbordamiento a 390 px';""",
+    "gerente-valora-transito": """
+      await login(config.originManager);
+      // RF-0026-CA-02: the pending units keep their frozen value, apart from the physical stock.
+      await page.getByRole('link', { name: 'Valoración', exact: true }).click();
+      const transit = page.getByRole('region', { name: /Valor en tránsito de/ }).getByRole('row').filter({ hasText: 'TR-000001' });
+      await transit.waitFor({ timeout: 10000 });
+      const pending = await transit.innerText();
+      check(/Hacia/.test(pending) && /12,000 unidad/.test(pending), 'Tránsito inesperado en la valoración: ' + pending);
+      await page.getByText('En tránsito de salida', { exact: true }).waitFor();
+      await page.screenshot({ path: config.screenshot.replace('.png', '-valoracion-transito.png'), fullPage: true });
+      await logout();
+      return 'el gerente de origen ve en Valoración las unidades pendientes de TR-000001 al costo congelado, aparte de las existencias';""",
     "gerente-reporta-cumplimiento": """
       await login(config.destinationManager);
       await page.getByRole('link', { name: 'Cumplimiento', exact: true }).click();
@@ -277,11 +289,11 @@ STAGES = {
       check((await summary.textContent()).startsWith('0,00 %'), 'El KPI no es 0,00 %');
       await page.getByRole('region', { name: 'Cumplimiento por ruta' }).getByText('R-NORTE-SUR').waitFor();
       await page.getByText('Con discrepancia: 1').waitFor();
-      await page.getByLabel('Desde', { exact: true }).fill('2031-02-01');
-      await page.getByLabel('Hasta', { exact: true }).fill('2031-01-01');
+      await page.locator('#compliance-from').fill('2031-02-01');
+      await page.locator('#compliance-to').fill('2031-01-01');
       await page.getByRole('button', { name: 'Generar reporte', exact: true }).click();
       await page.getByText('La fecha final del período no puede ser anterior a la inicial.').waitFor();
-      await page.getByLabel('Hasta', { exact: true }).fill('2031-02-28');
+      await page.locator('#compliance-to').fill('2031-02-28');
       await page.getByRole('button', { name: 'Generar reporte', exact: true }).click();
       await page.getByRole('heading', { name: /del 01\\/02\\/2031 al 28\\/02\\/2031/ }).waitFor();
       await page.getByText('Sin llegadas confirmadas en el período').first().waitFor();

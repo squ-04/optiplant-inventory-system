@@ -190,12 +190,20 @@ test('createPurchase sends the replaced order of a replacement', async () => {
 test('inventoryValuation reads the recorded balances of a branch and rejects malformed amounts', async () => {
   const body = { branch, readAt: '2026-10-28T15:00:00Z', totalValue: '123.33', exactTotalValue: '123.333334', items: [
     { productExternalId: line.productExternalId, sku: 'MAC-1', productName: 'Maceta', baseUnitName: 'unidad',
-      physicalQuantity: '8.000', averageCost: '15.000000', value: '120.00', exactValue: '120' }] };
+      physicalQuantity: '8.000', averageCost: '15.000000', value: '120.00', exactValue: '120' }],
+    outgoingTransitValue: '27.00', incomingTransitValue: '0.00', transit: [
+      { transferExternalId: line.productExternalId, transferCode: 'TR-000001', direction: 'OUTGOING', counterpart: branch,
+        productExternalId: line.productExternalId, sku: 'MAC-1', productName: 'Maceta', baseUnitName: 'unidad',
+        pendingQuantity: '3.000', frozenCost: '9.000000', value: '27.00', exactValue: '27' }] };
   const h = harness([Response.json(body), Response.json({ ...body, totalValue: '-1' }),
+    Response.json({ ...body, outgoingTransitValue: '-1' }),
+    Response.json({ ...body, transit: [{ ...body.transit[0], direction: 'SIDEWAYS' }] }),
     Response.json({ code: 'VALUATION_FORBIDDEN', detail: 'No autorizado.' }, { status: 403 })]);
   assert.deepEqual(await h.client.inventoryValuation(branch.externalId), body);
   assert.equal(h.calls[0].url, `http://localhost:8080/api/v1/inventory/branches/${branch.externalId}/valuation`);
-  await assert.rejects(h.client.inventoryValuation(branch.externalId), /Respuesta JSON inválida/);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await assert.rejects(h.client.inventoryValuation(branch.externalId), /Respuesta JSON inválida/);
+  }
   await assert.rejects(h.client.inventoryValuation(branch.externalId), (error: unknown) =>
     error instanceof ApiError && error.status === 403 && error.problem.code === 'VALUATION_FORBIDDEN');
 });

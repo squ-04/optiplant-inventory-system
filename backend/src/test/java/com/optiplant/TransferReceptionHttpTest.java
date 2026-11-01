@@ -225,6 +225,49 @@ class TransferReceptionHttpTest {
         assertThat(seen.at("/lines/0/missingQuantity").asText()).isEqualTo("3.000");
     }
 
+    @Test void theValuationShowsTheFrozenValueStillInTransitForBothBranches() throws Exception {
+        String id = inTransit(line(product, "unidad", "10"));
+        String code = read(originManager.get("/transfers/" + id)).get("code").asText();
+        JsonNode dispatched = read(originManager.get("/inventory/branches/" + a + "/valuation"));
+        assertThat(dispatched.get("outgoingTransitValue").asText()).isEqualTo("90.00");
+
+        assertThat(destinationOperator.post("/transfers/" + id + "/receive", quantities(1, "7")).statusCode()).isEqualTo(200);
+
+        // RF-0026-CA-02: the destination received value 63 and the 3 pending units keep value 27 in transit.
+        JsonNode origin = read(originManager.get("/inventory/branches/" + a + "/valuation"));
+        assertThat(origin.get("outgoingTransitValue").asText()).isEqualTo("27.00");
+        assertThat(origin.get("incomingTransitValue").asText()).isEqualTo("0.00");
+        assertThat(origin.get("transit")).hasSize(1);
+        JsonNode outgoing = origin.at("/transit/0");
+        assertThat(outgoing.get("transferCode").asText()).isEqualTo(code);
+        assertThat(outgoing.get("direction").asText()).isEqualTo("OUTGOING");
+        assertThat(outgoing.at("/counterpart/externalId").asText()).isEqualTo(b.toString());
+        assertThat(outgoing.get("sku").asText()).isEqualTo(read(originManager.get("/products/" + product)).get("sku").asText());
+        assertThat(outgoing.get("pendingQuantity").asText()).isEqualTo("3.000");
+        assertThat(outgoing.get("frozenCost").asText()).isEqualTo("9.000000");
+        assertThat(outgoing.get("value").asText()).isEqualTo("27.00");
+        assertThat(outgoing.get("exactValue").asText()).isEqualTo("27");
+
+        // The same units are pending for the destination, and never count as physical stock of either branch.
+        JsonNode destination = read(destinationManager.get("/inventory/branches/" + b + "/valuation"));
+        assertThat(destination.get("incomingTransitValue").asText()).isEqualTo("27.00");
+        assertThat(destination.get("outgoingTransitValue").asText()).isEqualTo("0.00");
+        assertThat(destination.at("/transit/0/direction").asText()).isEqualTo("INCOMING");
+        assertThat(destination.at("/transit/0/counterpart/externalId").asText()).isEqualTo(a.toString());
+        assertThat(destination.get("totalValue").asText()).isEqualTo("63.00");
+
+        // A later purchase in origin does not change the frozen value.
+        stock(product, "5", "20");
+        assertThat(read(originManager.get("/inventory/branches/" + a + "/valuation")).at("/transit/0/value").asText()).isEqualTo("27.00");
+
+        // An unrelated branch sees no transit, and a write-off leaves nothing pending.
+        assertThat(read(otherManager.get("/inventory/branches/" + c + "/valuation")).get("transit")).isEmpty();
+        assertThat(originManager.post("/transfers/" + id + "/discrepancy/transit-loss", loss()).statusCode()).isEqualTo(200);
+        JsonNode written = read(originManager.get("/inventory/branches/" + a + "/valuation"));
+        assertThat(written.get("transit")).isEmpty();
+        assertThat(written.get("outgoingTransitValue").asText()).isEqualTo("0.00");
+    }
+
     @Test void aZeroArrivalCreatesNoMovementAndLeavesEverythingInTransit() throws Exception {
         String id = inTransit(line(product, "unidad", "10"));
         int movements = jdbc.queryForObject("SELECT count(*) FROM inventory_movement", Integer.class);
@@ -425,7 +468,9 @@ class TransferReceptionHttpTest {
         // Replaying the key returns the same result; another write-off finds nothing pending.
         assertThat(read(originManager.post("/transfers/" + id + "/discrepancy/transit-loss", loss(), key))).isEqualTo(transfer);
         assertError(originManager.post("/transfers/" + id + "/discrepancy/transit-loss", loss()), 409, "TRANSIT_ALREADY_SETTLED");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM inventory_operation WHERE kind='TRANSIT_LOSS'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM inventory_operation WHERE kind='TRANSIT_LOSS' AND discrepancy_id="
+            + "(SELECT id FROM logistics_discrepancy WHERE external_id=?::uuid)", Integer.class,
+            transfer.at("/discrepancy/externalId").asText())).isEqualTo(1);
     }
 
     @Test void aResendIsANewTransferReferencingTheShortageAndNeverAnotherArrival() throws Exception {
