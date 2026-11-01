@@ -1,25 +1,36 @@
 # Uso de inteligencia artificial — OptiPlant
 
-Este documento responde a la sección 9 de la prueba técnica. Los prompts son textuales: se copiaron del historial de las sesiones, incluidas sus erratas. Las cifras provienen de ese historial y del repositorio al 31 de octubre de 2026.
+Este documento responde a la sección 9 de la prueba técnica: explica qué herramientas de IA se utilizaron, para qué, con qué resultados y bajo qué control. Los prompts son textuales: se copiaron del historial de las sesiones, incluidas sus erratas. Las cifras provienen de ese historial y del repositorio al 31 de octubre de 2026.
 
 ## 1. Enfoque
 
-La IA fue el componente estructural del desarrollo. El responsable definió el alcance, ratificó las decisiones, escribió las instrucciones y verificó los resultados. Los asistentes analizaron, redactaron, implementaron y probaron bajo esas instrucciones.
+La prueba pide que la IA sea un componente estructural del desarrollo, y así se utilizó: intervino en el análisis, la documentación, la implementación, las pruebas y la verificación. El proyecto exigía convertir el enunciado en 55 requerimientos implementados, con sus casos de uso, arquitectura, modelo de datos y pruebas, y mantener todo eso coherente. Los agentes aportaron capacidad de producción y de comprobación; la dirección del trabajo permaneció en manos del responsable.
 
-Los prompts son de autoría propia del responsable. Se ajustaron con ChatGPT para lograr mayor efectividad y un mejor entendimiento por parte del agente.
+Producir un artefacto y responder por él fueron, por tanto, actividades distintas:
 
-El trabajo siguió Organic Driven Development (ODD), el flujo de Gentle AI: explorar, clasificar la tarea, implementar y verificar. Las reglas permanentes del proyecto están en [`AGENTS.md`](../../AGENTS.md), y las tareas de mayor tamaño dejaron su registro en [`odd/tasks/`](../../odd/tasks/).
+| Actividad | Responsable del proyecto | Asistentes de IA |
+|---|---|---|
+| Alcance y requisitos | Definió el alcance y resolvió las incertidumbres. | Analizaron el enunciado, señalaron vacíos y redactaron los artefactos. |
+| Arquitectura y datos | Ratificó PEN-001–PEN-008 y delimitó qué podía resolverse de forma autónoma. | Evaluaron alternativas, documentaron las decisiones y especificaron el modelo. |
+| Implementación | Escribió las instrucciones, autorizó las rondas de trabajo y pidió correcciones. | Desarrollaron el código, las migraciones, la infraestructura y las pruebas. |
+| Verificación | Ejecutó los recorridos manuales y decidió qué hacer con los hallazgos. | Ejecutaron las pruebas, las exploraciones E2E y la verificación independiente. |
+
+Los prompts son de autoría propia del responsable. Se ajustaron con ChatGPT para lograr mayor efectividad y un mejor entendimiento por parte del agente. No solo pedían un resultado: fijaban sus fuentes, sus límites y lo que el agente tenía prohibido hacer, como modificar archivos durante un análisis, ampliar el alcance o integrar en `main`.
+
+El trabajo siguió Organic Driven Development (ODD), el flujo de Gentle AI: explorar, clasificar la tarea, implementar y verificar. Esta disciplina evitó que cada sesión empezara de cero: las reglas permanentes del proyecto están en [`AGENTS.md`](../../AGENTS.md), y las tareas de mayor tamaño dejaron su registro en [`odd/tasks/`](../../odd/tasks/).
 
 ## 2. Herramientas y etapas
+
+Cada herramienta cubrió una necesidad distinta del proceso: producir, conservar el contexto entre sesiones o comprobar el resultado.
 
 | Herramienta | Etapa | Uso |
 |---|---|---|
 | OpenCode con Gentle AI (GPT-6.1 Sol, GPT-5.6 Terra y, de forma puntual, DeepSeek V4.1 Flash) | 20–25 de octubre: 18 sesiones principales y 41 de subagentes | Análisis, requisitos, casos de uso, arquitectura, modelo de datos, diagramas, base técnica y RF-0002–RF-0007. |
 | Claude Code con Gentle AI (Claude Opus 5.5) | 26–31 de octubre: 45 sesiones | RF-0001 y RF-0008–RF-0055, correcciones, exploraciones E2E, guías manuales y revisión final. |
-| ChatGPT | Preparación de prompts | Ajuste de los prompts de autoría propia antes de enviarlos a los agentes. |
-| Agentes de Gentle AI | Todo el desarrollo | Orquestación, exploración, escritura y verificación independiente. |
+| ChatGPT | Preparación de prompts | Ajuste de los prompts de autoría propia antes de enviarlos a los agentes, para hacerlos más efectivos y comprensibles. |
+| Agentes de Gentle AI | Todo el desarrollo | Orquestación, exploración, escritura y verificación independiente de los cambios de riesgo. |
 | Revisión nativa de Gentle AI | Implementación | Revisión adversarial de los cambios de riesgo alto. |
-| Engram | Todo el desarrollo | Memoria persistente de decisiones y hallazgos entre sesiones. |
+| Engram | Todo el desarrollo | Memoria persistente de decisiones y hallazgos, para no perderlos entre sesiones. |
 | CodeGraph | Desde el 26 de octubre | Consulta del código mediante un grafo de símbolos. |
 | `playwright-cli` | Pruebas | Pruebas exploratorias de extremo a extremo en navegador. |
 | Skill `frontend-design` | Interfaz | Dirección visual, subordinada a requisitos y arquitectura. |
@@ -28,20 +39,20 @@ Aplicación de las áreas sugeridas en la sección 9.1:
 
 | Área | Aplicación | Evidencia |
 |---|---|---|
-| Diseño de arquitectura | Alternativas evaluadas por IA y decisiones PEN-001–PEN-008 ratificadas por el responsable. | [Arquitectura](../04-arquitectura/arquitectura-y-diseno-tecnico.md), [acta de decisiones](../04-arquitectura/respuestas-decisiones-arquitectura-optiplant.md) |
-| Generación de código | Backend, frontend, migraciones e infraestructura. | Historial de Git, [`odd/tasks/`](../../odd/tasks/) |
+| Diseño de arquitectura | La IA evaluó alternativas y sus consecuencias; las decisiones PEN-001–PEN-008 fueron ratificadas por el responsable. | [Arquitectura](../04-arquitectura/arquitectura-y-diseno-tecnico.md), [acta de decisiones](../04-arquitectura/respuestas-decisiones-arquitectura-optiplant.md) |
+| Generación de código | Backend, frontend, migraciones e infraestructura, desarrollados por bloques de requerimientos a partir de especificaciones aprobadas. | Historial de Git, [`odd/tasks/`](../../odd/tasks/) |
 | Generación de tests | Pruebas de backend y frontend junto con cada entrega. | `backend/src/test`, `frontend`, `scripts/run_checks.py` |
-| Documentación técnica | Requisitos, casos de uso, modelo, guías, este documento y el README. | [Índice documental](../indice-documental.md) |
+| Documentación técnica | Requisitos, casos de uso, modelo, guías, este documento y el README, trazados entre sí mediante identificadores estables. | [Índice documental](../indice-documental.md) |
 | Revisión de código | Verificadores independientes y revisión por riesgo. | Registros `## Log` en [`odd/tasks/`](../../odd/tasks/) |
-| Buenas prácticas | Evaluación de versiones y compatibilidad del stack. | Arquitectura §5.4 |
+| Buenas prácticas | Evaluación de versiones y compatibilidad del stack antes de implementar. | Arquitectura §5.4 |
 
 ## 3. Ejemplos de prompts y resultados
 
-Cada ejemplo muestra el prompt completo, salvo que se indique lo contrario. Se despliega con un clic.
+Los ejemplos recorren el proyecto desde el análisis hasta la verificación y muestran cómo cambió la dirección de la IA en cada etapa: primero restringida a leer, después integrando decisiones ajenas y, más adelante, con autonomía técnica delimitada. Cada ejemplo muestra el prompt completo, salvo que se indique lo contrario. Se despliega con un clic.
 
 ### 3.1. Análisis inicial de la prueba
 
-Primera interacción del proyecto. Exige separar hechos, inferencias y propuestas, y prohíbe modificar archivos.
+Primera interacción del proyecto. La prioridad era entender el enunciado antes de producir nada, de modo que el prompt exige separar hechos, inferencias y propuestas, y prohíbe modificar archivos.
 
 <details>
 <summary>Prompt del análisis integral (20 de octubre)</summary>
@@ -126,11 +137,11 @@ Espera mi revisión y autorización antes de realizar cualquier modificación al
 
 </details>
 
-**Resultado.** Un diagnóstico de las secciones 1 a 12 y un plan para las secciones 6 a 8. De ahí salieron las incertidumbres INC-001–INC-020, que el responsable resolvió en el [registro de decisiones](../01-requerimientos/decisiones-aprobadas-optiplant-v1.0.md).
+**Resultado.** Un diagnóstico de las secciones 1 a 12 y un plan para las secciones 6 a 8. Su principal utilidad fue transformar la ambigüedad del enunciado en preguntas concretas: de ahí salieron las incertidumbres INC-001–INC-020, que el responsable resolvió en el [registro de decisiones](../01-requerimientos/decisiones-aprobadas-optiplant-v1.0.md). Las decisiones documentadas sirvieron como referencia para la elaboración de los artefactos posteriores.
 
 ### 3.2. Integración de decisiones de arquitectura
 
-La decisión es humana; la IA solo la integra en el documento.
+Este prompt ilustra la separación entre decidir y documentar: la decisión es humana y la IA solo la integra en el documento, sin autorización para añadir otras.
 
 <details>
 <summary>Prompt de integración de PEN-001–PEN-008 (21 de octubre)</summary>
@@ -146,11 +157,11 @@ Realiza la actualización directamente, sin ciclos intermedios de propuestas o a
 
 </details>
 
-**Resultado.** El [documento de arquitectura](../04-arquitectura/arquitectura-y-diseno-tecnico.md), con las decisiones ARQ-001–ARQ-010 y su trazabilidad.
+**Resultado.** El [documento de arquitectura](../04-arquitectura/arquitectura-y-diseno-tecnico.md), con las decisiones ARQ-001–ARQ-010 y su trazabilidad. La integración dejó en un único documento lo aprobado y lo que aún debía comprobarse, y sirvió de referencia a las actividades siguientes, como el modelo de datos.
 
 ### 3.3. Modelo de datos
 
-El prompt completo tiene unos 20.000 caracteres. Este fragmento muestra sus dos primeras secciones: fuentes y autonomía técnica.
+Aquí la delegación fue deliberadamente mayor: una vez aprobada la arquitectura, el responsable autorizó de forma expresa las decisiones de diseño lógico y físico, siempre fundamentadas en lo ya ratificado. El prompt completo tiene unos 20.000 caracteres. Este fragmento muestra sus dos primeras secciones: fuentes y autonomía técnica.
 
 <details>
 <summary>Fragmento del prompt del modelo de datos (22 de octubre)</summary>
@@ -183,9 +194,11 @@ No debes limitarte a reproducir propuestas preliminares ni dejar indefinidos atr
 
 </details>
 
-**Resultado.** El [modelo de datos](../06-modelo-base-datos/modelo-datos.md), con diccionario, restricciones y diagramas E-R.
+**Resultado.** El [modelo de datos](../06-modelo-base-datos/modelo-datos.md), con diccionario, restricciones y diagramas E-R. El prompt fijó una precedencia de fuentes y prohibió introducir decisiones de versiones obsoletas.
 
 ### 3.4. Dirección visual
+
+El responsable definió la dirección visual a partir de una imagen de referencia, y dejó claro que la estética no podía alterar requisitos ni reglas de negocio.
 
 <details>
 <summary>Prompt de diseño visual (25 de octubre), acompañado de una imagen de referencia</summary>
@@ -223,7 +236,7 @@ Adaptar la interfaz a las necesidades funcionales de cada módulo, sin replicar 
 
 ### 3.5. Implementación de requerimientos funcionales
 
-Todos los bloques de RF se pidieron con una plantilla. La primera versión, para RF-0002–RF-0007, tenía unos 1.800 caracteres; la plantilla creció con la gestión de Git, el diseño visual, la metodología y la entrega hasta unos 5.000. Este es el último bloque.
+Todos los bloques de requerimientos compartieron una base de instrucciones que se amplió progresivamente durante el desarrollo. La primera versión, para RF-0002–RF-0007, tenía unos 1.800 caracteres; la base creció con la gestión de Git, el diseño visual, la metodología y la entrega hasta unos 5.000. Este es el último bloque.
 
 <details>
 <summary>Prompt de implementación de RF-0050–RF-0055 (30 de octubre)</summary>
@@ -275,11 +288,11 @@ Implementa directamente conforme a las especificaciones existentes, sin modifica
 
 </details>
 
-**Resultado.** El módulo `reports`, la vista de Reportes, pruebas y la [guía de reportes](../08-implementacion/reportes-exportables.md), en la rama `feat/rf0050-rf0055`. La IA comprobó que el enunciado fija exactamente tres categorías, y la revisión obligó a corregir el orden de la guarda de rol. El proceso está en [`odd/tasks/rf-0050-0055.md`](../../odd/tasks/rf-0050-0055.md).
+**Resultado.** El módulo `reports`, la vista de Reportes, pruebas y la [guía de reportes](../08-implementacion/reportes-exportables.md), en la rama `feat/rf0050-rf0055`. El prompt pidió contrastar el alcance en lugar de darlo por sentado, y la IA comprobó que el enunciado fija exactamente tres categorías. La revisión, por su parte, obligó a corregir el orden de la guarda de rol: un ejemplo de por qué la implementación no se aceptaba sin una verificación separada. El proceso está en [`odd/tasks/rf-0050-0055.md`](../../odd/tasks/rf-0050-0055.md).
 
 ### 3.6. Pruebas exploratorias con Playwright
 
-Se ejecutó cuatro veces: al cerrar cada grupo de requerimientos se cambiaba el foco y se conservaba una regresión de lo anterior. «Opción B» es una pila de Compose desechable con datos de prueba, decidida por el responsable.
+Se ejecutó cuatro veces: al cerrar cada grupo de requerimientos se cambiaba el foco y se conservaba una regresión de lo anterior. El prompt prohíbe corregir durante la exploración. «Opción B» es una pila de Compose desechable con datos de prueba, decidida por el responsable.
 
 <details>
 <summary>Prompt de exploración E2E (30 de octubre)</summary>
@@ -383,20 +396,22 @@ Prioriza la rapidez, la cobertura funcional y la reutilización de los datos par
 
 </details>
 
-**Resultado.** El [recorrido manual integral](../08-implementacion/recorrido-manual-integral.md). Se repitió para los demás módulos, y el responsable completó los cuatro recorridos: 25, 25, 26 y 26 pasos.
+**Resultado.** El [recorrido manual integral](../08-implementacion/recorrido-manual-integral.md). Se repitió para los demás módulos, y el responsable completó los cuatro recorridos: 25, 25, 26 y 26 pasos. Esta validación aportó lo que las pruebas no dieron: varios de los ajustes de la sección 4 surgieron de este uso real.
 
 ## 4. Evaluación crítica
 
 ### Qué aportó la IA
 
-- **Velocidad con trazabilidad.** 55 requerimientos, su documentación y 187 commits entre el 22 y el 31 de octubre.
-- **Detección de vacíos.** El análisis inicial convirtió la ambigüedad del enunciado en decisiones explícitas antes de programar.
-- **Consistencia.** Las reglas de `AGENTS.md` y la memoria persistente mantuvieron las decisiones entre sesiones.
-- **Pruebas que un desarrollador solo haría menos.** Exploraciones completas de extremo a extremo y comprobaciones en Excel real y Safari.
+El mayor aporte no fue solo producir más rápido, sino sostener a la vez volumen y control:
+
+- **Velocidad con trazabilidad.** Los 55 requerimientos y su documentación se completaron en 187 commits entre el 22 y el 31 de octubre (recuento con fusiones, previo a incorporar este documento). La velocidad no sacrificó el rastro: requisitos, decisiones y tareas conservan identificadores y registro.
+- **Detección de vacíos.** El análisis inicial convirtió la ambigüedad del enunciado en veinte bloques de incertidumbres (INC-001–INC-020), resueltos antes de programar.
+- **Consistencia.** Las reglas de `AGENTS.md` y la memoria persistente mantuvieron las decisiones a lo largo de decenas de sesiones.
+- **Capacidad de verificación.** Al cerrar RF-0055, `mvn verify` ejecutaba 190 pruebas y `pnpm test` 172. A ello se sumaron cuatro exploraciones de extremo a extremo, con 36 hallazgos, y comprobaciones en Excel real y Safari.
 
 ### Qué fue necesario ajustar manualmente
 
-Estos ejemplos provienen de las sesiones:
+La supervisión no fue una aprobación formal al final del proceso: en estos casos, tomados de las sesiones, el criterio humano cambió el resultado. Los agentes ejecutaron después los cambios acordados.
 
 | Situación | Intervención humana |
 |---|---|
@@ -412,27 +427,37 @@ Estos ejemplos provienen de las sesiones:
 
 ### Dónde no fue útil
 
-- **Validar una decisión de negocio.** La IA propone, pero no puede saber qué quiere el responsable. Solo decidió donde había autorización expresa.
+Estos fueron los principales límites observados:
+
+- **Validar una decisión de negocio.** La IA propone, pero no puede saber qué quiere el responsable. Solo decidió donde había autorización expresa, como en el diseño técnico del modelo de datos.
 - **Sustituir el uso real.** Varios problemas de experiencia los encontró una persona usando la aplicación, no una prueba automatizada.
 - **Confianza en resultados propios.** Las exploraciones también produjeron falsos positivos: un fallo se debió al localizador de la prueba y otro hallazgo se descartó al repetirlo. Todo hallazgo tuvo que reproducirse.
-- **Pruebas que no cubren lo que parecen cubrir.** La comprobación de arranque pasaba en verde mientras el arranque real sin configuración fallaba.
+- **Pruebas que no cubren lo que parecen cubrir.** La comprobación de arranque pasaba en verde mientras el arranque real sin configuración fallaba. Una prueba en verde generada por IA demuestra solo lo que realmente ejercita.
 - **Efectos secundarios del entorno.** Las pruebas de integración dejaron imágenes de Docker acumuladas, y hubo que pedir su limpieza más de una vez.
 - **Costo de contexto y ceremonia.** Los documentos extensos y los prompts largos consumen mucho contexto, y el protocolo añade pasos que en tareas pequeñas no aportan.
 
 ### Limitaciones
+
+El resultado debe leerse con estas reservas:
 
 - Los requisitos no funcionales no tienen una medición individual.
 - El contenido generado se verificó con pruebas y recorridos, no mediante una revisión humana línea por línea.
 - Las exploraciones E2E siguen marcadas como evidencia pendiente de revisión; no son decisiones aprobadas.
 - Los commits no llevan atribución de IA; este documento es la declaración de su uso.
 
-## 5. Estimación de contenido generado con IA
+## 5. Estimación de la participación de IA
 
-Es una estimación del responsable a partir del proceso seguido; no es una medición.
+Estos valores son una estimación del responsable a partir del proceso seguido. No son una medición ni una atribución precisa de autoría: indican en qué medida los asistentes de IA intervinieron en la producción de cada artefacto, no quién respondió por él.
 
-| Artefacto | Generado con asistencia de IA | Aporte humano |
+| Artefacto | Participación de IA (estimada) | Contribución humana |
 |---|---|---|
-| Código de backend y frontend | 100 % | Requisitos, instrucciones, correcciones funcionales y verificación. |
-| Pruebas automatizadas | 100 % | Criterios de aceptación y exigencia de cobertura. |
-| Documentación técnica | ~90 % | Decisiones, correcciones, aprobación y contenido verificado por el responsable. |
-| Decisiones de alcance y arquitectura | Propuestas y análisis | Ratificación: la decisión final fue humana. |
+| Código de backend y frontend | 100 %, desarrollado con asistencia de IA | Requisitos, instrucciones, correcciones funcionales y verificación. |
+| Pruebas automatizadas | 100 %, desarrolladas con asistencia de IA | Criterios de aceptación y exigencia de cobertura. |
+| Documentación técnica | ~90 %, elaborada con asistencia de IA | Decisiones, correcciones, aprobación y contenido verificado por el responsable. |
+| Decisiones de alcance y arquitectura | Propuestas y análisis | Ratificación: la decisión final fue humana, salvo el diseño técnico delegado de forma expresa. |
+
+Una participación del 100 % indica que la asistencia de IA abarcó la totalidad de la producción de esos artefactos, lo que no implica ausencia de criterio, dirección o responsabilidad humana. El responsable definió qué debía construirse y con qué límites, y responde por las decisiones técnicas y funcionales del resultado. Su contribución se expresa en requisitos, instrucciones, decisiones, correcciones y validación.
+
+## 6. Cierre
+
+El resultado se explica por la combinación de tres elementos. La automatización asistida permitió producir y comprobar un volumen de trabajo amplio; las decisiones humanas fijaron el alcance y corrigieron el rumbo cuando la IA no podía saber qué se quería; y la verificación, mediante pruebas, revisiones y recorridos manuales, separó lo generado de lo aceptado. Ninguno de los tres habría bastado por sí solo.
