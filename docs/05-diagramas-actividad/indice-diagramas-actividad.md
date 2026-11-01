@@ -1,6 +1,6 @@
 # Diagramas de actividad — Transferencias y venta
 
-Diagramas UML editables de los dos flujos solicitados en la sección 7. Conservan el estilo visual aprobado en [`../diagramas-v2/`](../diagramas-v2/), adaptado a la notación de actividad: carriles de responsabilidad, acciones redondeadas, decisiones con guardas, inicio y finales.
+Diagramas UML editables de los dos flujos solicitados en la sección 7. Conservan el estilo visual aprobado en [`../02-casos-de-uso/diagramas/`](../02-casos-de-uso/diagramas/), adaptado a la notación de actividad: carriles de responsabilidad, acciones redondeadas, decisiones con guardas, inicio y finales.
 
 | Flujo | Archivo editable | Vista previa |
 |---|---|---|
@@ -13,14 +13,14 @@ Abrir los archivos `.excalidraw` en Excalidraw. Los conectores y sus guardas est
 
 | Contenido representado | Fuente vigente |
 |---|---|
-| Obligación de ambos diagramas | [`prueba-tecnica.md`](../../00-source/prueba-tecnica.md), sección 7, líneas 148–155; fuente externa definitiva: PDF original en la misma carpeta. |
-| Permisos, actores y alcance de venta | [`especificacion-casos-de-uso.md`](../especificacion-casos-de-uso.md), UC-013 y UC-014; [`requisitos-funcionales.md`](../../01-requerimientos/requisitos-funcionales.md), RF-0027 a RF-0031 y matriz de permisos. |
+| Obligación de ambos diagramas | [`prueba-tecnica.md`](../00-source/prueba-tecnica.md), sección 7, líneas 148–155; fuente externa definitiva: PDF original en la misma carpeta. |
+| Permisos, actores y alcance de venta | [`especificacion-casos-de-uso.md`](../02-casos-de-uso/especificacion-casos-de-uso.md), UC-013 y UC-014; [`requisitos-funcionales.md`](../01-requerimientos/requisitos-funcionales.md), RF-0027 a RF-0031 y matriz de permisos. |
 | Solicitud, preparación, aprobación/rechazo y despacho | RF-0032 a RF-0035; RF-0034-CA-03–RF-0034-CA-04; H v1.2/01; UC-015 y HU-015. |
 | Llegada única, recepción completa, parcial y llegada cero | RF-0036 y RF-0037; UC-016 y UC-017. |
 | Tratamiento del faltante y resolución de alerta | RF-0038 y RF-0039. |
 | Estados históricos de transferencia | RF-0042. |
 
-Se contrastaron las [decisiones ratificadas](../../01-requerimientos/decisiones-aprobadas-optiplant-v1.0.md), las restricciones operativas y los permisos. Las precisiones humanas integradas en los RF vigentes prevalecen sobre los antecedentes sustituidos, conforme a la jerarquía de la especificación de casos de uso.
+Se contrastaron las [decisiones ratificadas](../01-requerimientos/decisiones-aprobadas-optiplant-v1.0.md), las restricciones operativas y los permisos. Las precisiones humanas integradas en los RF vigentes prevalecen sobre los antecedentes sustituidos, conforme a la jerarquía de la especificación de casos de uso.
 
 ## Lectura de los flujos
 

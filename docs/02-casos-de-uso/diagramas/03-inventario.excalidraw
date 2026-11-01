@@ -1139,16 +1139,12 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-c1b52d9539f0",
-          "type": "text"
-        },
-        {
-          "id": "text-e6ca220f469c",
-          "type": "text"
-        },
-        {
           "id": "arrow-ad064e5bb599",
           "type": "arrow"
+        },
+        {
+          "id": "text-c1b52d9539f0",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -1158,12 +1154,12 @@
     {
       "id": "text-c1b52d9539f0",
       "type": "text",
-      "x": 735,
-      "y": 272,
+      "x": 735.0,
+      "y": 296.25,
       "width": 430,
-      "height": 22.5,
+      "height": 47.5,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -1182,50 +1178,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-007",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-f90e3262e7b3",
-      "originalText": "UC-007",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-e6ca220f469c",
-      "type": "text",
-      "x": 735,
-      "y": 316,
-      "width": 430,
-      "height": 23.75,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 786210114,
-      "version": 1,
-      "versionNonce": 600706594,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Consultar inventario y catálogo local",
+      "text": "UC-007\nConsultar inventario y catálogo local",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-f90e3262e7b3",
-      "originalText": "Consultar inventario y catálogo local",
+      "originalText": "UC-007\nConsultar inventario y catálogo local",
       "autoResize": false,
       "lineHeight": 1.25
     },
@@ -1256,20 +1215,16 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-3096cd21e3c2",
-          "type": "text"
-        },
-        {
-          "id": "text-f1256bd33510",
-          "type": "text"
-        },
-        {
           "id": "arrow-77c4c4a5e4da",
           "type": "arrow"
         },
         {
           "id": "arrow-8f7906c9f2c9",
           "type": "arrow"
+        },
+        {
+          "id": "text-3096cd21e3c2",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -1279,12 +1234,12 @@
     {
       "id": "text-3096cd21e3c2",
       "type": "text",
-      "x": 735,
-      "y": 472,
+      "x": 735.0,
+      "y": 484.375,
       "width": 430,
-      "height": 22.5,
+      "height": 71.25,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -1303,50 +1258,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-008",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-9433f5570dbf",
-      "originalText": "UC-008",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-f1256bd33510",
-      "type": "text",
-      "x": 735,
-      "y": 516,
-      "width": 430,
-      "height": 47.5,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 650857450,
-      "version": 1,
-      "versionNonce": 1730546855,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Registrar movimiento de inventario y\nconsultar historial",
+      "text": "UC-008\nRegistrar movimiento de inventario y\nconsultar historial",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-9433f5570dbf",
-      "originalText": "Registrar movimiento de inventario y consultar historial",
+      "originalText": "UC-008\nRegistrar movimiento de inventario y consultar historial",
       "autoResize": false,
       "lineHeight": 1.25
     },
@@ -1377,14 +1295,6 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-dc9fed3a7e15",
-          "type": "text"
-        },
-        {
-          "id": "text-f67b402b48b0",
-          "type": "text"
-        },
-        {
           "id": "arrow-0e5a0346631c",
           "type": "arrow"
         },
@@ -1395,6 +1305,10 @@
         {
           "id": "arrow-93073dbbf9e8",
           "type": "arrow"
+        },
+        {
+          "id": "text-dc9fed3a7e15",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -1404,12 +1318,12 @@
     {
       "id": "text-dc9fed3a7e15",
       "type": "text",
-      "x": 735,
-      "y": 672,
+      "x": 735.0,
+      "y": 684.375,
       "width": 430,
-      "height": 22.5,
+      "height": 71.25,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -1428,50 +1342,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-009",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-f24a097a9bd9",
-      "originalText": "UC-009",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-f67b402b48b0",
-      "type": "text",
-      "x": 735,
-      "y": 716,
-      "width": 430,
-      "height": 47.5,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 216495968,
-      "version": 1,
-      "versionNonce": 1211174487,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Consultar y atender alertas de\ninventario",
+      "text": "UC-009\nConsultar y atender alertas de\ninventario",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-f24a097a9bd9",
-      "originalText": "Consultar y atender alertas de inventario",
+      "originalText": "UC-009\nConsultar y atender alertas de inventario",
       "autoResize": false,
       "lineHeight": 1.25
     },

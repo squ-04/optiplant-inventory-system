@@ -891,14 +891,6 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-4ff7411376ae",
-          "type": "text"
-        },
-        {
-          "id": "text-af6c8a7dafcd",
-          "type": "text"
-        },
-        {
           "id": "arrow-648d8489ff14",
           "type": "arrow"
         },
@@ -909,6 +901,10 @@
         {
           "id": "arrow-1e52e1b59ef3",
           "type": "arrow"
+        },
+        {
+          "id": "text-4ff7411376ae",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -918,12 +914,12 @@
     {
       "id": "text-4ff7411376ae",
       "type": "text",
-      "x": 735,
-      "y": 272,
+      "x": 735.0,
+      "y": 284.375,
       "width": 430,
-      "height": 22.5,
+      "height": 71.25,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -942,50 +938,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-006",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-8e3ceb3ce0e2",
-      "originalText": "UC-006",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-af6c8a7dafcd",
-      "type": "text",
-      "x": 735,
-      "y": 316,
-      "width": 430,
-      "height": 47.5,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 550720619,
-      "version": 1,
-      "versionNonce": 1762385116,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Administrar catálogo, habilitación local\ny unidades",
+      "text": "UC-006\nAdministrar catálogo, habilitación local\ny unidades",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-8e3ceb3ce0e2",
-      "originalText": "Administrar catálogo, habilitación local y unidades",
+      "originalText": "UC-006\nAdministrar catálogo, habilitación local y unidades",
       "autoResize": false,
       "lineHeight": 1.25
     },

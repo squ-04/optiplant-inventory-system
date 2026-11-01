@@ -903,14 +903,6 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-1f579458ce34",
-          "type": "text"
-        },
-        {
-          "id": "text-c04f57f8f193",
-          "type": "text"
-        },
-        {
           "id": "arrow-12f6ce9e862a",
           "type": "arrow"
         },
@@ -921,6 +913,10 @@
         {
           "id": "arrow-03c8f382527f",
           "type": "arrow"
+        },
+        {
+          "id": "text-1f579458ce34",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -930,12 +926,12 @@
     {
       "id": "text-1f579458ce34",
       "type": "text",
-      "x": 735,
-      "y": 272,
+      "x": 735.0,
+      "y": 296.25,
       "width": 430,
-      "height": 22.5,
+      "height": 47.5,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -954,50 +950,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-010",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-bfd25b738f7f",
-      "originalText": "UC-010",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-c04f57f8f193",
-      "type": "text",
-      "x": 735,
-      "y": 316,
-      "width": 430,
-      "height": 23.75,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 323131146,
-      "version": 1,
-      "versionNonce": 1205483576,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Gestionar orden de compra y condiciones",
+      "text": "UC-010\nGestionar orden de compra y condiciones",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-bfd25b738f7f",
-      "originalText": "Gestionar orden de compra y condiciones",
+      "originalText": "UC-010\nGestionar orden de compra y condiciones",
       "autoResize": false,
       "lineHeight": 1.25
     },
@@ -1028,16 +987,12 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-e1cf32ee282c",
-          "type": "text"
-        },
-        {
-          "id": "text-6c38dc7574bd",
-          "type": "text"
-        },
-        {
           "id": "arrow-f6e407c0e140",
           "type": "arrow"
+        },
+        {
+          "id": "text-e1cf32ee282c",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -1047,12 +1002,12 @@
     {
       "id": "text-e1cf32ee282c",
       "type": "text",
-      "x": 735,
-      "y": 472,
+      "x": 735.0,
+      "y": 484.375,
       "width": 430,
-      "height": 22.5,
+      "height": 71.25,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -1071,50 +1026,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-011",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-52bbfdbd911e",
-      "originalText": "UC-011",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-6c38dc7574bd",
-      "type": "text",
-      "x": 735,
-      "y": 516,
-      "width": 430,
-      "height": 47.5,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 1372650508,
-      "version": 1,
-      "versionNonce": 1884152656,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Confirmar recepción de compra y valorar\ninventario",
+      "text": "UC-011\nConfirmar recepción de compra y valorar\ninventario",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-52bbfdbd911e",
-      "originalText": "Confirmar recepción de compra y valorar inventario",
+      "originalText": "UC-011\nConfirmar recepción de compra y valorar inventario",
       "autoResize": false,
       "lineHeight": 1.25
     },
@@ -1145,20 +1063,16 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-c32300f17fb5",
-          "type": "text"
-        },
-        {
-          "id": "text-d66a52eec47f",
-          "type": "text"
-        },
-        {
           "id": "arrow-22b4731e2eab",
           "type": "arrow"
         },
         {
           "id": "arrow-d03bb555bd0d",
           "type": "arrow"
+        },
+        {
+          "id": "text-c32300f17fb5",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -1168,12 +1082,12 @@
     {
       "id": "text-c32300f17fb5",
       "type": "text",
-      "x": 735,
-      "y": 672,
+      "x": 735.0,
+      "y": 684.375,
       "width": 430,
-      "height": 22.5,
+      "height": 71.25,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -1192,50 +1106,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-012",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-af6ddee139aa",
-      "originalText": "UC-012",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-d66a52eec47f",
-      "type": "text",
-      "x": 735,
-      "y": 716,
-      "width": 430,
-      "height": 47.5,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 765472902,
-      "version": 1,
-      "versionNonce": 925415010,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Consultar compras y valoración\nautorizada",
+      "text": "UC-012\nConsultar compras y valoración\nautorizada",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-af6ddee139aa",
-      "originalText": "Consultar compras y valoración autorizada",
+      "originalText": "UC-012\nConsultar compras y valoración autorizada",
       "autoResize": false,
       "lineHeight": 1.25
     },

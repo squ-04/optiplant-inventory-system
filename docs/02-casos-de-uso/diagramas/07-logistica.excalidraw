@@ -891,14 +891,6 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-1c3946e27bd3",
-          "type": "text"
-        },
-        {
-          "id": "text-f53932438229",
-          "type": "text"
-        },
-        {
           "id": "arrow-2e23b47ba3a5",
           "type": "arrow"
         },
@@ -909,6 +901,10 @@
         {
           "id": "arrow-ff2dfc828e9e",
           "type": "arrow"
+        },
+        {
+          "id": "text-1c3946e27bd3",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -918,12 +914,12 @@
     {
       "id": "text-1c3946e27bd3",
       "type": "text",
-      "x": 735,
-      "y": 272,
+      "x": 735.0,
+      "y": 284.375,
       "width": 430,
-      "height": 22.5,
+      "height": 71.25,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -942,50 +938,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-018",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-4a0a7ef09788",
-      "originalText": "UC-018",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-f53932438229",
-      "type": "text",
-      "x": 735,
-      "y": 316,
-      "width": 430,
-      "height": 47.5,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 2080253065,
-      "version": 1,
-      "versionNonce": 1124678172,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Administrar y consultar logística de\ntransferencias",
+      "text": "UC-018\nAdministrar y consultar logística de\ntransferencias",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-4a0a7ef09788",
-      "originalText": "Administrar y consultar logística de transferencias",
+      "originalText": "UC-018\nAdministrar y consultar logística de transferencias",
       "autoResize": false,
       "lineHeight": 1.25
     },

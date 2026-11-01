@@ -899,20 +899,16 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-10c5d9202595",
-          "type": "text"
-        },
-        {
-          "id": "text-d0d78ee47288",
-          "type": "text"
-        },
-        {
           "id": "arrow-246f1cf50134",
           "type": "arrow"
         },
         {
           "id": "arrow-fa5c75953036",
           "type": "arrow"
+        },
+        {
+          "id": "text-10c5d9202595",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -922,12 +918,12 @@
     {
       "id": "text-10c5d9202595",
       "type": "text",
-      "x": 735,
-      "y": 272,
+      "x": 735.0,
+      "y": 296.25,
       "width": 430,
-      "height": 22.5,
+      "height": 47.5,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -946,50 +942,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-013",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-937130ac23c1",
-      "originalText": "UC-013",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-d0d78ee47288",
-      "type": "text",
-      "x": 735,
-      "y": 316,
-      "width": 430,
-      "height": 23.75,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 594423546,
-      "version": 1,
-      "versionNonce": 1252712424,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Gestionar listas de precios",
+      "text": "UC-013\nGestionar listas de precios",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-937130ac23c1",
-      "originalText": "Gestionar listas de precios",
+      "originalText": "UC-013\nGestionar listas de precios",
       "autoResize": false,
       "lineHeight": 1.25
     },
@@ -1020,14 +979,6 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-9bafe81e89b5",
-          "type": "text"
-        },
-        {
-          "id": "text-2a6a0b5a45d2",
-          "type": "text"
-        },
-        {
           "id": "arrow-b540cfb872ab",
           "type": "arrow"
         },
@@ -1038,6 +989,10 @@
         {
           "id": "arrow-3dc031449e58",
           "type": "arrow"
+        },
+        {
+          "id": "text-9bafe81e89b5",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -1047,12 +1002,12 @@
     {
       "id": "text-9bafe81e89b5",
       "type": "text",
-      "x": 735,
-      "y": 472,
+      "x": 735.0,
+      "y": 496.25,
       "width": 430,
-      "height": 22.5,
+      "height": 47.5,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -1071,50 +1026,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-014",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-58b6c21081b0",
-      "originalText": "UC-014",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-2a6a0b5a45d2",
-      "type": "text",
-      "x": 735,
-      "y": 516,
-      "width": 430,
-      "height": 23.75,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 235929360,
-      "version": 1,
-      "versionNonce": 486251821,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Registrar venta y consultar comprobante",
+      "text": "UC-014\nRegistrar venta y consultar comprobante",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-58b6c21081b0",
-      "originalText": "Registrar venta y consultar comprobante",
+      "originalText": "UC-014\nRegistrar venta y consultar comprobante",
       "autoResize": false,
       "lineHeight": 1.25
     },

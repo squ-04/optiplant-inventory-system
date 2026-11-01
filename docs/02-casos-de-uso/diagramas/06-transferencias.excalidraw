@@ -667,20 +667,16 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-c909d9795cbd",
-          "type": "text"
-        },
-        {
-          "id": "text-85a68418a150",
-          "type": "text"
-        },
-        {
           "id": "arrow-bb7b597b6ee0",
           "type": "arrow"
         },
         {
           "id": "arrow-99d9b3a2188a",
           "type": "arrow"
+        },
+        {
+          "id": "text-c909d9795cbd",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -690,12 +686,12 @@
     {
       "id": "text-c909d9795cbd",
       "type": "text",
-      "x": 735,
-      "y": 272,
+      "x": 735.0,
+      "y": 284.375,
       "width": 430,
-      "height": 22.5,
+      "height": 71.25,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -714,50 +710,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-015",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-b1582da68b07",
-      "originalText": "UC-015",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-85a68418a150",
-      "type": "text",
-      "x": 735,
-      "y": 316,
-      "width": 430,
-      "height": 47.5,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 832341603,
-      "version": 1,
-      "versionNonce": 709581611,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Solicitar, preparar, aprobar y despachar\ntransferencia",
+      "text": "UC-015\nSolicitar, preparar, aprobar y despachar\ntransferencia",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-b1582da68b07",
-      "originalText": "Solicitar, preparar, aprobar y despachar transferencia",
+      "originalText": "UC-015\nSolicitar, preparar, aprobar y despachar transferencia",
       "autoResize": false,
       "lineHeight": 1.25
     },
@@ -788,14 +747,6 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-64e6555f1e64",
-          "type": "text"
-        },
-        {
-          "id": "text-14f953b45481",
-          "type": "text"
-        },
-        {
           "id": "arrow-ad791920b254",
           "type": "arrow"
         },
@@ -806,6 +757,10 @@
         {
           "id": "arrow-f9487a4d196d",
           "type": "arrow"
+        },
+        {
+          "id": "text-64e6555f1e64",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -815,12 +770,12 @@
     {
       "id": "text-64e6555f1e64",
       "type": "text",
-      "x": 735,
-      "y": 472,
+      "x": 735.0,
+      "y": 496.25,
       "width": 430,
-      "height": 22.5,
+      "height": 47.5,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -839,50 +794,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-016",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-19b60f5d48d4",
-      "originalText": "UC-016",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-14f953b45481",
-      "type": "text",
-      "x": 735,
-      "y": 516,
-      "width": 430,
-      "height": 23.75,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 316970056,
-      "version": 1,
-      "versionNonce": 554690965,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Confirmar recepción de transferencia",
+      "text": "UC-016\nConfirmar recepción de transferencia",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-19b60f5d48d4",
-      "originalText": "Confirmar recepción de transferencia",
+      "originalText": "UC-016\nConfirmar recepción de transferencia",
       "autoResize": false,
       "lineHeight": 1.25
     },
@@ -913,14 +831,6 @@
       "isDeleted": false,
       "boundElements": [
         {
-          "id": "text-7c8bba957196",
-          "type": "text"
-        },
-        {
-          "id": "text-6a81fe3746b1",
-          "type": "text"
-        },
-        {
           "id": "arrow-91659830c726",
           "type": "arrow"
         },
@@ -931,6 +841,10 @@
         {
           "id": "arrow-f9487a4d196d",
           "type": "arrow"
+        },
+        {
+          "id": "text-7c8bba957196",
+          "type": "text"
         }
       ],
       "updated": 1761091200000,
@@ -940,12 +854,12 @@
     {
       "id": "text-7c8bba957196",
       "type": "text",
-      "x": 735,
-      "y": 672,
+      "x": 735.0,
+      "y": 684.375,
       "width": 430,
-      "height": 22.5,
+      "height": 71.25,
       "angle": 0,
-      "strokeColor": "#1971c2",
+      "strokeColor": "#212529",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -964,50 +878,13 @@
       "updated": 1761091200000,
       "link": null,
       "locked": false,
-      "fontSize": 18,
-      "fontFamily": 2,
-      "text": "UC-017",
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "ellipse-68ab0b5de629",
-      "originalText": "UC-017",
-      "autoResize": false,
-      "lineHeight": 1.25
-    },
-    {
-      "id": "text-6a81fe3746b1",
-      "type": "text",
-      "x": 735,
-      "y": 716,
-      "width": 430,
-      "height": 47.5,
-      "angle": 0,
-      "strokeColor": "#212529",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": null,
-      "roundness": null,
-      "seed": 334056159,
-      "version": 1,
-      "versionNonce": 1774724510,
-      "isDeleted": false,
-      "boundElements": [],
-      "updated": 1761091200000,
-      "link": null,
-      "locked": false,
       "fontSize": 19,
       "fontFamily": 2,
-      "text": "Registrar recepción parcial y gestionar\nfaltante",
+      "text": "UC-017\nRegistrar recepción parcial y gestionar\nfaltante",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "ellipse-68ab0b5de629",
-      "originalText": "Registrar recepción parcial y gestionar faltante",
+      "originalText": "UC-017\nRegistrar recepción parcial y gestionar faltante",
       "autoResize": false,
       "lineHeight": 1.25
     },
@@ -1580,8 +1457,8 @@
       "type": "text",
       "x": 432.79999999999995,
       "y": 258.2,
-      "width": 162.0,
-      "height": 35.0,
+      "width": 162,
+      "height": 35,
       "angle": 0,
       "strokeColor": "#2f9e44",
       "backgroundColor": "transparent",
@@ -1604,11 +1481,11 @@
       "locked": false,
       "fontSize": 14,
       "fontFamily": 2,
-      "text": "Aprueba / cancela en\norigen",
+      "text": "Aprueba / rechaza /\ncancela en origen",
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "arrow-99d9b3a2188a",
-      "originalText": "Aprueba / cancela en origen",
+      "originalText": "Aprueba / rechaza / cancela en origen",
       "autoResize": true,
       "lineHeight": 1.25
     },
