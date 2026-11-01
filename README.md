@@ -107,6 +107,7 @@ La prueba deja alternativas abiertas o incluye ejemplos que no son obligatorios.
 | Clasificación de rutas | Clasificar rutas «por prioridad, costo o tiempo» (§3.5) | Solo por **prioridad manual** alta, media o baja. Sin tarifas ni optimización; el tiempo se mide aparte. | INC-017/D02 |
 | Urgencia en transferencias | Aparece en una historia de usuario de ejemplo (§6.3) | **No se incorpora** en esta versión. Es distinta de la prioridad de ruta, que sí existe. | INC-019/D03 |
 | Órdenes de pago | Aparecen en una historia de usuario de ejemplo (§6.3) | **Quedan fuera**: no es una funcionalidad financiera obligatoria. Se conservan las condiciones de compra y el plazo de pago. | INC-019/D01 |
+| Sistema externo | Actor opcional que se integra con ERP o punto de venta por API (§6.2) | **Queda excluido**: no se implementan integraciones externas. Esto no afecta a la API REST entre el frontend y el backend. | Requisitos funcionales, sección 1 |
 | Administrador en transferencias | La solicitud la genera «la sucursal destino (o un administrador)» (§3.4) | Solo la solicita el **operador de la sucursal destino**. El administrador supervisa, pero no solicita, aprueba ni rechaza por herencia de rol. | RF-0032, H v0.16 |
 
 El detalle está en el [registro de decisiones aprobadas](docs/01-requerimientos/decisiones-aprobadas-optiplant-v1.0.md) y en los [requisitos funcionales](docs/01-requerimientos/requisitos-funcionales.md).
