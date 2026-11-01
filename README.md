@@ -1,10 +1,10 @@
 # OptiPlant — Sistema de Inventario Multi-Sucursal
 
-Aplicación web para gestionar de forma centralizada el inventario de una red de sucursales: catálogo, existencias, compras, ventas, transferencias entre sucursales, logística, indicadores y reportes. Cada sucursal opera con autonomía local sobre una plataforma común, y un administrador supervisa toda la red.
+Aplicación web para gestionar de forma centralizada el inventario de una red de sucursales: catálogo, existencias, compras, ventas, transferencias entre sucursales, logística, indicadores y reportes. Resuelve una necesidad concreta: que cada sucursal opere con autonomía local sin que la red pierda una única versión de sus existencias. Por eso todas trabajan sobre una plataforma común, con permisos por sucursal, y un administrador supervisa el conjunto.
 
 Es la solución a la [prueba técnica de OptiPlant Consultores](docs/00-source/prueba-tecnica.pdf). Los 55 requerimientos funcionales (RF-0001–RF-0055) están implementados.
 
-Perfiles del sistema:
+El acceso se organiza en tres perfiles, que limitan tanto las acciones como las sucursales visibles:
 
 | Perfil | Alcance |
 |---|---|
@@ -14,17 +14,17 @@ Perfiles del sistema:
 
 ## Instalación
 
-Solo se necesita Docker con Compose y Git. Java, Maven, Node y PostgreSQL se ejecutan dentro de contenedores.
+Solo se necesita Docker con Compose y Git. Java, Maven, Node y PostgreSQL se ejecutan dentro de contenedores, lo que evita instalaciones locales y reduce las diferencias entre equipos.
 
 ```sh
-git clone <url-del-repositorio>
+git clone https://github.com/squ-04/optiplant-inventory-system
 cd optiplant-inventory-system
 docker compose up --build --wait
 ```
 
 `--build` construye las imágenes y `--wait` devuelve el control cuando los servicios están sanos. La primera construcción puede tardar varios minutos.
 
-No hay configuración previa: el servicio de un solo uso `credentials` genera las credenciales en el primer arranque y las conserva en un volumen.
+No hay configuración previa, como exige el enunciado (§5): el servicio de un solo uso `credentials` genera las credenciales en el primer arranque y las conserva en un volumen. Se prefirió esta solución a fijar valores por defecto en `compose.yaml`, porque estos quedarían publicados en el repositorio.
 
 | Servicio | Dirección |
 |---|---|
@@ -32,13 +32,13 @@ No hay configuración previa: el servicio de un solo uso `credentials` genera la
 | API | <http://localhost:8080> |
 | Documentación de la API | <http://localhost:8080/swagger-ui/index.html> |
 
-**Primer acceso.** El código es `ADMIN`. La contraseña inicial se consulta con el comando siguiente, y el primer ingreso exige cambiarla:
+**Primer acceso.** El código es `ADMIN`. La contraseña inicial no se imprime en los registros: se consulta con el comando siguiente, y el primer ingreso exige cambiarla:
 
 ```sh
 docker compose exec backend cat /run/optiplant/admin-password
 ```
 
-Usa siempre `localhost`, no `127.0.0.1`: las cookies y CORS dependen del mismo nombre de host.
+Usa siempre `localhost`, no `127.0.0.1`: la sesión viaja en cookies y CORS solo admite orígenes explícitos, de modo que ambos dependen de mantener el mismo nombre de host.
 
 **Datos.** `docker compose down` conserva la base. `docker compose down -v` **elimina los datos y las credenciales generadas**.
 
@@ -50,18 +50,18 @@ Más detalle en [Ejecutar y verificar la base técnica](docs/07-colaboracion/pre
 
 ## Arquitectura
 
-Monolito modular con tres servicios independientes orquestados por Docker Compose. El frontend se comunica con el backend exclusivamente por API REST, y PostgreSQL no publica puertos al host.
+El sistema se compone de tres servicios independientes orquestados por Docker Compose: frontend, backend, construido como monolito modular, y PostgreSQL. El frontend se comunica con el backend exclusivamente por API REST y PostgreSQL no publica puertos al host, de modo que todo acceso a los datos pasa por las validaciones y los permisos del servidor. La interfaz orienta al usuario, pero el backend es quien decide.
 
 ![Arquitectura general de OptiPlant](docs/04-arquitectura/diagramas/vistas-previas/01-arquitectura-general.png)
 
 | Capa | Tecnología | Responsabilidad |
 |---|---|---|
-| Presentación | React 19, TypeScript 6, Vite 8, Tailwind CSS 4, shadcn/ui, Recharts 3 | Interfaz web responsiva y dashboards. |
-| Negocio | Java 25, Spring Boot 4.1, Spring Security, Apache POI | API REST, reglas de negocio, autorización, cálculo de costos y reportes. |
-| Datos | PostgreSQL 17, Spring Data JPA con Hibernate, Flyway | Persistencia relacional y migraciones versionadas. |
-| Infraestructura | Docker Compose | Servicios aislados y arranque con un solo comando. |
+| Presentación | React 19, TypeScript 6, Vite 8, Tailwind CSS 4, shadcn/ui, Recharts 3 | Interfaz web responsiva y dashboards. No decide permisos, existencias, costos ni estados. |
+| Negocio | Java 25, Spring Boot 4.1, Spring Security, Apache POI | API REST, reglas de negocio, autorización, cálculo de costos e indicadores, y reportes. |
+| Datos | PostgreSQL 17, Spring Data JPA con Hibernate, Flyway | Persistencia relacional y migraciones versionadas: Flyway evoluciona el esquema y Hibernate solo lo valida. |
+| Infraestructura | Docker Compose | Servicios aislados, comprobaciones de salud, datos en un volumen y arranque con un solo comando. |
 
-El backend se organiza por funcionalidad (*package-by-feature*). Dentro de cada módulo, los controladores exponen la API, los servicios concentran reglas y transacciones, y los repositorios acceden a los datos.
+El backend se organiza por funcionalidad (*package-by-feature*), para que cada área del negocio pueda entenderse y revisarse por separado. Dentro de cada módulo, los controladores exponen la API, los servicios concentran reglas y transacciones, y los repositorios acceden a los datos. La colaboración entre módulos usa contratos internos, no repositorios ajenos, e `inventory` es el único propietario de existencias, movimientos y valoración: compras, ventas y transferencias reutilizan esa capacidad en lugar de reimplementarla.
 
 Referencias: [arquitectura y diseño técnico](docs/04-arquitectura/arquitectura-y-diseno-tecnico.md), [modelo de datos y diagramas E-R](docs/06-modelo-base-datos/modelo-datos.md) e [índice de todos los diagramas y documentos](docs/indice-documental.md).
 
@@ -81,24 +81,26 @@ Referencias: [arquitectura y diseño técnico](docs/04-arquitectura/arquitectura
 
 ## Decisiones de diseño
 
-Cada decisión se desarrolla, con alternativas y consecuencias, en el [registro de arquitectura](docs/04-arquitectura/arquitectura-y-diseno-tecnico.md) (ARQ-001–ARQ-010).
+El criterio común fue elegir el mecanismo más simple capaz de proteger la integridad del inventario, sin añadir infraestructura que el alcance no justifica. Cada decisión se desarrolla, con alternativas y consecuencias, en el [registro de arquitectura](docs/04-arquitectura/arquitectura-y-diseno-tecnico.md) (ARQ-001–ARQ-010).
 
 ### Decisiones técnicas
 
 | Decisión | Elección | Por qué |
 |---|---|---|
-| Stack (ARQ-001, ARQ-002) | React con TypeScript; Java con Spring Boot; API REST | Tipado estático en ambos extremos y `BigDecimal` para expresar cantidades y costos con reglas explícitas. |
-| Arquitectura (ARQ-002, ARQ-008) | Monolito modular de nueve módulos | Las operaciones cruzan módulos dentro de una misma transacción; los microservicios introducirían despliegues y fallos distribuidos que este alcance no necesita. |
-| Base de datos (ARQ-003) | PostgreSQL relacional | Inventario, ventas y transferencias exigen integridad referencial y transacciones. |
-| Autenticación y autorización (ARQ-005) | Spring Security con sesiones en PostgreSQL mediante Spring Session JDBC, cookies `HttpOnly` y CSRF | Permite revocar sesiones y controlar la inactividad, algo que un JWT validado solo por firma no resuelve. La autorización comprueba acción y sucursal. |
-| Sincronización entre sucursales (ARQ-006) | Una base común y polling REST cada dos segundos con TanStack Query | Una sola fuente de verdad evita reconciliar copias; el polling da frescura sin conexiones persistentes. |
-| Consistencia (ARQ-007) | Transacciones `READ COMMITTED`, bloqueo pesimista e idempotencia | Impide que dos operaciones consuman las mismas unidades y que un reintento duplique efectos. |
-| Patrones (ARQ-008) | Repository, Service Layer y DTO | Separan acceso a datos, reglas y contrato de la API. CQRS completo, un bus de eventos o una arquitectura hexagonal estricta se descartaron por sobreingeniería. |
-| Reportes (ARQ-010) | Excel `.xlsx` real generado con Apache POI | La prueba admite PDF o Excel; se ratificó solo Excel, con un archivo real y no un CSV renombrado (INC-020/D01). |
+| Stack (ARQ-001, ARQ-002) | React con TypeScript; Java con Spring Boot; API REST | El tipado estático en ambos extremos hace explícitos estados, cantidades y costos. React permite reutilizar componentes en catálogos, operaciones y dashboards; Java aporta `BigDecimal` y Spring Boot integra el acceso a datos elegido. |
+| Arquitectura (ARQ-002, ARQ-008) | Monolito modular de nueve módulos | Una transferencia afecta a documentos, saldos y valoración, y debe confirmarse en una sola transacción. El monolito lo permite sin coordinación entre servicios; los microservicios introducirían despliegues y fallos distribuidos que este alcance no necesita. A cambio, se requiere disciplina para mantener los límites entre módulos. |
+| Base de datos (ARQ-003) | PostgreSQL relacional | Productos, sucursales, documentos y movimientos tienen relaciones que deben preservarse, y sus cambios deben confirmarse juntos o rechazarse sin efectos parciales. No se identificó una ventaja de NoSQL que compensara modelar esas relaciones. |
+| Autenticación y autorización (ARQ-005) | Spring Security con sesiones en PostgreSQL mediante Spring Session JDBC, cookies `HttpOnly` y CSRF | El proyecto exige revocar accesos y expirar sesiones por inactividad, algo que un JWT validado solo por firma y vencimiento no resuelve. Se reutiliza PostgreSQL, sin añadir Redis. La autorización comprueba acción, recurso y sucursal, de modo que conocer un identificador no concede acceso. |
+| Sincronización entre sucursales (ARQ-006) | Una base común y polling REST cada dos segundos con TanStack Query | Una sola fuente de verdad evita reconciliar copias, y cada escritura se valida en el servidor aunque la pantalla esté desactualizada. El polling reutiliza REST sin las conexiones persistentes de SSE o WebSockets, a costa de más solicitudes. El objetivo de cinco segundos no tiene medición formal. |
+| Consistencia (ARQ-007) | Transacciones `READ COMMITTED`, bloqueo pesimista e idempotencia | Comprobar y guardar sin protección permitiría que dos operaciones consumieran las mismas unidades. Frente al control optimista, el bloqueo serializa las filas en disputa, a costa de posibles esperas, y la clave `Idempotency-Key` evita que un reintento duplique efectos. |
+| Patrones (ARQ-008) | Repository, Service Layer y DTO | Separan acceso a datos, reglas y contrato de la API; los DTO, además, evitan exponer entidades JPA y claves internas. CQRS completo, un bus de eventos o una arquitectura hexagonal estricta se descartaron por sobreingeniería. |
+| Precisión e identidad (ARQ-009) | `BigDecimal` y `NUMERIC`; UUID público (`externalId`) sobre claves internas `BIGINT` | Cantidades y costos no admiten los errores de redondeo de `float`, y un identificador público evita exponer secuencias internas. |
+| Ejecución (ARQ-004) | Docker Compose con migraciones Flyway | Hace reproducible el arranque desde cero y deja versionada la evolución del esquema. Kubernetes no aporta una necesidad demostrada para esta entrega. |
+| Reportes (ARQ-010) | Excel `.xlsx` real generado en el backend con Apache POI | La prueba admite PDF o Excel; se ratificó solo Excel, con un archivo real y no un CSV renombrado (INC-020/D01). Generarlo en el servidor aplica los mismos permisos y filtros que la API y aporta un resultado utilizable fuera del dashboard. |
 
 ### Decisiones de alcance frente al enunciado
 
-La prueba deja alternativas abiertas o incluye ejemplos que no son obligatorios. Estas son las decisiones propias del proyecto:
+La prueba deja alternativas abiertas o incluye ejemplos que no son obligatorios. Resolverlos de forma explícita evita presentar suposiciones como requisitos. Estas son las decisiones propias del proyecto:
 
 | Tema | Qué dice la prueba | Decisión | Fuente |
 |---|---|---|---|
@@ -111,4 +113,12 @@ El detalle está en el [registro de decisiones aprobadas](docs/01-requerimientos
 
 ## Uso de inteligencia artificial
 
-El proceso, los prompts utilizados y la evaluación crítica están en [Uso de inteligencia artificial](docs/09-uso-de-ia/uso-de-inteligencia-artificial.md).
+La IA fue un componente estructural del desarrollo, utilizado bajo la dirección, las decisiones y la validación del responsable del proyecto. El proceso, los prompts utilizados, la evaluación crítica y la estimación de su participación están en [Uso de inteligencia artificial](docs/09-uso-de-ia/uso-de-inteligencia-artificial.md).
+
+## Resumen
+
+OptiPlant ofrece una plataforma común para operar y supervisar una red de sucursales: del catálogo y las existencias a compras, ventas y transferencias, con indicadores y reportes en Excel. Los 55 requerimientos funcionales están implementados y el sistema arranca con un solo comando.
+
+Su diseño responde a una prioridad: que el inventario siga siendo correcto cuando varias sucursales operan a la vez. De ahí la base común y el backend como única autoridad, porque así no hay copias que reconciliar; el monolito modular, porque las operaciones que cruzan módulos deben confirmarse juntas; y el bloqueo con idempotencia, porque ni la concurrencia ni un reintento deben alterar las existencias. Las sesiones en servidor siguen la misma lógica en seguridad: un acceso debe poder revocarse.
+
+El resultado es una solución deliberadamente sobria. Las alternativas más complejas se descartaron cuando el alcance no las justificaba, y las decisiones sobre lo que el enunciado dejó abierto quedaron registradas. Sus costos también son explícitos, como el mayor número de solicitudes del polling o la disciplina que exigen los límites entre módulos. Esa combinación da al sistema un comportamiento predecible y una base que puede revisarse y evolucionar con criterios documentados.
