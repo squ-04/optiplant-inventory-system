@@ -9,6 +9,11 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * An account able to sign in, with one role and, except for an administrator without assignment, one branch. New
+ * accounts must change their password, and {@code credentialsVersion} grows whenever access changes (role, branch,
+ * deactivation or password), which revokes the sessions opened with the previous version.
+ */
 @Entity
 @Table(name = "identity_user_account")
 public class UserAccount {

@@ -31,6 +31,10 @@ import org.springframework.http.MediaType;
 import org.springframework.http.server.ServerHttpResponse;
 import tools.jackson.databind.json.JsonMapper;
 
+/**
+ * Central HTTP security setup: server-side sessions with CSRF protection, Argon2 password hashing, a single allowed
+ * frontend origin, and errors returned as problem details. Login and session rules themselves live in the identity module.
+ */
 @Configuration
 public class SecurityConfiguration {
     @Bean
@@ -58,6 +62,7 @@ public class SecurityConfiguration {
         return source;
     }
 
+    /** CORS filter whose rejections use the same problem-details format as the rest of the API. */
     @Bean
     CorsFilter corsFilter(@Qualifier("corsConfigurationSource") CorsConfigurationSource source, JsonMapper json) {
         var filter = new CorsFilter(source);
@@ -82,6 +87,11 @@ public class SecurityConfiguration {
         return registration;
     }
 
+    /**
+     * Every request requires authentication except health, CSRF token, login, API documentation and the error page. Form
+     * login, HTTP basic and the default logout are disabled because {@code AuthController} owns those flows, and
+     * {@link SessionPolicyFilter} runs before authorization to revoke expired or outdated sessions.
+     */
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository contexts,
         CsrfTokenRepository csrf, UserAccountRepository users, AccountService accounts, Clock clock,

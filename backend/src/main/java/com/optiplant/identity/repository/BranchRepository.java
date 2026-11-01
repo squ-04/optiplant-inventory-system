@@ -10,6 +10,10 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+/**
+ * Persistence of branches, addressed publicly by external id. {@code lockByExternalId} serializes the commands that change
+ * a branch, so a deactivation decides on a stable state.
+ */
 public interface BranchRepository extends JpaRepository<Branch, Long> {
     List<Branch> findAllByOrderByCodeAsc();
     Optional<Branch> findByExternalId(UUID externalId);

@@ -1,3 +1,7 @@
+/**
+ * Presentation helpers of delivery times and logistics compliance (RF-0040, RF-0043), and the period check that reports
+ * and the dashboard reuse. The server computes every metric.
+ */
 import type { ComplianceMetrics, DeliveryTiming } from '../api/client.ts';
 import { decimal } from '../format.ts';
 import { BUSINESS_ZONE, bogotaLocal } from './routes.ts';

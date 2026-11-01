@@ -3,6 +3,7 @@ package com.optiplant.identity.dto;
 import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 
+/** Body of a user update. It carries no password, and unknown fields are rejected rather than silently ignored. */
 public class ManagedUserUpdateRequest {
     private String code;
     private String fullName;

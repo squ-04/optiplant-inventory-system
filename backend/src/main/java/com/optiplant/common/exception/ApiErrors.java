@@ -13,6 +13,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import tools.jackson.databind.json.JsonMapper;
 
+/**
+ * Translates failures into {@code application/problem+json} with a stable {@code code} property. Unexpected errors are
+ * answered with a generic message so internals never leak; {@link #write} serves security filters, which run outside MVC.
+ */
 @RestControllerAdvice
 public class ApiErrors {
     public static ProblemDetail problem(int status, String code, String detail) {

@@ -1,3 +1,7 @@
+/**
+ * Application root: owns the session, the hash navigation and the shell notices, and mounts every view for the signed-in
+ * user. The role checks here only choose what to show; the server authorizes each request.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
@@ -76,6 +80,7 @@ export function App() {
     return () => { active = false; };
   }, [client]);
 
+  /** Runs a user action under the shell's busy state; a failure becomes the shell alert. */
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(''); setMessage('');
     try { await action(); } catch (reason) { showError(reason); }

@@ -15,6 +15,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Verifies credentials and throttles repeated failures. The guard is keyed by a SHA-256 hash of the submitted code, so it
+ * works the same for existing and unknown accounts.
+ */
 @Service
 public class LoginService {
     private final UserAccountRepository users;
@@ -34,6 +38,11 @@ public class LoginService {
         dummyHash = passwords.encode(java.util.UUID.randomUUID().toString());
     }
 
+    /**
+     * Five failures within a 15-minute window block the code for 5, 15 and then 30 minutes as escalation grows; success
+     * clears the guard. Unknown codes are checked against a dummy hash so both cases perform the same password verification,
+     * and an inactive account fails like wrong credentials.
+     */
     // Rejected attempts must commit their guard state, never account changes.
     @Transactional(noRollbackFor = ApiException.class)
     public UserAccount login(String code, String password) {

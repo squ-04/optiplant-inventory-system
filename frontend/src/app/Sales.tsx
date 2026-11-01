@@ -1,3 +1,8 @@
+/**
+ * Sales: operators confirm sales of their branch; managers and administrators consult the receipts (RF-0027, RF-0031).
+ * The form only previews amounts: the server applies the current list price, validates stock and decides the sale, and
+ * an idempotency key keeps a retry from selling twice.
+ */
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Plus, ReceiptText, RefreshCw, Search, Trash2, X } from 'lucide-react';
@@ -168,6 +173,7 @@ export function Sales({ client, user, onError, onChanged, revision, visible }: P
     revealEditor('sale-editor');
   }
 
+  /** Confirms the sale in order: local checks, a re-read of the list prices, the user's confirmation and the request. */
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const missing = lines.findIndex(entry => entry.price === null);

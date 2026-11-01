@@ -1,3 +1,7 @@
+/**
+ * Presentation helpers of the dashboard indicators (RF-0046–RF-0049). The server computes the figures; these helpers word
+ * them, prepare the charts and check the consulted month before asking.
+ */
 import type { BranchComparison, BranchPerformance, DemandRanking, DemandReport, RestockItem, TransferImpactItem } from '../api/client.ts';
 import { decimal } from '../format.ts';
 import { bogotaLocal } from '../logistics/routes.ts';

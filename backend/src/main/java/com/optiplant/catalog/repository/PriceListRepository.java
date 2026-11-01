@@ -6,6 +6,10 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+/**
+ * Persistence of price lists, addressed publicly by external id. The case-insensitive checks support code uniqueness
+ * on creation and on update of another list.
+ */
 public interface PriceListRepository extends JpaRepository<PriceList, Long> {
     List<PriceList> findAllByOrderByCodeAsc();
     List<PriceList> findAllByActiveTrueOrderByCodeAsc();

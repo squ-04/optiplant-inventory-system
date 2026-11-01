@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/** Read-only REST access to restock alerts; the alerts themselves are managed by {@code ReorderAlertService}. */
 @RestController
 @RequestMapping("/api/v1/inventory")
 public class ReorderAlertController {

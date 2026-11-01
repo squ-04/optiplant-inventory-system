@@ -1,3 +1,6 @@
+/**
+ * Tabs of one section. Every panel stays mounted and is only hidden, so a form keeps what was typed when changing tabs.
+ */
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';

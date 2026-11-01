@@ -1,3 +1,4 @@
+/** Badge with the state of a transfer, from its single definition in `lib/transfers/statuses.ts`. */
 import { Badge } from '../ui/badge';
 import { CLOSED_BEFORE_DISPATCH, TRANSFER_STATUS } from '../../lib/transfers/statuses.ts';
 import type { TransferStatus } from '../../lib/transfers/statuses.ts';

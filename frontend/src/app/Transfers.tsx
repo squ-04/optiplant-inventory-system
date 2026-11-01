@@ -1,3 +1,8 @@
+/**
+ * Transfers between branches (RF-0032–RF-0039): listing, request, and the detail with its preparation, approval, dispatch,
+ * reception and shortage actions. `lib/transfers` chooses which actions to offer each profile; the server validates and
+ * decides each transition, sent with an idempotency key so a retry cannot repeat it.
+ */
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowRight, Ban, CheckCircle2, ClipboardCheck, PackageCheck, Plus, RefreshCw, Search, Send, Trash2, Truck, X, XCircle } from 'lucide-react';
@@ -481,6 +486,7 @@ function TransferProgress({ transfer }: { transfer: Transfer }) {
   </ol>;
 }
 
+/** One transfer with the forms of the actions offered to this user; the transitions themselves run in `Transfers`. */
 function TransferDetail({ transfer, user, busy, error, onPrepare, onApprove, onReject, onCancel, onClose, route, routesLoaded,
                           routesError, onDispatch, onReceive, onResolve, onWriteOff, onResend }: {
   transfer: Transfer; user: User; busy: boolean; error: string;

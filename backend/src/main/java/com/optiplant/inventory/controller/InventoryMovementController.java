@@ -22,6 +22,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
+/**
+ * REST access to manual stock movements and to the movement history and valuation of a branch. Scope and business rules
+ * are enforced by the inventory services.
+ */
 @RestController
 @RequestMapping("/api/v1/inventory")
 public class InventoryMovementController {

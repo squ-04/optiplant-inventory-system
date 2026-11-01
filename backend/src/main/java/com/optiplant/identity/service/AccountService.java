@@ -12,6 +12,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Account rules shared by the controllers and the session filter: the response view of the user, the password change,
+ * and the check that a session still matches its account.
+ */
 @Service
 public class AccountService {
     private final UserAccountRepository users;
@@ -52,6 +56,10 @@ public class AccountService {
         user.changePassword(passwords.encode(replacement), clock.instant());
     }
 
+    /**
+     * A session stays valid only while the account is active and its credentials version, role and branch are the ones the
+     * session was opened with.
+     */
     public boolean valid(SessionPrincipal principal, UserAccount user) {
         // An inactive branch blocks commands, not authorized historical consultation.
         return user.isActive()

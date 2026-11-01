@@ -1,3 +1,7 @@
+/**
+ * Helpers to read the entries of a price list while building a sale. The server applies the current list price when
+ * confirming (RF-0030).
+ */
 import type { ListPrice } from '../api/client.ts';
 
 /** The price a list already defines for a product unit, or undefined while the unit has no price in it. */

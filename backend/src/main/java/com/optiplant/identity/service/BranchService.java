@@ -15,6 +15,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Branch administration use cases. Authorization is enforced by {@code BranchController}; this service owns code
+ * uniqueness and the conditions for taking a branch out of operation.
+ */
 @Service
 public class BranchService {
     private final BranchRepository branches;
@@ -53,6 +57,10 @@ public class BranchService {
         return response(branch);
     }
 
+    /**
+     * Idempotent for an inactive branch. Otherwise it answers 409 while the branch holds physical stock, draft or pending
+     * purchases, open transfers, pending transit or open transfer shortages, and it closes the branch's restock episodes.
+     */
     @Transactional
     public BranchResponse deactivate(UUID externalId) {
         Branch branch = locked(externalId);

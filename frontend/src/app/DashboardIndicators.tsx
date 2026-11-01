@@ -1,3 +1,7 @@
+/**
+ * Dashboard sections that read and fail independently through `useReading`: demand (RF-0046), active transfers (RF-0047),
+ * restock (RF-0048) and the administrators' branch comparison (RF-0049). The server computes every figure.
+ */
 import { Fragment, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';

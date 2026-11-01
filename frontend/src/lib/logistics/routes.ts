@@ -1,3 +1,7 @@
+/**
+ * Route priorities, business-time conversions and the checks offered before a dispatch. The dispatch checks mirror the
+ * server so the operator can correct the data first; the server still decides.
+ */
 import type { Branch, Transfer, User } from '../api/client.ts';
 
 /**

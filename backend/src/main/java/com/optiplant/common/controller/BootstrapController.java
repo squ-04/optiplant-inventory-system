@@ -11,6 +11,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Technical endpoint that returns a sample payload rather than business data. It proves end to end the session, role and
+ * branch checks and the serialization of identifiers, instants and exact decimals as strings; the HTTP tests exercise it.
+ */
 @RestController
 public class BootstrapController {
     private final Clock clock;
