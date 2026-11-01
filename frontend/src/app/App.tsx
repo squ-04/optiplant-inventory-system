@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
-import { ApiClient, ApiError } from '../lib/api/client.ts';
+import { ApiClient, ApiError, sessionNotice } from '../lib/api/client.ts';
 import { roleLabel } from '../lib/format.ts';
 import type { User } from '../lib/api/client.ts';
 import { Administration } from './Administration.tsx';
@@ -47,15 +47,21 @@ export function App() {
     window.addEventListener('hashchange', update);
     return () => window.removeEventListener('hashchange', update);
   }, []);
+  const signedIn = useRef(false);
+  signedIn.current = user !== null;
   const [client] = useState(() => new ApiClient(
     import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080', fetch,
-    () => { setUser(null); },
+    code => {
+      // Polling also loses the session, so the notice is raised here: once, and only for a session that was open.
+      if (signedIn.current && code) setError(sessionNotice(code));
+      setUser(null);
+    },
   ));
 
   function showError(reason: unknown) {
-    setError(reason instanceof ApiError && reason.status === 401
-      ? 'Sesión no disponible o credenciales incorrectas. Inicie sesión de nuevo. Los formularios no enviados no se confirmaron.'
-      : reason instanceof TypeError ? 'Sin comunicación con el servidor. No se confirmó la solicitud; las consultas pueden estar desactualizadas. No se guardarán operaciones para sincronización offline.'
+    // The client already reported this lost session; a rejected login answers in its own form.
+    if (reason instanceof ApiError && reason.status === 401) return;
+    setError(reason instanceof TypeError ? 'Sin comunicación con el servidor. No se confirmó la solicitud; las consultas pueden estar desactualizadas. No se guardarán operaciones para sincronización offline.'
       : reason instanceof Error ? reason.message : 'No se pudo completar la solicitud.');
     if (reason instanceof ApiError && reason.status === 403 && reason.problem.code === 'PASSWORD_CHANGE_REQUIRED') {
       setUser(previous => previous && { ...previous, mustChangePassword: true });
@@ -86,6 +92,9 @@ export function App() {
         // Each session starts on its own landing view, not on the view the previous session left in the URL.
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
         setLocation('');
+      } catch (reason) {
+        if (!(reason instanceof ApiError && reason.status === 401)) throw reason;
+        setError(reason.problem.detail ?? 'No se pudo iniciar sesión. Vuelva a intentarlo.');
       } finally { form.reset(); }
     });
   }
