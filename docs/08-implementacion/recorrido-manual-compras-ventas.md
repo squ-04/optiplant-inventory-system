@@ -404,4 +404,4 @@ Esta es la guía de recorrido manual en un solo flujo para compras, valoración,
 - **Ventas simultáneas sobre el mismo saldo:** requiere dos sesiones del mismo operador confirmando a la vez; está cubierto por `SaleHttpTest` y por el informe E2E (escenario 25).
 - **Perfiles que intentan escribir por la API:** el gerente y el administrador reciben `403` (`PURCHASE_FORBIDDEN`, `SALE_FORBIDDEN`) aunque el cuerpo sea inválido; el operador recibe `403 VALUATION_FORBIDDEN` en la valoración.
 - **CAL-SUR:** queda fuera porque desde el recorrido anterior no tiene operador activo (`resp.cal` es gerente y `ope.temporal` está inactivo).
-- **Costo congelado en tránsito (RF-0026-CA-02):** depende de las transferencias, aún no implementadas.
+- **Costo congelado en tránsito (RF-0026-CA-02):** se verifica en el [recorrido de transferencias](recorrido-manual-transferencias.md).

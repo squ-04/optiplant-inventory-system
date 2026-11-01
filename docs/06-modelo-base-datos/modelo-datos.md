@@ -1,7 +1,7 @@
 # Modelo relacional y especificación de datos — OptiPlant
 
 **Versión:** 1.1 · **Fecha:** 22 de octubre de 2026 · **Actividad:** sección 7 de la prueba técnica.  
-**Estado:** diseño técnico derivado del alcance autorizado; no acredita implementación ni aprobación funcional nueva.  
+**Estado:** diseño técnico derivado del alcance autorizado, implementado mediante migraciones Flyway; no aporta aprobación funcional nueva.  
 **Motor objetivo:** PostgreSQL 17.11, una base y esquema compartido `public`. Los prefijos identifican propietarios lógicos, no esquemas ni microservicios.
 
 ## 1. Alcance y lectura del documento

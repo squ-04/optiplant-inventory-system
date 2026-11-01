@@ -1,6 +1,6 @@
 # Arquitectura y diseño técnico — OptiPlant
 
-**Estado:** decisiones arquitectónicas PEN-001–PEN-008 ratificadas por el responsable el 21 de octubre de 2026; definición y aprobación documental del punto 8 finalizadas. No acredita implementación, pruebas ni modelo E-R completo.  
+**Estado:** decisiones arquitectónicas PEN-001–PEN-008 ratificadas por el responsable el 21 de octubre de 2026; definición y aprobación documental del punto 8 finalizadas. Implementada; evidencia en el [estado de la implementación](../indice-documental.md#estado-de-la-implementación) y modelo E-R en el [modelo de datos](../06-modelo-base-datos/modelo-datos.md).  
 **Versión:** 1.1 — 22 de octubre de 2026; incorpora la evaluación de versiones y compatibilidad de §5.4 sin modificar las decisiones ratificadas.  
 **Ámbito:** documento único de decisiones arquitectónicas y diseño técnico de la sección 8; los detalles derivados del modelo/contratos, la implementación y los diagramas de la sección 7 corresponden a etapas posteriores.
 
@@ -45,17 +45,17 @@ A ratifica mecanismos arquitectónicos, no nuevas reglas funcionales. La intenci
 
 | Obligación | Fuente | Tratamiento en este documento | Situación |
 |---|---|---|---|
-| Separar frontend, backend y base de datos | M §5 | §3 y ARQ-001–ARQ-004 | Base seleccionada; cumplimiento ejecutable pendiente. |
-| API exclusiva, sin lógica de negocio en el cliente | M §§5 y 8.1 | §3, ARQ-001 y ARQ-002 | Responsabilidades delimitadas. |
-| Interfaz responsiva | M §8.1 | ARQ-001 | Stack y organización aprobados; comprobación visual posterior. |
+| Separar frontend, backend y base de datos | M §5 | §3 y ARQ-001–ARQ-004 | Implementado: `frontend`, `backend` y `postgres` en servicios separados. |
+| API exclusiva, sin lógica de negocio en el cliente | M §§5 y 8.1 | §3, ARQ-001 y ARQ-002 | Implementado: el cliente usa solo REST y previsualiza; el servidor decide. |
+| Interfaz responsiva | M §8.1 | ARQ-001 | Implementado; navegación móvil y tablas comprobadas en el [sistema visual](../08-implementacion/sistema-visual.md). |
 | Compose con servicios independientes y aislados; arranque con un comando | M §§5 y 8.1 | ARQ-004 | Implementado y comprobado desde cero, sin `.env`, por `scripts/smoke_stack.py`. |
 | Justificar lenguaje de backend | M §8.2 | ARQ-002 | Elección y justificación documental aprobadas. |
-| Justificar motor y modelo de datos | M §8.2 | ARQ-003 | Estrategia relacional y fundamento aprobados; modelo lógico/físico completo y E-R posteriores. |
-| Justificar autenticación y autorización | M §8.2 | ARQ-005 | Sesiones JDBC y seguridad aprobadas y justificadas; implementación y pruebas posteriores. |
-| Justificar sincronización entre sucursales | M §8.2 | ARQ-006 | Polling REST aprobado y justificado; latencia real pendiente de medición. |
-| Justificar patrones utilizados | M §8.2 | ARQ-008 | Patrones y capas tradicionales por módulo aprobados y fundamentados; inspección ejecutable posterior. |
+| Justificar motor y modelo de datos | M §8.2 | ARQ-003 | Aprobados e implementados; modelo y E-R en el [modelo de datos](../06-modelo-base-datos/modelo-datos.md). |
+| Justificar autenticación y autorización | M §8.2 | ARQ-005 | Aprobadas, justificadas, implementadas y probadas. |
+| Justificar sincronización entre sucursales | M §8.2 | ARQ-006 | Polling REST aprobado, justificado e implementado; latencia real sin medición formal. |
+| Justificar patrones utilizados | M §8.2 | ARQ-008 | Patrones y capas tradicionales por módulo aprobados, fundamentados e implementados. |
 
-M §7 exige diagramas de arquitectura y entidad-relación, entre otros. Este cierre documental no los sustituye ni declara completada esa sección. La conformidad ejecutable de §§5 y 8.1 permanece pendiente de implementación y pruebas.
+M §7 exige diagramas de arquitectura y entidad-relación, entre otros. Sus diagramas están en el [índice de arquitectura](diagramas/indice-diagramas-arquitectura.md) y en el [modelo de datos](../06-modelo-base-datos/modelo-datos.md). Las notas «Detalles y verificación posteriores» de cada decisión conservan lo previsto al diseñar; el estado vigente es el de esta tabla.
 
 ## 3. Separación de responsabilidades por capas — §8.1
 
@@ -138,11 +138,11 @@ El propietario definitivo de los datos maestros de sucursales **no está ratific
 
 ### ARQ-004 — Ejecución y aislamiento con Docker Compose
 
-**Estado:** ejecución local, servicios, volumen nombrado, migraciones, semillas y controles de arranque APROBADOS por A PEN-007; configuración operativa no implementada en esta actividad.  
+**Estado:** ejecución local, servicios, volumen nombrado, migraciones, semillas y controles de arranque APROBADOS por A PEN-007; implementados en `compose.yaml` y comprobados por `scripts/smoke_stack.py`.  
 **Clasificación:** justificación de una decisión significativa y cumplimiento obligatorio de M §§5 y 8.1; no categoría mínima independiente de §8.2.  
 **Trazabilidad:** A PEN-007, relacionada con PEN-001 y PEN-005; P §1; M §§5 y 8.1; RNF-SEG-02.
 
-**Decisión aprobada.** Ejecutar localmente tres servicios principales Compose: `frontend` (React servido por Vite), `backend` (Spring Boot) y `postgres` (PostgreSQL). Comando de referencia: `docker compose up --build`, sin instalar JDK, Node o PostgreSQL fuera de los contenedores. Es una decisión documentada, no una configuración creada ni un comando ejecutado en esta actividad.
+**Decisión aprobada.** Ejecutar localmente tres servicios principales Compose: `frontend` (React servido por Vite), `backend` (Spring Boot) y `postgres` (PostgreSQL). Comando de referencia: `docker compose up --build`, sin instalar JDK, Node o PostgreSQL fuera de los contenedores. El servicio auxiliar `credentials` se describe más abajo.
 
 **Persistencia.** Volumen nombrado Docker **`pgdata`**, administrado por Docker, no bind mount a una carpeta del proyecto. Montarlo en la ruta correcta según versión de imagen y `PGDATA`; no asumir idéntica ruta en todas las versiones. Conserva datos entre `up`, `down` y reconstrucciones; advertir que **`docker compose down -v` puede borrarlos**. Los archivos físicos del volumen no son un respaldo portable: cuando se necesite una copia exportable se utilizarán mecanismos PostgreSQL.
 

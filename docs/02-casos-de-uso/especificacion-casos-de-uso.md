@@ -1,6 +1,6 @@
 # Especificación de casos de uso — OptiPlant
 
-**Estado:** definitivo para modelado de casos de uso; no acredita implementación ni pruebas.  
+**Estado:** definitivo para modelado de casos de uso; funcionalidad implementada, con evidencia en el [estado de la implementación](../indice-documental.md#estado-de-la-implementación).  
 **Versión:** 1.3 — 22 de octubre de 2026. Conserva H v1.1 y H v1.2/01; integra H v1.3/01–02 en UC-006 y UC-010: baja lógica de productos y nombre histórico del proveedor.  
 **Alcance:** interacciones funcionales aprobadas del Sistema de Inventario Multi-Sucursal OptiPlant.
 

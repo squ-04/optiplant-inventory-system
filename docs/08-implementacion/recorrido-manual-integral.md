@@ -347,4 +347,4 @@ Esta es la guía de recorrido manual en un solo flujo, basada en las cinco guía
 - **Caída del servidor:** con **Consultas** abierta, ejecuta `docker compose stop backend`. Debe aparecer la advertencia ámbar y la tabla conserva la última lectura. Después ejecuta `docker compose start backend`. No borra datos.
 - **Baja efectiva de una sucursal y consulta de una sucursal inactiva:** omitida para conservar las tres sucursales. Si la quieres probar, crea una sucursal vacía `PRU-BAJA` y desactívala.
 - **Cambio de factor e inactivación de una unidad:** omitido porque alteraría `estiba` y `saco`. Si quieres probarlo, usa una unidad extra, por ejemplo `display` ×6 en MAC-14.
-- **Devolución vinculada a una venta:** todavía no hay módulo de ventas, así que solo se puede probar sin referencia.
+- **Devolución vinculada a una venta:** en esta guía solo se prueba sin referencia; la vinculada se verifica en el [recorrido de compras y ventas](recorrido-manual-compras-ventas.md), paso 21.

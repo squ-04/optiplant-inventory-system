@@ -1,6 +1,6 @@
 # Ejecutar y verificar la base técnica
 
-Esta base conecta React con Spring Boot y PostgreSQL por REST. Es preparación técnica: no acredita la implementación de ventas, compras, transferencias, dashboards ni reportes completos. Las decisiones vigentes están en [arquitectura](../04-arquitectura/arquitectura-y-diseno-tecnico.md) y [modelo de datos](../06-modelo-base-datos/modelo-datos.md).
+Esta base conecta React con Spring Boot y PostgreSQL por REST. Las guías de cada módulo están en el [índice documental](../indice-documental.md). Las decisiones vigentes están en [arquitectura](../04-arquitectura/arquitectura-y-diseno-tecnico.md) y [modelo de datos](../06-modelo-base-datos/modelo-datos.md).
 
 ## Arranque local
 
@@ -61,6 +61,6 @@ El hook sigue validando los bytes de los commits enviados, no los cambios sin co
 
 La prueba de humo genera credenciales y un nombre Compose exclusivos, publica puertos locales libres y utiliza un volumen nuevo. Al terminar elimina **solo el volumen desechable y las imágenes construidas de esa prueba** (`down --volumes --rmi local`), nunca el `pgdata` del entorno personal ni las imágenes base compartidas. Cada nombre exclusivo genera imágenes `<proyecto>-backend` y `<proyecto>-frontend` que `down` conserva por defecto; todo script que levante un proyecto Compose propio debe retirarlas igual, y `odd/probes/test_compose_teardown.py` lo comprueba. El directorio temporal externo se informa para limpieza posterior; puede contener secretos efímeros y no debe publicarse.
 
-La demostración HTTP local no acredita HTTPS productivo. El navegador no guarda contraseñas ni identificadores de sesión en almacenamiento web. La API conserva CSRF, cookies `HttpOnly` y CORS explícito con credenciales. Las reglas de negocio pendientes no deben inferirse del endpoint técnico `/api/v1/bootstrap`.
+La demostración HTTP local no acredita HTTPS productivo. El navegador no guarda contraseñas ni identificadores de sesión en almacenamiento web. La API conserva CSRF, cookies `HttpOnly` y CORS explícito con credenciales. Las reglas de negocio no deben inferirse del endpoint técnico `/api/v1/bootstrap`.
 
 Los resultados observados y cualquier comprobación pendiente se registran en [las tareas de preparación](../../odd/tasks/preparacion-tecnica.md). Ejecutar localmente un grupo no demuestra que GitHub Actions haya corrido; no se publica ni dispara CI remoto como parte de esta preparación.

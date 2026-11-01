@@ -62,7 +62,7 @@ El catálogo local responde `branchExternalId`, `branchCode`, `branchName`, `bra
 
 - Precisiones derivadas, no requisitos nuevos: el mínimo de una unidad base indivisible debe ser entero (RF-0013, sin redondeo silencioso) y «uso» que protege SKU y unidad base comprende saldos, movimientos, líneas de documentos y precios.
 - RF-0001, RF-0012 y RF-0013 se incorporaron después sobre las mismas tablas, sin migraciones; ver la sección siguiente. La deshabilitación local (RF-0019) no forma parte de esta entrega.
-- RF-0011-CA-03 exige impedir nuevas operaciones de inventario, compra, venta o transferencia sobre productos inactivos. Esos comandos aún no existen; la entrega impide nuevas habilitaciones y deja cada producto inactivo sin sucursales habilitadas, pero la validación en cada comando se aplicará y probará con sus módulos.
+- RF-0011-CA-03 impide nuevas operaciones sobre productos inactivos: inventario, compras, ventas y transferencias resuelven el producto mediante `OperableUnits`, entregado con esos módulos.
 - El listado no tiene filtros ni paginación, porque ningún RF los prescribe.
 
 ## Mínimo, catálogo local y unidades (RF-0001, RF-0012, RF-0013)

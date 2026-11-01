@@ -8,7 +8,7 @@ Punto de entrada a la documentación del Sistema de Inventario Multi-Sucursal. E
 |---|---|
 | [Requisitos funcionales](01-requerimientos/requisitos-funcionales.md) | Comportamiento aprobado, RF-0001–RF-0055, permisos, reglas y criterios de aceptación. |
 | [Arquitectura y diseño técnico](04-arquitectura/arquitectura-y-diseno-tecnico.md) | Diseño por capas, organización modular, decisiones ARQ, fundamentos, alternativas y verificaciones pendientes. |
-| [Modelo relacional y especificación de datos](06-modelo-base-datos/modelo-datos.md) | Entidades, atributos, relaciones, restricciones, índices, diagramas E-R y trazabilidad. Es diseño técnico; no acredita implementación. |
+| [Modelo relacional y especificación de datos](06-modelo-base-datos/modelo-datos.md) | Entidades, atributos, relaciones, restricciones, índices, diagramas E-R y trazabilidad. Diseño técnico implementado mediante migraciones Flyway. |
 
 ## Fuentes y decisiones
 
@@ -21,6 +21,10 @@ Punto de entrada a la documentación del Sistema de Inventario Multi-Sucursal. E
 | [Instrucciones del proyecto](../AGENTS.md) | Convenciones de trabajo, fuentes protegidas, alcance y aprobaciones necesarias. |
 
 Las tecnologías elegidas y las reglas ratificadas por el responsable son decisiones del proyecto, no exigencias externas por defecto. Consultar el estado, las fuentes y la precedencia en cada documento; una aprobación documental no demuestra implementación ni pruebas. Ante una contradicción no resuelta, señalarla y solicitar decisión, sin corregir silenciosamente las fuentes.
+
+## Estado de la implementación
+
+RF-0001–RF-0055 están implementados en `main` (31 de octubre de 2026). La evidencia son las comprobaciones de `scripts/run_checks.py`, que incluyen un arranque desde cero de Compose, y los cuatro recorridos manuales realizados por el responsable: RF-0001–RF-0020 y RF-0026, RF-0021–RF-0031, RF-0032–RF-0043 y RF-0044–RF-0055. Quedan pendientes el `README.md` general y la sección de uso de IA. Los requisitos no funcionales no tienen una medición individual.
 
 ## Requisitos complementarios
 
@@ -65,6 +69,7 @@ Los diagramas E-R están incluidos en el [modelo de datos](06-modelo-base-datos/
 | [Recorrido manual de compras y ventas](08-implementacion/recorrido-manual-compras-ventas.md) | Continuación del recorrido integral que verifica desde la interfaz compras, valoración, listas de precios y ventas (RF-0021–RF-0031) partiendo de los datos que este deja. Generado con IA a partir de las guías de prueba manual; realizado por el responsable (25 de 25 pasos, confirmado el 29/10/2026), con el estado final contrastado en la base local. |
 | [Recorrido manual de transferencias](08-implementacion/recorrido-manual-transferencias.md) | Continuación del recorrido de compras y ventas que verifica desde la interfaz transferencias, rutas, faltantes, tiempos de entrega y cumplimiento logístico (RF-0032–RF-0043) partiendo de los datos que este deja. Generado con IA a partir de la guía de transferencias y de la base local; realizado por el responsable (26 de 26 pasos, confirmado el 29/10/2026), con el estado final contrastado en la base local. |
 | [Recorrido manual de dashboard y reportes](08-implementacion/recorrido-manual-dashboard-reportes.md) | Continuación del recorrido de transferencias que verifica desde la interfaz el dashboard y los reportes Excel (RF-0044–RF-0055) partiendo de los datos que este deja. Generado con IA y comprobado en una copia desechable del volumen local; realizado por el responsable (26 de 26 pasos, confirmado el 31/10/2026). |
+| [Ejecutar y verificar la base técnica](07-colaboracion/preparacion-tecnica.md) | Arranque con Docker Compose, primer acceso, persistencia y comprobaciones compartidas con CI. |
 | [Git, GitHub y pull requests](07-colaboracion/git-github-y-pull-requests.md) | Guía de colaboración y revisión del repositorio. |
 | [Guía temporal de incertidumbres](01-requerimientos/incertidumbres-pendientes-temporal.md) | Antecedente de análisis con alternativas no aprobadas por sí mismas. No sustituye las decisiones ratificadas ni demuestra que todas sus preguntas sigan abiertas. |
 | [Diagramas de casos de uso — respaldo anterior](02-casos-de-uso/diagramas/indice-diagramas-casos-de-uso.md) | Versión anterior conservada como respaldo; consultar primero la versión 2 y la especificación textual. |

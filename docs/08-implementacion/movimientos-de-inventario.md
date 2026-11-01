@@ -34,7 +34,7 @@ Errores principales: `400 VALIDATION_FAILED`, `UNIT_COST_REQUIRED`, `UNIT_COST_N
 
 ## Alcance y límites
 
-- Compras (RF-0024), ventas (RF-0027/RF-0028) y transferencias aún no existen: los motivos «compra» y «venta» de RF-0016-CA-01/RF-0017-CA-01 se ejercitan en las pruebas publicando operaciones directamente en `InventoryLedger`, como lo harán esos módulos. No hay ingreso manual por compra ni venta manual, porque esos documentos generan sus propios movimientos.
+- Compras (RF-0024), ventas (RF-0027/RF-0028) y transferencias se entregaron después y publican sus operaciones en `InventoryLedger`; ver [compras](compras.md), [ventas](ventas.md) y [transferencias](transferencias.md).
 - Solo se corrigen entradas identificadas y solo a la baja; un error en un retiro o unidades faltantes se regularizan con un nuevo ingreso o un ajuste por conteo. No hay correcciones exclusivas de precio (RF-0026, límites).
 - Cada operación de `InventoryLedger` reevalúa la alerta de stock mínimo de las combinaciones afectadas; ver [alertas de reabastecimiento](alertas-de-reabastecimiento.md).
 - El historial no tiene paginación ni filtros de fecha; muestra los 200 movimientos más recientes (hasta 500 con `limit`). La exportación pertenece a reportes (RF-0050–RF-0055).
