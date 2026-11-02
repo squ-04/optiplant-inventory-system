@@ -78,6 +78,29 @@ class ReportWorkbookTest {
         }
     }
 
+    @Test void aTotalledColumnAddsOnlyItsVisibleRowsAboveTheFrozenHeader() throws Exception {
+        byte[] file = writer.write(new ReportTable("Datos", "Título", List.of(new Metadata("Filas", "2")),
+            List.of(new Column("A", Kind.TEXT, 10), new Column("Importe", Kind.MONEY, 10, "Total")),
+            List.of(List.of("x", new BigDecimal("10.50")), List.of("y", new BigDecimal("20.25")))));
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(file))) {
+            Row total = workbook.getSheetAt(0).getRow(2);
+            assertThat(total.getCell(0).getStringCellValue()).isEqualTo("Total");
+            assertThat(total.getCell(1).getCellFormula()).isEqualTo("SUBTOTAL(109,B6:B7)");
+            assertThat(total.getCell(1).getNumericCellValue()).isEqualTo(30.75);
+            assertThat(total.getCell(1).getCellStyle().getDataFormatString()).isEqualTo("#,##0.00");
+            assertThat(workbook.getSheetAt(0).getRow(4).getCell(1).getStringCellValue()).isEqualTo("Importe");
+            assertThat(workbook.getSheetAt(0).getPaneInformation().getHorizontalSplitPosition()).isEqualTo((short) 5);
+        }
+    }
+
+    @Test void aReportWithoutRowsHasNoTotal() throws Exception {
+        byte[] file = writer.write(new ReportTable("Datos", "Título", List.of(new Metadata("Filas", "0")),
+            List.of(new Column("Importe", Kind.MONEY, 10, "Total")), List.of()));
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(file))) {
+            assertThat(workbook.getSheetAt(0).getRow(3).getCell(0).getStringCellValue()).isEqualTo("Importe");
+        }
+    }
+
     @Test void twelveCalendarMonthsAreAllowedAndOneMoreDayIsNot() {
         assertThat(ReportPeriod.parse("2026-01-01", "2026-12-31").to()).isEqualTo(LocalDate.of(2026, 12, 31));
         assertThat(ReportPeriod.parse("2026-03-15", "2027-03-14").from()).isEqualTo(LocalDate.of(2026, 3, 15));

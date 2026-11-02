@@ -159,6 +159,8 @@ class ReportExportHttpTest {
         BigDecimal total = report.rows().stream().map(row -> new BigDecimal(row.get("Importe neto de línea (COP)")))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(total).isEqualByComparingTo(sale.get("totalNet").asText());
+        assertThat(report.metadata().get("Total neto (COP)")).startsWith("SUBTOTAL(109,K");
+        assertThat(report.formulaCells()).isZero();
     }
 
     // ---------------------------------------------------------------- RF-0054

@@ -29,7 +29,8 @@ import org.springframework.stereotype.Component;
  * Writes any {@link ReportTable} as a real XLSX workbook (RF-0051): title and metadata on top, then a frozen header with
  * filters and one row per record. Text always goes in string cells, so user content starting with {@code =} is never
  * interpreted as a formula (ARQ-010). A decimal goes in a numeric cell only when a double keeps it exactly; otherwise it
- * stays as text instead of being degraded.
+ * stays as text instead of being degraded. A column's total goes among the metadata, not under the rows: it stays visible
+ * and out of the sorted and filtered range, and only the writer composes that formula.
  */
 @Component
 public class XlsxReportWriter {
@@ -49,6 +50,7 @@ public class XlsxReportWriter {
                 Row row = sheet.createRow(next++);
                 for (int i = 0; i < table.columns().size(); i++) cell(row, i, values.get(i), table.columns().get(i).kind(), styles);
             }
+            totals(workbook, sheet, table, header, next, styles);
             sheet.createFreezePane(0, header + 1);
             sheet.setAutoFilter(new CellRangeAddress(header, next - 1, 0, table.columns().size() - 1));
             workbook.write(file);
@@ -81,7 +83,29 @@ public class XlsxReportWriter {
             name.setCellStyle(label);
             row.createCell(1).setCellValue(item.value());
         }
-        return next + 1;
+        return next + (table.rows().isEmpty() ? 0 : totalled(table).size()) + 1;
+    }
+
+    private static List<Column> totalled(ReportTable table) {
+        return table.columns().stream().filter(column -> column.total() != null).toList();
+    }
+
+    /** Fills the rows {@link #metadata} reserved. SUBTOTAL follows the filters; its value is stored for viewers that do not calculate. */
+    private static void totals(XSSFWorkbook workbook, Sheet sheet, ReportTable table, int header, int end, Map<Kind, CellStyle> styles) {
+        if (table.rows().isEmpty()) return;
+        CellStyle label = sheet.getRow(1).getCell(0).getCellStyle();
+        int next = 1 + table.metadata().size();
+        for (Column column : totalled(table)) {
+            Row row = sheet.createRow(next++);
+            Cell name = row.createCell(0);
+            name.setCellValue(column.total());
+            name.setCellStyle(label);
+            CellRangeAddress range = new CellRangeAddress(header + 1, end - 1, table.columns().indexOf(column), table.columns().indexOf(column));
+            Cell total = row.createCell(1);
+            total.setCellFormula("SUBTOTAL(109," + range.formatAsString() + ")");
+            total.setCellStyle(styles.get(column.kind()));
+            workbook.getCreationHelper().createFormulaEvaluator().evaluateFormulaCell(total);
+        }
     }
 
     private static void header(XSSFWorkbook workbook, Sheet sheet, List<Column> columns, int index) {
