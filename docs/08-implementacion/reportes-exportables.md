@@ -29,12 +29,12 @@ Funcionalidad adicional seleccionada: descarga directa de libros Excel `.xlsx` r
 
 ## Contenido del libro
 
-Una hoja con título, metadatos (sucursal, período, fecha del filtro, zona horaria, estado en transferencias, generación y filas), encabezado inmovilizado con filtros y una fila por registro.
+Una hoja con título, metadatos (sucursal, período, fecha del filtro, zona horaria, estado en transferencias, generación y filas; en ventas con datos, también el total neto), encabezado inmovilizado con filtros y una fila por registro.
 
 | Reporte | Columnas |
 |---|---|
 | Movimientos | ID público del movimiento, Fecha de registro, Sucursal, SKU, Producto, Clase, Motivo, Cantidad (con signo, como el historial), Unidad, Usuario responsable, Documento origen. Sin costos. |
-| Ventas | Número de venta, Fecha de confirmación, Sucursal, Responsable, SKU, Producto, Unidad, Cantidad, Precio unitario (COP), Descuento (%), Importe neto de línea (COP). Sin total de cabecera. |
+| Ventas | Número de venta, Fecha de confirmación, Sucursal, Responsable, SKU, Producto, Unidad, Cantidad, Precio unitario (COP), Descuento (%), Importe neto de línea (COP). Sin total de cabecera por fila; un único **Total neto (COP)** entre los metadatos. |
 | Transferencias | Número de transferencia, Origen, Destino, Fecha de solicitud, Fecha de despacho, Fecha de recepción, Estado, SKU, Unidad, Cantidad solicitada, Cantidad despachada, Cantidad recibida, Diferencia pendiente, Tratamiento. |
 
 - Identificadores: UUID público en movimientos, que no tienen número comercial; número comercial en ventas y transferencias (DEC-TEC-ID-001 §9.5). Nunca claves primarias.
@@ -42,6 +42,7 @@ Una hoja con título, metadatos (sucursal, período, fecha del filtro, zona hora
 - Texto de usuario siempre en celdas de texto: un motivo que empiece por `=` no se evalúa como fórmula.
 - Cantidades y precios en celdas numéricas cuando caben con exactitud en 15 dígitos significativos; si no, en texto exacto. Fechas como fechas reales de Excel en hora de Bogotá.
 - El importe neto de línea usa la precisión de presentación de 2 decimales (INC-013/D03). Por el redondeo, sumar muchas líneas puede diferir en centavos del total exacto de la venta.
+- **Total neto (COP):** fórmula `SUBTOTAL(109, …)` sobre la columna de importe, con su valor ya guardado. Respeta los filtros y queda fuera de las filas, así que ordenar no la mueve y sumar la columna no la duplica (INC-020/D07). Es una ampliación aprobada por el responsable el 2026-11-01. Solo se añade en ventas: movimientos y transferencias mezclan unidades distintas. Un libro sin filas no la incluye. Suma importes redondeados, por lo que puede diferir en centavos del dashboard.
 
 ## Reutilización
 
@@ -52,7 +53,7 @@ Dependencia: `org.apache.poi:poi-ooxml` 5.5.1 (ARQ-010). Se usa `XSSFWorkbook`: 
 ## Recorrido manual
 
 1. Con `docker compose up --build --wait`, entre como gerente y abra **Reportes**. Debe ver las tres categorías y ningún selector de sucursal.
-2. Elija **Ventas** y pulse **Descargar Excel**. Abra el archivo: una fila por línea, sin total de cabecera.
+2. Elija **Ventas** y pulse **Descargar Excel**. Abra el archivo: una fila por línea y un único **Total neto (COP)** arriba; al filtrar, el total cambia.
 3. Elija **Transferencias** y filtre por **Recibidas con discrepancia**. Compruebe cantidades, diferencia y tratamiento.
 4. Use fechas de 2020 sin datos: se descarga un libro vacío con su nota y la vista lo avisa.
 5. Use un rango de más de 12 meses: la vista lo rechaza y no se descarga nada.

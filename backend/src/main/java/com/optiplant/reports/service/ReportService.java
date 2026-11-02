@@ -57,7 +57,7 @@ public class ReportService {
         new Column("Sucursal", Kind.TEXT, 24), new Column("Responsable", Kind.TEXT, 28), new Column("SKU", Kind.TEXT, 18),
         new Column("Producto", Kind.TEXT, 30), new Column("Unidad", Kind.TEXT, 14), new Column("Cantidad", Kind.QUANTITY, 14),
         new Column("Precio unitario (COP)", Kind.DECIMAL, 20), new Column("Descuento (%)", Kind.DECIMAL, 14),
-        new Column("Importe neto de línea (COP)", Kind.MONEY, 24));
+        new Column("Importe neto de línea (COP)", Kind.MONEY, 24, "Total neto (COP)"));
     private static final List<Column> TRANSFER_COLUMNS = List.of(
         new Column("Número de transferencia", Kind.TEXT, 22), new Column("Origen", Kind.TEXT, 24),
         new Column("Destino", Kind.TEXT, 24), new Column("Fecha de solicitud", Kind.DATE_TIME, 20),
