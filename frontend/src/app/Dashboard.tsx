@@ -30,7 +30,10 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
   const [branch, setBranch] = useState('');
   const scope = admin ? branch || undefined : undefined;
   const ready = !admin || !!branch;
-  const reading = { client, branch: scope, ready, onError, revision, visible };
+  const [tab, setTab] = useState(0);
+  // Every panel stays mounted, so opening one must count as showing it again: its figures may have changed meanwhile.
+  const shows = (index: number) => visible && tab === index;
+  const reading = { client, branch: scope, ready, onError, revision };
 
   useEffect(() => {
     if (admin && visible) client.visibleBranches().then(setBranches).catch(onError);
@@ -67,9 +70,10 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
   useEffect(() => {
     if (!visible) return;
     if (!ready) { setSales(null); setTurnover(null); return; }
-    void loadSales();
-  }, [visible, revision, branch]);
-  useEffect(() => { if (visible && ready) void loadTurnover(); }, [visible, revision, branch, consulted]);
+    // The title names the branch from these figures, so they are read even when another panel is open.
+    if (tab === 0 || !sales) void loadSales();
+  }, [visible, tab, revision, branch]);
+  useEffect(() => { if (shows(0) && ready) void loadTurnover(); }, [visible, tab, revision, branch, consulted]);
 
   function submitPeriod() {
     const invalid = rotationPeriodError(period.from, period.to, new Date());
@@ -100,7 +104,7 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
         </select></div>
     </form>}
 
-    <SectionTabs label="Indicadores del dashboard" items={[
+    <SectionTabs label="Indicadores del dashboard" onSelect={setTab} items={[
       { label: 'Ventas y rotación', content: <>
     {!ready && <p>Seleccione una sucursal para ver sus ventas mensuales y la rotación de su inventario.</p>}
 
@@ -145,17 +149,17 @@ export function Dashboard({ client, user, onError, revision, visible }: Props) {
       </> },
       { label: 'Demanda', content: <>
         {!ready && <p>Seleccione una sucursal para ver sus productos de alta y baja demanda.</p>}
-        {ready && <DemandSection {...reading} />}
+        {ready && <DemandSection {...reading} visible={shows(1)} />}
       </> },
       { label: 'Transferencias', content: <>
         {!ready && <p>Seleccione una sucursal para ver sus transferencias activas.</p>}
-        {ready && <TransferImpactSection {...reading} />}
+        {ready && <TransferImpactSection {...reading} visible={shows(2)} />}
       </> },
       { label: 'Próximos a agotarse', content: <>
         {!ready && <p>Seleccione una sucursal para ver sus productos próximos a agotarse.</p>}
-        {ready && <RestockSection {...reading} />}
+        {ready && <RestockSection {...reading} visible={shows(3)} />}
       </> },
-      ...(admin ? [{ label: 'Comparativa', content: <BranchComparisonSection {...{ client, onError, revision, visible }} /> }] : []),
+      ...(admin ? [{ label: 'Comparativa', content: <BranchComparisonSection {...{ client, onError, revision }} visible={shows(4)} /> }] : []),
     ]} />
   </section>;
 }

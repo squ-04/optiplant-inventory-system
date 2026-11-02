@@ -102,14 +102,20 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
     if (operator) {
       client.transferOrigins().then(setOrigins).catch(onError);
       client.localCatalog().then(setCatalog).catch(onError);
-      setRoutesError('');
-      client.routes().then(setRoutes).catch(reason => {
-        if (reason instanceof ApiError && reason.status === 401) onError(reason);
-        else setRoutesError(`No se pudieron consultar las rutas (${problem(reason, 'error desconocido')}). Vuelva a abrir la vista para reintentar.`);
-      });
+      loadRoutes();
     }
     if (admin) client.visibleBranches().then(setBranches).catch(onError);
   }, [client, admin, operator, revision, visible]);
+
+  // Routes are maintained by the administrator from another session, so what this view read may already be outdated.
+  function loadRoutes() {
+    if (!operator) return;
+    setRoutesError('');
+    client.routes().then(setRoutes).catch(reason => {
+      if (reason instanceof ApiError && reason.status === 401) onError(reason);
+      else setRoutesError(`No se pudieron consultar las rutas (${problem(reason, 'error desconocido')}). Vuelva a abrir el detalle para reintentar.`);
+    });
+  }
 
   async function loadHistory(target = consulted) {
     setLoading(true); setHistoryError('');
@@ -125,6 +131,7 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
 
   async function openDetail(id: string) {
     setDetailError(''); setActionError(''); setConfirmed('');
+    loadRoutes();
     try {
       setSelected(await client.transfer(id));
       revealEditor('transfer-detail');
@@ -387,7 +394,7 @@ export function Transfers({ client, user, onError, revision, visible }: Props) {
         {history && <p>{consulted.discrepancy ? 'Alertas de faltante más recientes primero' : 'Más recientes primero'}.
           Lectura del servidor: {when(history.readAt)}</p>}
       </div>
-      <Button variant="outline" disabled={loading} onClick={() => void loadHistory()}>
+      <Button variant="outline" disabled={loading} onClick={() => { loadRoutes(); void loadHistory(); }}>
         <RefreshCw aria-hidden="true" />{loading ? 'Actualizando…' : 'Actualizar listado'}
       </Button>
     </div>
