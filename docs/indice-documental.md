@@ -10,7 +10,7 @@ Punto de entrada a la documentación del Sistema de Inventario Multi-Sucursal. E
 | [Arquitectura y diseño técnico](04-arquitectura/arquitectura-y-diseno-tecnico.md) | Diseño por capas, organización modular, decisiones ARQ, fundamentos, alternativas y verificaciones pendientes. |
 | [Modelo relacional y especificación de datos](06-modelo-base-datos/modelo-datos.md) | Entidades, atributos, relaciones, restricciones, índices, diagramas E-R y trazabilidad. Diseño técnico implementado mediante migraciones Flyway. |
 | [README del proyecto](../README.md) | Descripción, instalación, arquitectura, módulos implementados y decisiones de diseño. |
-| [Uso de inteligencia artificial](09-uso-de-ia/uso-de-inteligencia-artificial.md) | Herramientas y etapas, prompts textuales con sus resultados, evaluación crítica y estimación de contenido generado. |
+| [Uso de inteligencia artificial](09-uso-de-ia/uso-de-inteligencia-artificial.md) | Herramientas y etapas; utilidad de Gentle AI, Engram y CodeGraph; metodología ODD; prompts textuales con sus resultados, evaluación crítica y estimación de contenido generado. |
 
 ## Fuentes y decisiones
 

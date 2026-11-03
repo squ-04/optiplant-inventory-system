@@ -17,7 +17,7 @@ Producir un artefacto y responder por él fueron, por tanto, actividades distint
 
 Los prompts son de autoría propia del responsable. Se ajustaron con ChatGPT para lograr mayor efectividad y un mejor entendimiento por parte del agente. No solo pedían un resultado: fijaban sus fuentes, sus límites y lo que el agente tenía prohibido hacer, como modificar archivos durante un análisis, ampliar el alcance o integrar en `main`.
 
-El trabajo siguió Organic Driven Development (ODD), el flujo de Gentle AI: explorar, clasificar la tarea, implementar y verificar. Esta disciplina evitó que cada sesión empezara de cero: las reglas permanentes del proyecto están en [`AGENTS.md`](../../AGENTS.md), y las tareas de mayor tamaño dejaron su registro en [`odd/tasks/`](../../odd/tasks/).
+El trabajo siguió Organic Driven Development (ODD), el flujo de Gentle AI: explorar, clasificar la tarea, implementar y verificar (§2.2). Esta disciplina evitó que cada sesión empezara de cero: las reglas permanentes del proyecto están en [`AGENTS.md`](../../AGENTS.md), y las tareas de mayor tamaño dejaron su registro en [`odd/tasks/`](../../odd/tasks/).
 
 ## 2. Herramientas y etapas
 
@@ -45,6 +45,73 @@ Aplicación de las áreas sugeridas en la sección 9.1:
 | Documentación técnica | Requisitos, casos de uso, modelo, guías, este documento y el README, trazados entre sí mediante identificadores estables. | [Índice documental](../indice-documental.md) |
 | Revisión de código | Verificadores independientes y revisión por riesgo. | Registros `## Log` en [`odd/tasks/`](../../odd/tasks/) |
 | Buenas prácticas | Evaluación de versiones y compatibilidad del stack antes de implementar. | Arquitectura §5.4 |
+
+### 2.1. Método, memoria y lectura del código
+
+El agente de programación cambió a mitad del proyecto, de OpenCode a Claude Code, pero el método se mantuvo. Las tres herramientas siguientes funcionan sobre ambos agentes y, junto con `AGENTS.md`, sostuvieron la continuidad entre unas sesenta sesiones. Versiones instaladas al 3 de noviembre de 2026: `gentle-ai 4.3.1`, `engram 3.6.0` y `codegraph 1.6.2`.
+
+**Gentle AI: el método de trabajo.** Gentle AI (`Gentleman-Programming/gentle-ai`) es una capa de configuración y orquestación que se instala sobre el agente. No es un modelo de IA: define cómo trabaja el agente, mediante instrucciones permanentes, agentes especializados, *skills* y comandos de revisión. Gracias a ella, las solicitudes al agente se convirtieron en un proceso repetible, aplicado igual en cada bloque de requerimientos.
+
+| Capacidad | Qué hace | Utilidad en el proyecto |
+|---|---|---|
+| Orquestador | El agente principal decide, con reglas explícitas, si trabaja directamente o delega. | Evitó delegaciones sin motivo y mantuvo acotado el contexto principal. |
+| Subagentes | Un explorador de solo lectura mapea el código, un escritor implementa una unidad acotada y un verificador comprueba un cambio sin haberlo escrito. | Exploración de áreas amplias y verificación independiente de los cambios de riesgo. |
+| Flujo ODD | Procedimiento obligatorio para cada solicitud (§2.2). | Metodología de implementación de los 55 requerimientos. |
+| Revisión nativa | `gentle-ai review assess` clasifica el riesgo de cada commit. En riesgo alto, revisores independientes lo examinan desde cuatro lentes: riesgo (seguridad y datos), resiliencia (fallos y concurrencia), legibilidad y fiabilidad (pruebas). | Revisión adversarial de los cambios delicados, con defectos reales corregidos (§2.2). |
+| *Skills* | Instrucciones especializadas que se cargan según la tarea, como `frontend-design` o `work-unit-commits`. | Diseño visual coherente y commits por unidades revisables. |
+
+**Engram: la memoria persistente.** Un agente no conserva información entre sesiones, y en una sesión larga el contexto se compacta y pierde detalles. Engram es un servidor de memoria al que el agente accede mediante herramientas MCP. Guarda observaciones por proyecto con la estructura qué, por qué, dónde y aprendizaje, clasificadas como decisión, preferencia, hallazgo, corrección o resumen de sesión. Un tema puede actualizarse en lugar de duplicarse, y una observación que contradice a otra se somete a juicio explícito. Algunos ejemplos son «Aprobar acceso con código y contraseña y cerrar INC-002» (20 de octubre) y «Elegir ramas por bloque funcional sin proteger main» (22 de octubre). Al iniciar una sesión se recupera el contexto, durante el trabajo se registra cada decisión o hallazgo y al cerrar se deja un resumen. Los documentos de tarea de ODD tienen además una copia en Engram para retomar el trabajo. Gracias a ello, las decisiones aprobadas se respetaron a lo largo del desarrollo porque el agente podía consultarlas, no porque las recordara.
+
+**CodeGraph: la lectura del código.** Sin herramientas, un agente busca texto, abre archivos completos y sigue las llamadas manualmente, con alto consumo de contexto y omisiones en las llamadas indirectas. CodeGraph indexa el repositorio en un grafo de símbolos almacenado en SQLite (`.codegraph/`), que se actualiza al cambiar los archivos. Una consulta devuelve el código literal de los símbolos relevantes, los caminos de llamada entre ellos y su radio de impacto: qué depende de lo que se va a modificar y qué pruebas lo cubren. Por ejemplo, señala que `SaleQueryService` es utilizado por `ReportService`, `SaleController` y `SaleService`. Se incorporó el 26 de octubre y redujo el contexto consumido, aumentó la precisión de las respuestas y permitió modificar el código conociendo su impacto.
+
+### 2.2. Metodología ODD
+
+Organic Driven Development (ODD) es el flujo predefinido de Gentle AI con el que se implementaron los requerimientos funcionales. Es «orgánico» porque el proceso crece en proporción a la tarea: una corrección pequeña se resuelve directamente, mientras que un bloque de requerimientos recibe especificación, seguimiento y verificación. Frente a pedir código sin método, exige explorar, especificar, probar y verificar. Frente a generar por adelantado todo el plan y la documentación, planifica solo lo necesario para la tarea en curso y actualiza el registro cuando cambian los requisitos.
+
+Cada solicitud recorre siete pasos:
+
+| Paso | Contenido |
+|---|---|
+| 1. Autorizar | Determinar si la solicitud pide un cambio o solo un análisis; un análisis es de solo lectura. |
+| 2. Explorar | Leer el código y los requisitos existentes antes de proponer o escribir. |
+| 3. Resolver la incertidumbre | Ante una decisión de producto abierta, formular una única pregunta y esperar la respuesta, sin suponerla. |
+| 4. Clasificar | Decidir si la tarea es pequeña o grande. |
+| 5. Registrar | Antes de escribir código, crear para las tareas grandes el documento `odd/tasks/<bloque>.md` y su copia en Engram. |
+| 6. Implementar | Avanzar tarea por tarea: prueba primero, commits por unidad de trabajo y verificación proporcional al riesgo. |
+| 7. Cerrar | Informar el resultado verificado, lo pendiente y la línea de riesgo del cambio. |
+
+**Clasificación.** Una tarea es pequeña si se entiende, no toca elementos de alto riesgo y podría terminarla otra persona solo con la solicitud original y el `git diff`. Si no supera esa prueba, por ejemplo porque abarca varios requerimientos y varias sesiones, es grande y se registra. El tamaño no se mide por número de archivos ni de líneas. Son de alto riesgo los cambios que afectan a:
+
+1. Datos o efectos irreversibles.
+2. Seguridad.
+3. Contratos consumidos por terceros.
+4. Concurrencia.
+5. Entrega o entorno.
+6. Comportamiento que ninguna prueba detectaría si dejara de funcionar.
+
+Estos cambios reciben un verificador independiente y, cuando corresponde, la revisión nativa.
+
+**Documento de tarea.** Cada bloque de requerimientos tuvo su documento en [`odd/tasks/`](../../odd/tasks/), veintitrés en total, con una estructura fija:
+
+- `## Specs` cita los requerimientos literalmente, junto con la decisión INC que los origina. Por ejemplo, en `rf-0027-0029-0031.md`: «S2 (RF-0028, INC-014/D04): disponible físico sin reservas; validar y descontar indivisiblemente al confirmar».
+- `## Tasks` asocia cada tarea a sus especificaciones, su ruta (directa o delegada, con su justificación), su estado y su evidencia, por ejemplo «e39341c; SaleHttpTest 8/8; mvn verify 104/104».
+- `## Log` comienza con la solicitud original literal y acumula correcciones, decisiones y evidencia.
+
+Citar los requerimientos literalmente impide que el agente los reinterprete. La delegación se hace por referencia («tarea T2, especificaciones S5»), no mediante resúmenes, y una tarea solo se marca como completada con el commit y las pruebas observadas.
+
+**Disciplina de implementación.**
+
+- Cada regla se implementa con prueba primero: la prueba se observa fallar (RED), se implementa hasta que pasa (GREEN) y después se refactoriza.
+- Los commits agrupan comportamiento, pruebas y documentación con mensajes *Conventional Commits*, en unidades del orden de cuatrocientas líneas.
+- Cada bloque se desarrolla en su propia rama y se integra en `main` al terminar.
+
+La revisión aportó correcciones verificables. En el bloque de ventas, el registro deja constancia de tres:
+
+- Conservar la clave de idempotencia y tratar `IDEMPOTENCY_CONFLICT` (L4).
+- No perder la clave al descartar un borrador con resultado incierto (L5, lente de resiliencia).
+- Un descuento mostrado de 0,50 que debía ser 0,51, corregido con prueba RED y después GREEN (L6, lentes de fiabilidad y legibilidad).
+
+**Recorrido de un bloque.** El responsable redacta el prompt con fuentes, límites y prohibiciones. El agente aplica ODD: explora con CodeGraph, recupera decisiones de Engram y lee `AGENTS.md`. Después registra las especificaciones literales e implementa en una rama propia con pruebas primero. En los cambios de riesgo intervienen el verificador independiente y la revisión nativa, cuyas correcciones quedan en el `## Log`. El bloque se cierra con `mvn verify`, `pnpm test` y la verificación previa al push. Por último, el responsable realiza el recorrido manual, decide las correcciones y autoriza la integración.
 
 ## 3. Ejemplos de prompts y resultados
 
