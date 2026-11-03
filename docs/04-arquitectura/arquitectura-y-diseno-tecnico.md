@@ -123,6 +123,8 @@ Jakarta Bean Validation valida estructura y formatos; los servicios gobiernan pe
 
 Usar códigos HTTP semánticos `200`, `201`, `204`, `400`, `401`, `403`, `404`, `409`, `429` y `500` cuando correspondan. Uniformar errores con Spring `ProblemDetail` (RFC 9457), `@RestControllerAdvice` y código estable de aplicación, sin filtrar SQL ni trazas. Documentar `Idempotency-Key` para creaciones/confirmaciones críticas según ARQ-007.
 
+**Revisión de implementación (decisión del responsable, 2026-11-03).** La implementación utiliza además dos códigos que la lista anterior no recogía: `405 METHOD_NOT_ALLOWED`, para métodos no admitidos (`common/exception/ApiErrors.java`), y `422 REPORT_TOO_LARGE`, cuando un reporte excedería 10.000 filas (`reports/service/ReportService.java`, ARQ-010). Ambos se emiten como `ProblemDetail` con código estable.
+
 Documentar con OpenAPI 3, springdoc-openapi y Swagger UI dentro de Spring Boot, sin servicio extra y sin desactivar cookies, CORS o CSRF. El cliente `fetch` maneja errores estructurados y descargas binarias autenticadas; frontend y backend se desacoplan mediante contrato, no por compartir entidades persistentes.
 
 **Alternativas y consecuencias.** Otros lenguajes y GraphQL son admisibles externamente, pero no existe autorización para sustituir las elecciones del proyecto. Microservicios introducirían despliegues y fallos distribuidos que el alcance no demuestra necesitar. El monolito implica despliegue conjunto y requiere disciplina para evitar acoplamiento entre módulos.
@@ -192,7 +194,7 @@ Flyway aporta trazabilidad a la creación/evolución SQL; las semillas permiten 
 
 ### ARQ-005 — Autenticación, autorización y sesiones
 
-**Estado:** Spring Security + Spring Session JDBC y estrategia de cookies/CSRF/CORS APROBADOS por A PEN-001; JWT descartado como mecanismo principal.  
+**Estado:** Spring Security + Spring Session JDBC y estrategia de cookies/CSRF/CORS APROBADOS por A PEN-001; JWT descartado como mecanismo principal. Algoritmo de contraseñas concretado en Argon2 en la revisión de implementación del 2026-11-03.  
 **Clasificación:** **JUSTIFICACIÓN OBLIGATORIA §8.2 — autenticación y autorización**.  
 **Trazabilidad:** A PEN-001 y su compatibilidad con PEN-003/PEN-006/PEN-007/PEN-008; M §8.2; RF-0006–RF-0007 y RF §5.2; D INC-003/D09–D14; RNF-SEG-01–RNF-SEG-05.
 
@@ -214,6 +216,13 @@ Verificar rol, acción, recurso y sucursal en backend en cada caso de uso. Imple
 
 **Detalles y verificación posteriores.** Concretar algoritmo/parámetros de hash, secretos, intercambio CSRF y criterio servidor de actividad/expiración; implementar los controles ya seleccionados. Probar autenticación, cookies/CORS/CSRF, acceso cruzado por UUID, revocaciones y ambas expiraciones, incluidos clientes con polling continuo que no perpetúen la sesión.
 
+**Revisión de implementación (decisión del responsable, 2026-11-03).** El algoritmo de contraseñas queda concretado en **Argon2**, mediante `Argon2PasswordEncoder(16, 32, 1, 19456, 2)` de Spring Security: sal de 16 bytes, hash de 32 bytes, paralelismo 1, 19 MiB de memoria y 2 iteraciones (`common/config/SecurityConfiguration.java`). Se eligió por su coste en memoria frente a ataques con hardware especializado; BCrypt queda descartado. El resto de los controles quedó implementado así:
+
+- `identity/service/SessionPolicyFilter.java` aplica el límite absoluto de ocho horas y la inactividad de treinta minutos. La marca de actividad solo se renueva tras comandos `POST` exitosos, de modo que el polling `GET` no prolonga la sesión.
+- `identity/service/LoginService.java` aplica la protección antiabuso: tras cinco fallos en quince minutos, bloqueos de 5, 15 y 30 minutos con `429 LOGIN_THROTTLED`.
+- El token CSRF se guarda en la sesión (`HttpSessionCsrfTokenRepository`) y el cliente lo obtiene en `GET /api/v1/auth/csrf`.
+- La cookie de sesión es `HttpOnly` y `SameSite=Lax`. `Secure` es configurable (`APP_COOKIE_SECURE`) y queda desactivado en la demostración HTTP local.
+
 ### ARQ-006 — Consistencia y actualización del inventario entre sucursales
 
 **Estado:** polling REST con TanStack Query e intervalo inicial de dos segundos APROBADOS por A PEN-003; máximo de cinco segundos pendiente de comprobación real.  
@@ -234,7 +243,7 @@ Aplicar cookies, CORS, CSRF y autorización de ARQ-005 sin prolongar la inactivi
 
 ### ARQ-007 — Confirmaciones atómicas, concurrencia y duplicados
 
-**Estado:** atomicidad, aislamiento, bloqueo pesimista e idempotencia APROBADOS por A PEN-002; implementación y pruebas posteriores.  
+**Estado:** atomicidad, aislamiento, bloqueo pesimista e idempotencia APROBADOS por A PEN-002 e implementados; aislamiento de lecturas e interbloqueos precisados en la revisión de implementación del 2026-11-03.  
 **Clasificación:** decisión significativa relacionada con ARQ-003 y ARQ-006; requiere justificación propia por su impacto en integridad.  
 **Trazabilidad:** A PEN-002, relacionada con PEN-004/PEN-005/PEN-008; D INC-008, INC-011/D04, INC-014/D03–D04, INC-015/D08; RF §§2.1 y 5.3.
 
@@ -249,6 +258,12 @@ Implementar idempotencia de solicitudes críticas de creación/confirmación rep
 **Fundamento, alternativas y consecuencias.** Comprobar stock y guardar sin protección permite consumir las mismas unidades concurrentemente. El mecanismo elegido utiliza recursos nativos Spring/PostgreSQL sin mensajería ni bases distribuidas. Frente al control optimista, el bloqueo pesimista serializa el acceso a filas en disputa, a costa de esperas y riesgo de interbloqueo; orden y duración acotada reducen ese riesgo, sin eliminar la necesidad de tratar errores. Rollback de una confirmación fallida no equivale a borrar historia: las compensaciones posteriores autorizadas conservan su trazabilidad según RF.
 
 **Verificación posterior.** Dos ventas simultáneas de dos unidades sobre saldo tres: solo una confirmada y ninguna huella parcial de la rechazada. Probar repetición de compras/ventas/despachos/llegadas, doble llegada, huellas distintas bajo una clave, rollback intermedio, bloqueos múltiples, carreras de saldo inexistente, ausencia de stock negativo, compensaciones e historia conforme a RF.
+
+**Revisión de implementación (decisión del responsable, 2026-11-03).**
+
+- **Aislamiento de lecturas.** Las confirmaciones mantienen `READ COMMITTED` con `SELECT ... FOR UPDATE`, tal como se aprobó. Los servicios de consulta usan `@Transactional(readOnly = true, isolation = REPEATABLE_READ)`: historiales de compras, ventas, transferencias y movimientos, dashboard, visibilidad, comparación entre sucursales, valoración y cumplimiento. Así, todas las lecturas de una misma consulta o reporte ven una única instantánea coherente y no mezclan datos anteriores y posteriores a una operación concurrente. Estas transacciones no escriben ni bloquean, por lo que no afectan a las confirmaciones.
+- **Interbloqueos.** Se previenen adquiriendo los bloqueos en orden determinista: primero los saldos por producto en `InventoryLedger.post`, después los tránsitos por identificador. No existe reintento automático ante un interbloqueo o fallo de serialización que PostgreSQL llegara a detectar (`40P01`/`40001`). En ese caso la transacción se revierte por completo, sin efectos parciales, y el cliente recibe `500 INTERNAL_ERROR`. Un reintento acotado de la transacción completa, protegido por la idempotencia existente, queda identificado como mejora posterior, coherente con la cautela sobre reintentos expresada en esta decisión.
+- **Evidencia.** Las pruebas concurrentes contra PostgreSQL (Testcontainers) cubren el caso de saldo tres (`SaleHttpTest.concurrentConfirmationsNeverSellTheSameUnits`), salidas manuales, despachos, recepciones y transiciones de transferencias repetidas o simultáneas.
 
 ### ARQ-008 — Capas internas, módulos y patrones del backend
 
@@ -357,7 +372,7 @@ Las ocho PEN fueron ratificadas el **21/10/2026** en A; conservan sus identifica
 | Pruebas y mediciones | Funcionales, seguridad, concurrencia, latencia extremo a extremo ≤5 s, arranque limpio, persistencia, migraciones, coherencia, memoria y exactitud XLSX. | Comprobaciones previstas en cada ARQ |
 | Diagramas de §7 | Arquitectura, E-R y restantes diagramas obligatorios; no generados ni sustituidos por este registro. | M §7 |
 
-No se convierte MapStruct ni ArchUnit en dependencia obligatoria, ni se aprueba propietario definitivo de sucursales, identidad gráfica, algoritmo concreto de hash o tamaños SQL tentativos por inferencia. Las versiones se concretan expresamente en §5.4; estos detalles no reabren las ocho selecciones ratificadas.
+No se convierte MapStruct ni ArchUnit en dependencia obligatoria, ni se aprueba propietario definitivo de sucursales, identidad gráfica, algoritmo concreto de hash o tamaños SQL tentativos por inferencia. El algoritmo de hash se concretó después, en la revisión de implementación de ARQ-005 (2026-11-03). Las versiones se concretan expresamente en §5.4; estos detalles no reabren las ocho selecciones ratificadas.
 
 ### 5.4. Versiones y compatibilidad tecnológica
 
