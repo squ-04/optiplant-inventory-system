@@ -35,7 +35,7 @@ La autorización del responsable permite instalar y adaptar componentes oficiale
 | Necesidad | Patrón actual |
 |---|---|
 | App Shell | `AppShell`, en `frontend/src/components/shared`: barra lateral persistente desde 1024 px, identidad, navegación y resumen de sesión; en móvil la navegación se adapta al ancho disponible. |
-| Navegación operativa | `.section-nav`, enlaces por fragmento a vistas existentes con `aria-current`; una vista visible a la vez, historial del navegador y foco en el título al cambiar. No sustituye la adopción aprobada de React Router. |
+| Navegación operativa | `.section-nav`, enlaces por fragmento a vistas existentes con `aria-current`; una vista visible a la vez, historial del navegador y foco en el título al cambiar. Sustituye a React Router por decisión del responsable (arquitectura, ARQ-001, revisión de implementación del 2026-11-03). |
 | Navegación contextual | `SectionTabs` compone los `Tabs` oficiales con primitivas Radix: roles ARIA, flechas, Inicio y Fin. `forceMount` y `hidden` mantienen paneles y formularios sin exponer los inactivos al teclado. |
 | Acceso al contenido | `.skip-link`, primer enlace de teclado, con destino enfocable. |
 | Contexto de usuario y sucursal | `.session-panel`, sin ocultar ni abreviar los identificadores. |

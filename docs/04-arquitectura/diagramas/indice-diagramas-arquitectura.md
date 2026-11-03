@@ -51,6 +51,7 @@ Se usa la decisión ratificada posterior cuando las instrucciones o referencias 
 - Dos conexiones en la vista general, ningún acceso frontend → base de datos, nueve módulos exactos y tres conexiones conceptuales en la vista interna.
 - Revisión geométrica de textos, componentes, etiquetas y notas; sin superposiciones ni conexiones que atraviesen componentes ajenos.
 - El 31 de octubre de 2026 se actualizaron tres textos de la vista general, en la fuente y en su PNG, para reflejar la implementación y el servicio `credentials`.
+- El 3 de noviembre de 2026 se actualizaron tres líneas del bloque frontend de la vista general, en la fuente y en su PNG: React Router, TanStack Table y React Hook Form/Zod se sustituyeron por lo implementado (navegación por fragmento, cliente `fetch`, validación HTML y tabla shadcn/ui), según la revisión de implementación de ARQ-001. En el PNG solo se redibujaron esas líneas, con la misma tipografía y posición.
 - Vistas previas PNG generadas con un renderizador local de coordenadas y textos e inspeccionadas visualmente; medición tipográfica sin desbordamientos. No son exportaciones nativas de Excalidraw y no se probó su interfaz de edición.
 - Se preservaron los documentos previos y diagramas existentes, comprobados mediante SHA-256. No se generó código de aplicación ni se hicieron commits.
 

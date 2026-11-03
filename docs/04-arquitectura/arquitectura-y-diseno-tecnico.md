@@ -61,9 +61,9 @@ M §7 exige diagramas de arquitectura y entidad-relación, entre otros. Sus diag
 
 | Capa externa | Tecnología y condición | Responsabilidades | Límites |
 |---|---|---|---|
-| Presentación | React/TypeScript/Vite, Tailwind CSS, shadcn/ui, Lucide React, React Router, TanStack Query, React Hook Form/Zod, TanStack Table y Recharts: aprobados en A PEN-006. | Interacción, navegación, formularios, presentación responsiva, gráficos y consumo de API. | Sin acceso directo a PostgreSQL; no decide permisos, stock, costos, estados ni confirmaciones. |
+| Presentación | React/TypeScript/Vite, Tailwind CSS, shadcn/ui, Lucide React, TanStack Query y Recharts: aprobados en A PEN-006. React Router, React Hook Form/Zod y TanStack Table no se incorporaron, según la revisión de implementación de ARQ-001. | Interacción, navegación, formularios, presentación responsiva, gráficos y consumo de API. | Sin acceso directo a PostgreSQL; no decide permisos, stock, costos, estados ni confirmaciones. |
 | Negocio | Java/Spring Boot y REST `/api/v1`; monolito de nueve módulos con capas Java tradicionales propias, Spring Security y Spring Session JDBC. | Validaciones autoritativas, autorización, casos de uso, transferencias, costos, consultas y XLSX mediante Apache POI. | No delega reglas al navegador ni expone entidades JPA como contrato público. |
-| Datos | Una base PostgreSQL, esquema inicial `public`; Spring Data JPA/Hibernate y Flyway ejecutados en el backend. | Persistencia relacional, sesiones JDBC, integridad y evolución SQL versionada; Hibernate valida el esquema. | Sin acceso directo desde frontend. Propiedad lógica por módulo; las restricciones complementan las reglas del negocio. |
+| Datos | Una base PostgreSQL, esquema inicial `public`; Spring Data JPA/Hibernate para entidades maestras, `JdbcTemplate` para inventario, documentos y consultas (revisión de ARQ-003), y Flyway, todos ejecutados en el backend. | Persistencia relacional, sesiones JDBC, integridad y evolución SQL versionada; Hibernate valida el esquema. | Sin acceso directo desde frontend. Propiedad lógica por módulo; las restricciones complementan las reglas del negocio. |
 | Infraestructura | Compose local con `frontend` servido por Vite, `backend` y `postgres`; volumen nombrado `pgdata`, healthchecks y puertos locales independientes. | Arranque reproducible, persistencia y configuración segura sin instalaciones locales obligatorias de JDK/Node/PostgreSQL. | HTTP directo navegador → backend; sin proxy inverso ni servicios accesorios. No se declara configuración de producción pública. |
 
 El recorrido conceptual es presentación → API del backend → caso de uso autorizado → acceso a datos → PostgreSQL. La respuesta vuelve por la API. Las capas internas del backend descritas en ARQ-008 no reemplazan las cuatro responsabilidades externas de M §8.1.
@@ -74,7 +74,7 @@ Los identificadores `ARQ-NNN` son estables y propios de este documento. `DEC-TEC
 
 ### ARQ-001 — Presentación web y herramientas del frontend
 
-**Estado:** stack y organización del frontend APROBADOS por A PEN-006; implementación y comprobaciones posteriores.  
+**Estado:** stack y organización del frontend APROBADOS por A PEN-006; React Router, React Hook Form/Zod, TanStack Table y la estructura orientativa de carpetas, REVISADOS por el responsable el 2026-11-03 conforme a la implementación (ver «Revisión de implementación»).  
 **Clasificación:** decisión significativa; no pertenece a las cinco justificaciones mínimas específicas de §8.2.  
 **Trazabilidad:** A PEN-006, relacionada con PEN-001, PEN-003 y PEN-007; P §1; D §2; M §§5 y 8.1; RNF-USA-01.
 
@@ -91,6 +91,19 @@ Establecer un sistema visual común, responsivo y accesible para navegación, ta
 **Alternativas y consecuencias.** Vue o Angular satisfacen el enunciado, pero sustituir React reabriría una elección ya aprobada sin necesidad identificada. Mantener frontend separado exige gestionar estados de carga, errores y datos desactualizados; la selección tecnológica no garantiza por sí sola accesibilidad o responsividad.
 
 **Detalles y verificación posteriores.** Concretar vistas, versiones compatibles y contratos de consumo. Verificar rutas/roles, cookies y CSRF, consistencia visual, responsividad, errores, tablas grandes y gráficos de servidor; manipular el navegador no debe eludir validaciones del backend.
+
+**Revisión de implementación (decisión del responsable, 2026-11-03).** La implementación no incorporó cuatro de las bibliotecas aprobadas, y el documento no lo había registrado. El responsable ratifica lo implementado en lugar de añadir esas dependencias antes de la presentación:
+
+| Aprobado inicialmente | Implementado y ratificado |
+|---|---|
+| React Router | Navegación por fragmento (`#vista`) en `frontend/src/app/App.tsx`, mediante `hashchange` e historial del navegador. Las vistas permanecen montadas y se ocultan con `hidden`, de modo que un formulario sin enviar no se pierde al cambiar de vista. |
+| React Hook Form + Zod | Estado de formulario con `useState`, validación nativa HTML (`required`, `inputMode`) y pistas de formato (`components/shared/formatHints.ts`). Las respuestas del servidor se validan en tiempo de ejecución con los analizadores `*Dto` de `lib/api/client.ts`. |
+| TanStack Table | Componente `table` de shadcn/ui, con límites y filtros aplicados por el backend. |
+| Estructura orientativa `modules/{...}` | `app/` contiene una vista por funcionalidad; `lib/` contiene el cliente REST único (`lib/api`) y la lógica de presentación sin interfaz, agrupada por funcionalidad; `components/{ui,shared}` aloja los componentes. |
+
+**Fundamento.** La aplicación es una única vista autenticada con secciones, sin rutas anidadas ni carga diferida por ruta. Sus formularios son acotados, y la validación autoritativa reside en el backend (ARQ-002). Las tablas reciben conjuntos limitados por el servidor. Prescindir de esas bibliotecas reduce dependencias sin trasladar reglas de negocio al cliente. Se mantienen sin cambios React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Lucide React, TanStack Query, Recharts y el cliente `fetch` centralizado con credenciales y CSRF.
+
+**Consecuencias.** Las URL identifican secciones mediante fragmento, no rutas de servidor. Sin un esquema compartido como Zod, la validación de entrada depende del navegador y, de forma autoritativa, del backend, mientras que la validación de respuestas reside en los analizadores `*Dto`. Si el alcance creciera con rutas profundas, formularios complejos o tablas con ordenación en cliente, convendría reevaluar estas bibliotecas. El acta `respuestas-decisiones-arquitectura-optiplant.md` se conserva sin modificar como registro histórico de la aprobación inicial.
 
 ### ARQ-002 — Java, Spring Boot, monolito modular y API REST
 
@@ -118,7 +131,7 @@ Documentar con OpenAPI 3, springdoc-openapi y Swagger UI dentro de Spring Boot, 
 
 ### ARQ-003 — PostgreSQL y modelo relacional
 
-**Estado:** estrategia relacional PostgreSQL/JPA y propiedad lógica por módulo APROBADAS; esquema lógico/físico completo y E-R posteriores.  
+**Estado:** estrategia relacional PostgreSQL/JPA y propiedad lógica por módulo APROBADAS; el mecanismo de acceso, REVISADO por el responsable el 2026-11-03 conforme a la implementación: JPA para entidades maestras y `JdbcTemplate` para inventario, documentos y consultas (ver «Revisión de implementación»).  
 **Clasificación:** **JUSTIFICACIÓN OBLIGATORIA §8.2 — motor de base de datos y modelo adoptado**.  
 **Trazabilidad:** A PEN-005, relacionada con PEN-002, PEN-004 y PEN-007; M §§8.1–8.2; P §1; D §2 y §9; RF §§5.1–5.4; RNF-PRE-01.
 
@@ -135,6 +148,17 @@ El propietario definitivo de los datos maestros de sucursales **no está ratific
 **Alternativas y consecuencias.** MySQL podría satisfacer un modelo relacional semejante; no se ha identificado una necesidad para sustituir PostgreSQL. NoSQL no está prohibido, pero no se ha justificado una ventaja que compense modelar estas relaciones y confirmaciones. JPA/Hibernate reduce acceso repetitivo, pero requiere revisar consultas, cargas y límites transaccionales; no elimina el conocimiento de SQL ni de concurrencia.
 
 **Detalles y verificación posteriores.** Derivar entidades, cardinalidades, DDL, índices y precisión SQL campo por campo de RF y consultas reales. La estrategia y su justificación están aprobadas; el modelo completo no se presume realizado. Probar integridad referencial, restricciones, historia y consistencia saldo/movimientos con PostgreSQL, junto con las verificaciones numéricas y temporales de ARQ-009.
+
+**Revisión de implementación (decisión del responsable, 2026-11-03).** La implementación combina dos mecanismos de acceso, ambos dentro del backend y sobre la misma base y transacción de Spring:
+
+| Mecanismo | Dónde se usa | Motivo |
+|---|---|---|
+| Spring Data JPA/Hibernate | Cinco entidades con ciclo de vida de alta y edición: `Branch` y `UserAccount` (`identity`), `Product` y `PriceList` (`catalog`) y `Supplier` (`purchases`), con sus repositorios. Incluye `@Lock(PESSIMISTIC_WRITE)` sobre sucursal, usuario y producto. | Mantenimiento de registros maestros, donde el mapeo de entidades reduce código repetitivo. |
+| `JdbcTemplate` con SQL explícito | Saldos, movimientos, valoración y tránsito (`InventoryLedger`); documentos de compra, venta y transferencia; despacho, llegada y discrepancias; idempotencia; consultas de historial, dashboards y fuentes de los reportes (`dashboard/repository/VisibilityRepository` incluido). `reports` no accede a SQL directamente: consume los servicios de consulta de los módulos. | Operaciones donde la consulta exacta es parte de la regla: `INSERT ... ON CONFLICT` para crear un saldo inexistente sin carrera, `SELECT ... FOR UPDATE` en orden determinista (ARQ-007), agregaciones y proyecciones de lectura sin cargar entidades. |
+
+**Fundamento.** El control explícito del SQL hace visibles el orden de bloqueo, las restricciones que lo respaldan y el plan de las consultas de lectura, que con entidades y JPQL quedarían implícitos. Se conserva lo aprobado: PostgreSQL relacional, Flyway como autoridad del esquema, `ddl-auto=validate`, propiedad lógica por módulo y DTO sin entidades expuestas.
+
+**Consecuencias.** `ddl-auto=validate` solo comprueba las tablas mapeadas por las cinco entidades; las consultas `JdbcTemplate` se verifican mediante las pruebas de integración contra PostgreSQL real (Testcontainers), no mediante Hibernate. El SQL explícito queda acoplado a PostgreSQL (`ON CONFLICT`, `FOR UPDATE OF`), lo que es coherente con la selección de un único motor. En `repository/` conviven interfaces Spring Data y una clase de consulta con `JdbcTemplate` (ARQ-008).
 
 ### ARQ-004 — Ejecución y aislamiento con Docker Compose
 
@@ -240,7 +264,7 @@ Implementar idempotencia de solicitudes críticas de creación/confirmación rep
 | `dto/`, con `request/` y `response/` cuando corresponda | Transporta contratos explícitos; no expone entidades JPA. |
 | `entity/` | Entidades JPA de persistencia. |
 | `service/` | Reglas, coordinación de casos de uso, autorización contextual y transacciones. |
-| `repository/` | Acceso Spring Data JPA a PostgreSQL; no concede permisos por devolver una entidad. |
+| `repository/` | Acceso Spring Data JPA a PostgreSQL o, en consultas de lectura, una clase con `JdbcTemplate` (revisión de ARQ-003); no concede permisos por devolver una entidad. |
 | `mapper/` | Transforma entidades y contratos. |
 | `enums/`, `exception/`, `api/` | Complementos solo necesarios; `api/` para contratos internos explícitos. |
 
@@ -307,7 +331,7 @@ Las ocho PEN fueron ratificadas el **21/10/2026** en A; conservan sus identifica
 | PEN-003 | APROBADA | Polling REST/TanStack Query, dos segundos iniciales; medir cinco segundos y no perpetuar sesiones. | A §3 PEN-003 → ARQ-006 |
 | PEN-004 | APROBADA | Nueve módulos por funcionalidad, capas Java convencionales propias; `transfers`/`logistics` separados e `inventory` propietario del stock. | A §3 PEN-004 → ARQ-008 y ARQ-002 |
 | PEN-005 | APROBADA | Base relacional común, identidad dual, decimales exactos, historia, UTC y calendario `America/Bogota`. | A §3 PEN-005 → ARQ-003 y ARQ-009 |
-| PEN-006 | APROBADA | React/TypeScript/Vite, Tailwind/shadcn/ui, React Router y herramientas de datos, formularios, tablas y gráficos. | A §3 PEN-006 → ARQ-001 |
+| PEN-006 | APROBADA; revisada el 2026-11-03 | React/TypeScript/Vite, Tailwind/shadcn/ui, TanStack Query y Recharts. React Router, React Hook Form/Zod y TanStack Table no se incorporaron. | A §3 PEN-006 → ARQ-001 (revisión de implementación) |
 | PEN-007 | APROBADA | Tres servicios locales, Vite, volumen Docker `pgdata`, Flyway/SQL/semillas, Hibernate `validate` y healthchecks; sin proxy. | A §3 PEN-007 → ARQ-004 |
 | PEN-008 | APROBADA | REST `/api/v1`, DTO/ProblemDetail/OpenAPI, Apache POI/`XSSFWorkbook` y descarga binaria XLSX. | A §3 PEN-008 → ARQ-002 y ARQ-010 |
 
@@ -370,16 +394,16 @@ Los números gestionados son una **instantánea informativa del BOM 4.1.1**, no 
 | Node.js | **24.22.1 LTS** | Concreta Node 24 LTS; entrega de seguridad. Satisface los requisitos Node de pnpm, Vite y su plugin React. |
 | pnpm | **11.24.0** | Requiere Node ≥22.13; Node 24 seleccionado cumple. Fijar gestor y lockfile, no depender de una instalación global variable. |
 | `react` / `react-dom` | **19.2.8 / 19.2.8** | Mantener ambos en la misma versión; `react-dom` declara React `^19.2.8`. SPA cliente, sin incorporar React Server Components. |
-| `typescript` | **6.0.3** | Estable; la compatibilidad declarada no sustituye comprobar tipos de la aplicación y bibliotecas. Conservar comprobación estricta para Zod. |
+| `typescript` | **6.0.3** | Estable; la compatibilidad declarada no sustituye comprobar tipos de la aplicación y bibliotecas. Conservar la comprobación estricta de tipos. |
 | `vite` | **8.3.4** | Requiere Node `^20.19.0` o `≥22.12.0`; Node 24 cumple. Servidor limitado a desarrollo/demostración local según ARQ-004. |
 | `@vitejs/plugin-react` | **6.1.0** | Declara Vite `^8`; coincide con 8.3.4. Sus integraciones opcionales no autorizan incorporar compiladores adicionales. |
 | `tailwindcss` | **4.3.3** | Compatible con la selección shadcn/Tailwind 4. Si se utiliza su adaptador oficial `@tailwindcss/vite`, alinearlo a **4.3.3**, cuyo rango incluye Vite 8; no es otro sistema de estilos. |
-| `react-router` | **7.18.4** | Node ≥20 y React/DOM ≥18; cumple el stack. Mantener el modo declarativo preferido en ARQ-001, sin introducir un servidor de framework. |
+| `react-router` | ~~7.18.4~~ | Node ≥20 y React/DOM ≥18; cumple el stack. **No incorporado** (revisión de implementación de ARQ-001, 2026-11-03). |
 | `@tanstack/react-query` | **5.102.6** | Declara React 18/19; consultas, invalidación y polling, no autorización ni cálculo de stock. |
-| `@tanstack/react-table` | **8.21.3** | Su rango React/DOM ≥16.8 incluye React 19. Su antigüedad respecto a otros paquetes no es por sí sola una incompatibilidad ni motivo para cambiar de tecnología. |
-| `react-hook-form` | **7.86.0** | Incluye React 19 y requiere Node ≥18. Validación de interacción, sin reemplazar validación del backend. |
-| `@hookform/resolvers` | **5.9.1** | Declara React Hook Form `^7.55.0` y compatibilidad Zod 3.25/4; las versiones seleccionadas cumplen. No instalar validadores alternativos opcionales. |
-| `zod` | **4.4.3** | Documentación exige TypeScript ≥5.5 con `strict`; TS 6.0.3 cumple el mínimo. Comprobar inferencias y tipos reales en implementación. |
+| `@tanstack/react-table` | ~~8.21.3~~ | Su rango React/DOM ≥16.8 incluye React 19. **No incorporado** (revisión de implementación de ARQ-001, 2026-11-03). |
+| `react-hook-form` | ~~7.86.0~~ | Incluye React 19 y requiere Node ≥18. **No incorporado** (revisión de implementación de ARQ-001, 2026-11-03). |
+| `@hookform/resolvers` | ~~5.9.1~~ | Declara React Hook Form `^7.55.0` y compatibilidad Zod 3.25/4. **No incorporado** (revisión de implementación de ARQ-001, 2026-11-03). |
+| `zod` | ~~4.4.3~~ | Documentación exige TypeScript ≥5.5 con `strict`; TS 6.0.3 cumple el mínimo. **No incorporado** (revisión de implementación de ARQ-001, 2026-11-03). |
 | `recharts` | **3.10.1** | Incluye React/DOM y `react-is` 19 en sus rangos. Verificar que `react-is` se resuelva coherentemente con React 19; no forzar una versión antigua mediante overrides. |
 | `lucide-react` | **1.34.0** | Su rango de compatibilidad incluye React 19. Mantener importaciones de iconos concretos y comprobar los usados. |
 | shadcn/ui | **CLI `shadcn` 4.22.1**, componentes versionados | No existe una única versión runtime de todos los componentes: el CLI incorpora código del registro. Fijar el CLI no congela el registro remoto; registrar los componentes incorporados y versionar su código y dependencias. |
@@ -390,7 +414,7 @@ Los rangos de `engines` y `peerDependencies` consultados no muestran un conflict
 
 | Decisiones preservadas | Evaluación y comprobación pendiente |
 |---|---|
-| ARQ-001 — SPA y herramientas visuales | Los rangos publicados permiten React 19, Vite 8, Tailwind 4 y las bibliotecas seleccionadas. Comprobar tipos, componentes, formularios Zod, navegación, tablas, responsividad y gráficos mediante construcción y navegador reales. |
+| ARQ-001 — SPA y herramientas visuales | Los rangos publicados permiten React 19, Vite 8, Tailwind 4 y las bibliotecas seleccionadas. Comprobar tipos, componentes, formularios, navegación, tablas, responsividad y gráficos mediante construcción y navegador reales; React Router, Zod y TanStack Table no se incorporaron (revisión de implementación de ARQ-001). |
 | ARQ-002 — REST, DTO, errores y OpenAPI | **Jackson 3/2 es el principal riesgo de integración.** springdoc 3.1.1 incorpora `swagger-core-jakarta:2.2.55`, dependiente de Jackson 2; el padre Swagger declara Jackson **2.22.1**, mientras Boot administra **2.21.5**. Es una diferencia comprobada de gestión, no una incompatibilidad reproducida. Inspeccionar el árbol efectivo y probar arranque, `/v3/api-docs`, Swagger UI, DTO, UUID, fechas, decimales y `ProblemDetail`. No excluir Jackson 2 globalmente ni actualizar sus módulos aisladamente para ocultar el desacuerdo. |
 | ARQ-003 y ARQ-004 — Persistencia y arranque | Flyway necesita el módulo PostgreSQL alineado con core. Versionar por Flyway las tablas de negocio y de Spring Session, tomando el esquema JDBC correspondiente a la versión seleccionada; desactivar la inicialización paralela de tablas de sesión. Mantener Hibernate `validate`. Verificar migración limpia, reinicios, imagen PostgreSQL, ruta `PGDATA` y persistencia de `pgdata`. |
 | ARQ-005 — Sesiones y seguridad | Spring Session JDBC serializa por defecto atributos mediante **serialización JDK a bytes**, no mediante Jackson. Los atributos personalizados deben ser serializables; cambios de clases pueden invalidar sesiones persistidas. No introducir JSON ni guardar entidades JPA completas por inferencia. Probar autenticación, revocación, CSRF/CORS y expiración absoluta/inactiva; el soporte de biblioteca no implementa por sí solo estas reglas. |
